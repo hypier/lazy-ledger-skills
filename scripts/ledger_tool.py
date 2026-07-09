@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import csv
 import json
 import re
 import sys
@@ -81,6 +82,11 @@ def parse_when(value):
         current_week_start = today - timedelta(days=today.weekday())
         target = current_week_start - timedelta(days=7) + timedelta(days=weekday_aliases[value[-1]])
         return target.replace(hour=12, minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
+    try:
+        parsed = datetime.fromisoformat(value)
+        return parsed.astimezone().isoformat(timespec="seconds")
+    except ValueError:
+        pass
     for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%Y/%m/%d"):
         try:
             parsed = datetime.strptime(value, fmt)
@@ -305,42 +311,76 @@ def merge_text_proposal(args, ledger):
     return parse_text_transaction(args.text, ledger=ledger, currency=currency, source=args.source)
 
 
-def add_transaction(args):
-    ledger = load_ledger(args.ledger, args.currency)
-    parsed = merge_text_proposal(args, ledger)
-    amount_value = args.amount if args.amount is not None else parsed.get("amount")
+def build_transaction_payload(
+    ledger,
+    *,
+    amount_value,
+    tx_type,
+    currency,
+    category,
+    occurred_at,
+    source,
+    confidence,
+    tags,
+    merchant=None,
+    note=None,
+    attachment=None,
+    tx_id=None,
+):
     if amount_value is None:
         raise SystemExit("Amount is required unless --text includes one")
     amount = float(amount_value)
     if amount <= 0:
         raise SystemExit("Amount must be positive")
-    tx_type = args.type or parsed.get("type", "expense")
     if tx_type not in VALID_TYPES:
         raise SystemExit(f"Type must be one of: {', '.join(sorted(VALID_TYPES))}")
-    validate_confidence(args.confidence)
-    occurred_at = parse_when(args.date or args.occurred_at) if (args.date or args.occurred_at) else parsed.get("occurred_at", now_iso())
+    validate_confidence(confidence)
     ts = now_iso()
     tx = {
-        "id": args.id or make_id(occurred_at),
+        "id": tx_id or make_id(occurred_at),
         "type": tx_type,
         "amount": round(amount, 2),
-        "currency": default_currency(args.currency or ledger.get("currency")),
-        "category": args.category or parsed.get("category") or ("收入" if tx_type == "income" else "其他"),
+        "currency": default_currency(currency or ledger.get("currency")),
+        "category": category or ("收入" if tx_type == "income" else "其他"),
         "occurred_at": occurred_at,
-        "source": args.source,
-        "confidence": args.confidence,
-        "tags": coerce_tags(args.tags),
+        "source": source,
+        "confidence": confidence,
+        "tags": coerce_tags(tags),
         "created_at": ts,
         "updated_at": ts,
     }
-    merchant = args.merchant if args.merchant is not None else parsed.get("merchant")
-    note = args.note if args.note is not None else parsed.get("note")
     if merchant:
         tx["merchant"] = merchant
     if note:
         tx["note"] = note
-    if args.attachment:
-        tx["attachment"] = args.attachment
+    if attachment:
+        tx["attachment"] = attachment
+    return tx
+
+
+def add_transaction(args):
+    ledger = load_ledger(args.ledger, args.currency)
+    parsed = merge_text_proposal(args, ledger)
+    amount_value = args.amount if args.amount is not None else parsed.get("amount")
+    tx_type = args.type or parsed.get("type", "expense")
+    occurred_at = parse_when(args.date or args.occurred_at) if (args.date or args.occurred_at) else parsed.get("occurred_at", now_iso())
+    merchant = args.merchant if args.merchant is not None else parsed.get("merchant")
+    note = args.note if args.note is not None else parsed.get("note")
+    tx = build_transaction_payload(
+        ledger,
+        amount_value=amount_value,
+        tx_type=tx_type,
+        currency=args.currency,
+        category=args.category or parsed.get("category"),
+        occurred_at=occurred_at,
+        source=args.source,
+        confidence=args.confidence,
+        tags=args.tags,
+        merchant=merchant,
+        note=note,
+        attachment=args.attachment,
+        tx_id=args.id,
+    )
     duplicates = likely_duplicate_candidates(ledger["transactions"], tx)
     if duplicates and not args.allow_duplicate:
         print(
@@ -604,6 +644,63 @@ def doctor_command(args):
         print(f"- {issue['code']} | {tx_id} | {issue['message']}")
 
 
+def import_tsv_command(args):
+    ledger = load_ledger(args.ledger, args.currency)
+    input_path = Path(args.input)
+    added_ids = []
+    with input_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if not reader.fieldnames:
+            raise SystemExit("TSV header is required")
+        for line_number, row in enumerate(reader, start=2):
+            if not any((value or "").strip() for value in row.values()):
+                continue
+            amount_value = row.get("amount")
+            occurred_at = row.get("occurred_at")
+            if not amount_value:
+                raise SystemExit(f"Missing amount on line {line_number}")
+            if not occurred_at:
+                raise SystemExit(f"Missing occurred_at on line {line_number}")
+            confidence_value = row.get("confidence")
+            confidence = float(confidence_value) if confidence_value not in (None, "") else 1.0
+            tx = build_transaction_payload(
+                ledger,
+                amount_value=amount_value,
+                tx_type=row.get("type") or "expense",
+                currency=row.get("currency") or args.currency,
+                category=row.get("category"),
+                occurred_at=parse_when(occurred_at),
+                source=row.get("source") or "import",
+                confidence=confidence,
+                tags=row.get("tags"),
+                merchant=row.get("merchant"),
+                note=row.get("note"),
+                attachment=row.get("attachment"),
+                tx_id=row.get("id"),
+            )
+            duplicates = likely_duplicate_candidates(ledger["transactions"], tx)
+            if duplicates and not args.allow_duplicate:
+                print(
+                    json.dumps(
+                        {
+                            "error": "likely_duplicate",
+                            "line": line_number,
+                            "message": "Likely duplicate transaction in import. Pass --allow-duplicate to import anyway.",
+                            "candidates": duplicates,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    file=sys.stderr,
+                )
+                raise SystemExit(2)
+            ledger["transactions"].append(tx)
+            added_ids.append(tx["id"])
+    ledger["transactions"].sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    save_ledger(args.ledger, ledger)
+    print(json.dumps({"input": str(input_path), "added": len(added_ids), "ids": added_ids}, ensure_ascii=False, indent=2))
+
+
 def init_command(args):
     path = Path(args.ledger)
     if path.exists() and not args.force:
@@ -693,6 +790,13 @@ def build_parser():
     p_doctor.add_argument("--ledger", required=True)
     p_doctor.add_argument("--json", action="store_true")
     p_doctor.set_defaults(func=doctor_command)
+
+    p_import_tsv = sub.add_parser("import-tsv", help="Import multiple transactions from a TSV file")
+    p_import_tsv.add_argument("--ledger", required=True)
+    p_import_tsv.add_argument("--input", required=True)
+    p_import_tsv.add_argument("--currency", default=None)
+    p_import_tsv.add_argument("--allow-duplicate", action="store_true")
+    p_import_tsv.set_defaults(func=import_tsv_command)
 
     p_render = sub.add_parser("render", help="Generate a self-contained HTML dashboard")
     p_render.add_argument("--ledger", required=True)

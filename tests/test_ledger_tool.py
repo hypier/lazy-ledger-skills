@@ -104,6 +104,31 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("新商户", result.stdout)
             self.assertNotIn("旧商户", result.stdout)
 
+    def test_import_tsv_adds_multiple_transactions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            source = Path(tmp) / "rows.tsv"
+            source.write_text(
+                "\n".join(
+                    [
+                        "occurred_at\ttype\tamount\tcategory\tmerchant\tnote\tsource\tconfidence",
+                        "2026-07-01T10:00:00+08:00\texpense\t12.5\t餐饮\t早餐店\t豆浆油条\timport\t0.9",
+                        "2026-07-01T12:00:00+08:00\tincome\t88\t红包\t朋友\t午饭红包\timport\t1.0",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = run_tool("import-tsv", "--ledger", str(ledger), "--input", str(source))
+
+            report = json.loads(result.stdout)
+            self.assertEqual(report["added"], 2)
+            data = json.loads(ledger.read_text())
+            self.assertEqual(len(data["transactions"]), 2)
+            self.assertEqual(data["currency"], "CNY")
+            self.assertEqual({tx["source"] for tx in data["transactions"]}, {"import"})
+
     def test_doctor_reports_likely_duplicates(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"

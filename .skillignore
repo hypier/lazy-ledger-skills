@@ -1,0 +1,15 @@
+# Packaging outputs
+dist/
+__pycache__/
+scripts/__pycache__/
+tests/__pycache__/
+
+# Runtime data
+lazy-ledger.json
+lazy-ledger-report.html
+
+# Repository-only files
+.gitignore
+README.md
+tests/
+product-design-audit/

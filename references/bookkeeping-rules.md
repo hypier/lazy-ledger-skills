@@ -62,6 +62,13 @@ When a screenshot or receipt is provided:
 - If the image contains multiple transactions, ask whether to record all or which one.
 - Put uncertain extraction details in `note` and lower `confidence`.
 
+When the image is a long payment-history list and the user wants every visible transaction:
+
+- Transcribe only fully visible rows.
+- Preserve the visible merchant text even if it is truncated with `...`.
+- Lower `confidence` for truncated merchant names or ambiguous payment counterparts.
+- Convert the cleaned rows into TSV and use `ledger_tool.py import-tsv ...` for deterministic writes.
+
 ## Duplicate Detection
 
 Before adding a transaction, scan recent transactions for likely duplicates:

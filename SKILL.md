@@ -1,6 +1,6 @@
 ---
 name: lazy-ledger
-description: Personal lazy bookkeeping assistant for recording expenses, income, refunds, transfers, and notes into a local JSON ledger, summarizing spending, finding transactions, cleaning/importing ledger data, and generating a self-contained HTML dashboard. Use when the user asks to 记账, 懒人记账, record a purchase, add an expense, summarize spending, view accounting data, make a ledger report, convert receipts or payment text into transactions, or create an HTML page to inspect ledger data.
+description: Personal lazy bookkeeping assistant for recording expenses, income, refunds, transfers, and notes into a local JSON ledger, summarizing spending, bulk importing cleaned rows, and generating a self-contained HTML dashboard. Use when the user asks to 记账, 懒人记账, record a purchase, add an expense, batch import payment history, summarize spending, view accounting data, make a ledger report, convert receipts or payment text into transactions, or create an HTML page to inspect ledger data.
 ---
 
 # Lazy Ledger
@@ -16,7 +16,7 @@ Default ledger path: use the user's requested file when provided; otherwise use 
 1. Identify intent: add transaction, revise/delete transaction, summarize, search, import/clean, or render HTML.
 2. Read `references/bookkeeping-rules.md` for field inference and confirmation rules when parsing user text, screenshots, receipts, or messy notes.
 3. Read `references/ledger-schema.md` before changing ledger JSON by hand or mapping external data.
-4. Use `scripts/ledger_tool.py` for deterministic parsing, ledger writes, summaries, validation, and HTML rendering.
+4. Use `scripts/ledger_tool.py` for deterministic parsing, ledger writes, summaries, validation, bulk TSV import, and HTML rendering.
 5. Read `references/html-report.md` when the user asks to customize or inspect the generated dashboard.
 6. When generating HTML, use `assets/ledger-viewer-template.html` via the script unless the user asks for a custom page.
 7. Report what changed: ledger path, transaction count affected, generated report path, and any assumptions.
@@ -89,6 +89,26 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py doctor \
   --ledger ./lazy-ledger.json \
   --json
 ```
+
+## Batch Import
+
+For multiple known transactions, prefer a TSV batch import instead of dozens of `add` calls:
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py import-tsv \
+  --ledger ./lazy-ledger.json \
+  --input ./rows.tsv
+```
+
+Expected TSV header:
+
+```tsv
+occurred_at	type	amount	category	merchant	note	source	confidence
+```
+
+Useful optional columns: `currency`, `tags`, `attachment`, `id`.
+
+For long payment-history screenshots or chat-exported rows, read [references/image-batch-import.md](references/image-batch-import.md).
 
 ## Safety Rules
 
