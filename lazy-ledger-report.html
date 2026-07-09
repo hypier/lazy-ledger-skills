@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>懒人记账</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #dde2ea;
+      --text: #18202b;
+      --muted: #687386;
+      --expense: #d94b4b;
+      --income: #198754;
+      --refund: #2f6fed;
+      --transfer: #7b61ff;
+      --ink: #111827;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 20px clamp(16px, 4vw, 40px);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px clamp(12px, 3vw, 28px) 40px;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    input, select {
+      width: 100%;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 0 10px;
+      font: inherit;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 86px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 22px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .expense { color: var(--expense); }
+    .income { color: var(--income); }
+    .refund { color: var(--refund); }
+    .transfer { color: var(--transfer); }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 13px 14px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .section-title span:last-child {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .bars {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 88px 1fr 88px;
+      gap: 10px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .bar-track {
+      height: 10px;
+      background: #edf0f4;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--ink);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 11px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      background: #fbfcfd;
+    }
+
+    td.amount {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+
+    .empty {
+      padding: 24px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 860px) {
+      .filters, .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .bar-row { grid-template-columns: 72px 1fr; }
+      .bar-row strong { grid-column: 2; }
+      th:nth-child(5), td:nth-child(5) { display: none; }
+    }
+
+    @media (max-width: 560px) {
+      .filters, .metrics { grid-template-columns: 1fr; }
+      table { font-size: 13px; }
+      th:nth-child(4), td:nth-child(4) { display: none; }
+      .metric-value { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>懒人记账</h1>
+    <div class="sub" id="ledgerMeta">本地账本</div>
+  </header>
+  <main>
+    <div class="filters">
+      <select id="monthFilter"></select>
+      <select id="typeFilter">
+        <option value="">全部类型</option>
+        <option value="expense">支出</option>
+        <option value="income">收入</option>
+        <option value="refund">退款</option>
+        <option value="transfer">转账</option>
+      </select>
+      <select id="categoryFilter"></select>
+      <input id="searchInput" type="search" placeholder="搜索商户、备注、金额">
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">支出</div>
+        <div class="metric-value expense" id="expenseTotal">¥0.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">收入</div>
+        <div class="metric-value income" id="incomeTotal">¥0.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">退款</div>
+        <div class="metric-value refund" id="refundTotal">¥0.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">转账</div>
+        <div class="metric-value transfer" id="transferTotal">¥0.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">净额</div>
+        <div class="metric-value" id="netTotal">¥0.00</div>
+      </div>
+    </div>
+
+    <section>
+      <div class="section-title">
+        <span>分类支出</span>
+        <span id="categoryCount">0 类</span>
+      </div>
+      <div class="bars" id="categoryBars"></div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <span>流水明细</span>
+        <span id="rowCount">0 笔</span>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>类型</th>
+              <th>分类</th>
+              <th>商户</th>
+              <th>备注</th>
+              <th style="text-align:right">金额</th>
+            </tr>
+          </thead>
+          <tbody id="transactionRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const LEDGER_DATA = {"schema_version": 1, "currency": "CNY", "created_at": "2026-07-09T07:47:20+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "transactions": [{"id": "tx_20260708_8444f602", "type": "expense", "amount": 38.0, "currency": "CNY", "category": "咖啡", "occurred_at": "2026-07-08T12:00:00+08:00", "source": "text", "confidence": 1.0, "tags": [], "created_at": "2026-07-09T07:47:20+08:00", "updated_at": "2026-07-09T07:48:34+08:00", "merchant": "星巴克", "note": "昨天星巴克 38"}, {"id": "tx_20260703_92fc831c", "type": "income", "amount": 45.0, "currency": "CNY", "category": "红包", "occurred_at": "2026-07-03T15:55:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "陈超", "note": "微信红包-来自陈超", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260702_76c0cfa9", "type": "expense", "amount": 2.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-07-02T17:27:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "亚连", "note": "扫二维码付款-给亚连", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260702_8dad15fa", "type": "expense", "amount": 10.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-07-02T17:27:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "月亮", "note": "扫二维码付款-给月亮", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260702_419af787", "type": "expense", "amount": 24.0, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-07-02T17:25:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "烧腊美食", "note": "扫二维码付款-给烧腊美食", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260701_1d620ef2", "type": "expense", "amount": 6.0, "currency": "CNY", "category": "交通", "occurred_at": "2026-07-01T11:45:00+08:00", "source": "image", "confidence": 0.75, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "深圳市顺易通信息科技有限...", "note": "深圳市顺易通信息科技有限...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260701_d2e77653", "type": "expense", "amount": 83.3, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-07-01T11:38:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "一麦滋烘焙店", "note": "一麦滋烘焙店", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260701_2e13adf5", "type": "expense", "amount": 19.0, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-07-01T11:33:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "喜茶", "note": "喜茶", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260701_1aa75686", "type": "expense", "amount": 246.75, "currency": "CNY", "category": "购物", "occurred_at": "2026-07-01T11:25:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "陵水百佳汇超市", "note": "陵水百佳汇超市", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260701_130205b6", "type": "expense", "amount": 386.0, "currency": "CNY", "category": "交通", "occurred_at": "2026-07-01T10:26:00+08:00", "source": "image", "confidence": 0.75, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "中国石化销售海南石油分...", "note": "中国石化销售海南石油分...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260629_de9d248a", "type": "expense", "amount": 394.0, "currency": "CNY", "category": "转账", "occurred_at": "2026-06-29T16:28:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "牟新麟", "note": "转账-转给牟新麟", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260629_ce3ca375", "type": "expense", "amount": 591.0, "currency": "CNY", "category": "转账", "occurred_at": "2026-06-29T16:28:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "陈超", "note": "转账-转给陈超", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260629_35e5a3ad", "type": "expense", "amount": 188.9, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-29T13:35:00+08:00", "source": "image", "confidence": 0.85, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "美团平台商户", "note": "美团平台商户", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260628_b70bf529", "type": "expense", "amount": 10.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-28T14:12:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "杭州深度求索", "note": "杭州深度求索", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260627_d4707d6d", "type": "expense", "amount": 33.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-27T17:54:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "鲜果园", "note": "扫二维码付款-给鲜果园", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260626_5c5c5de5", "type": "expense", "amount": 93.5, "currency": "CNY", "category": "居住", "occurred_at": "2026-06-26T14:59:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "广州天力物业陵水分公司", "note": "广州天力物业陵水分公司", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260626_194a57aa", "type": "expense", "amount": 1000.0, "currency": "CNY", "category": "居住", "occurred_at": "2026-06-26T14:56:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "广州天力物业陵水分公司", "note": "广州天力物业陵水分公司", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260626_bd4899de", "type": "expense", "amount": 10.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-26T11:55:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "杭州深度求索", "note": "杭州深度求索", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260625_21317112", "type": "expense", "amount": 167.47, "currency": "CNY", "category": "转账", "occurred_at": "2026-06-25T17:37:00+08:00", "source": "image", "confidence": 0.75, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "王晓蓉15737139...", "note": "转账-转给王晓蓉15737139...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260623_f29114bd", "type": "expense", "amount": 4.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-23T16:02:00+08:00", "source": "image", "confidence": 0.7, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "梦相随百货...", "note": "扫二维码付款-给梦相随百货...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260623_23f713e5", "type": "expense", "amount": 500.0, "currency": "CNY", "category": "转账", "occurred_at": "2026-06-23T10:47:00+08:00", "source": "image", "confidence": 0.75, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "王晓蓉15737139...", "note": "转账-转给王晓蓉15737139...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260623_947acf27", "type": "expense", "amount": 15500.0, "currency": "CNY", "category": "转账", "occurred_at": "2026-06-23T10:46:00+08:00", "source": "image", "confidence": 0.7, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "王晓蓉157371...", "note": "转账-转给王晓蓉157371...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260622_b94bf49b", "type": "expense", "amount": 89.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-22T19:15:00+08:00", "source": "image", "confidence": 0.7, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "Ho。。。", "note": "扫二维码付款-给Ho。。。", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260616_42902d1f", "type": "expense", "amount": 3.0, "currency": "CNY", "category": "交通", "occurred_at": "2026-06-16T10:55:00+08:00", "source": "image", "confidence": 0.75, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "深圳市顺易通信息科技有限...", "note": "深圳市顺易通信息科技有限...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260616_daafd24f", "type": "expense", "amount": 23.0, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-06-16T10:44:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "喜茶", "note": "喜茶", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260616_6339b3a5", "type": "expense", "amount": 129.26, "currency": "CNY", "category": "购物", "occurred_at": "2026-06-16T10:37:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:18+08:00", "updated_at": "2026-07-09T07:56:18+08:00", "merchant": "陵水百佳汇超市", "note": "陵水百佳汇超市", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260616_fc6d32bc", "type": "expense", "amount": 47.33, "currency": "CNY", "category": "保险", "occurred_at": "2026-06-16T08:54:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "众安保险", "note": "众安保险", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260615_60e789f1", "type": "expense", "amount": 18.0, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-06-15T18:24:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "夏计清补凉", "note": "扫二维码付款-给夏计清补凉", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260613_6054e77a", "type": "expense", "amount": 15.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-13T17:26:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "月亮", "note": "扫二维码付款-给月亮", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260613_e3614569", "type": "expense", "amount": 12.5, "currency": "CNY", "category": "买菜", "occurred_at": "2026-06-13T17:25:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "卖菜", "note": "扫二维码付款-给卖菜", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260613_4e476adc", "type": "expense", "amount": 25.0, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-06-13T17:23:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "烧腊美食", "note": "扫二维码付款-给烧腊美食", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260611_faccc7e6", "type": "expense", "amount": 20.9, "currency": "CNY", "category": "购物", "occurred_at": "2026-06-11T11:00:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "陵水百佳汇超市", "note": "陵水百佳汇超市", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260611_7b7c00f9", "type": "expense", "amount": 29.0, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-06-11T10:56:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "喜茶", "note": "喜茶", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260611_3fdf225b", "type": "expense", "amount": 17.5, "currency": "CNY", "category": "交通", "occurred_at": "2026-06-11T10:20:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "途虎养车", "note": "途虎养车", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260611_9228b33b", "type": "expense", "amount": 87.39, "currency": "CNY", "category": "购物", "occurred_at": "2026-06-11T10:02:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "陵水百佳汇超市", "note": "陵水百佳汇超市", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260611_81427f88", "type": "expense", "amount": 10.34, "currency": "CNY", "category": "购物", "occurred_at": "2026-06-11T09:07:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "洋卡优选", "note": "洋卡优选", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260611_d25524d9", "type": "expense", "amount": 22.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-11T08:39:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "中国邮政", "note": "中国邮政", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260610_0cf8ba43", "type": "expense", "amount": 42.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-10T17:33:00+08:00", "source": "image", "confidence": 0.7, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "Ho。。。", "note": "扫二维码付款-给Ho。。。", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260610_b66ac581", "type": "expense", "amount": 2.6, "currency": "CNY", "category": "买菜", "occurred_at": "2026-06-10T17:29:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "陵水菜篮子-北斗市场", "note": "陵水菜篮子-北斗市场", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260610_c53c9587", "type": "expense", "amount": 5.0, "currency": "CNY", "category": "买菜", "occurred_at": "2026-06-10T17:29:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "卖菜", "note": "扫二维码付款-给卖菜", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260610_f005f36a", "type": "expense", "amount": 22.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-10T17:26:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "果树", "note": "扫二维码付款-给果树", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260609_3fa85450", "type": "expense", "amount": 15.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-09T16:18:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "芳", "note": "扫二维码付款-给芳", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260609_f69bb180", "type": "expense", "amount": 3.0, "currency": "CNY", "category": "交通", "occurred_at": "2026-06-09T16:16:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "速停车", "note": "速停车", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260609_8185053c", "type": "expense", "amount": 446.1, "currency": "CNY", "category": "购物", "occurred_at": "2026-06-09T16:03:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "URBAN REVIVO", "note": "URBAN REVIVO", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260609_e9acb78f", "type": "transfer", "amount": 2813.19, "currency": "CNY", "category": "提现", "occurred_at": "2026-06-09T08:25:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "零钱提现-到招商银行(5835)", "note": "零钱提现-到招商银行(5835)", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260608_2c9cbd76", "type": "expense", "amount": 8.0, "currency": "CNY", "category": "其他", "occurred_at": "2026-06-08T10:48:00+08:00", "source": "image", "confidence": 0.9, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "妹歌", "note": "扫二维码付款-给妹歌", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260604_ddd4b1c4", "type": "income", "amount": 50.0, "currency": "CNY", "category": "红包", "occurred_at": "2026-06-04T18:52:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "陈超", "note": "微信红包-来自陈超", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260604_fb0e2963", "type": "expense", "amount": 442.15, "currency": "CNY", "category": "交通", "occurred_at": "2026-06-04T11:18:00+08:00", "source": "image", "confidence": 0.75, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "中国石化销售海南石油分...", "note": "中国石化销售海南石油分...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260604_87a27910", "type": "expense", "amount": 3.0, "currency": "CNY", "category": "交通", "occurred_at": "2026-06-04T11:10:00+08:00", "source": "image", "confidence": 0.75, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "深圳市顺易通信息科技有限...", "note": "深圳市顺易通信息科技有限...", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260604_635d200c", "type": "expense", "amount": 199.61, "currency": "CNY", "category": "购物", "occurred_at": "2026-06-04T11:03:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "陵水百佳汇超市", "note": "陵水百佳汇超市", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260601_7a54d3a9", "type": "expense", "amount": 18.0, "currency": "CNY", "category": "餐饮", "occurred_at": "2026-06-01T18:56:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "夏计清补凉", "note": "扫二维码付款-给夏计清补凉", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260530_0adeabc5", "type": "expense", "amount": 15.9, "currency": "CNY", "category": "购物", "occurred_at": "2026-05-30T10:36:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "赵一鸣", "note": "赵一鸣", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}, {"id": "tx_20260530_81fa3e5d", "type": "expense", "amount": 5.8, "currency": "CNY", "category": "购物", "occurred_at": "2026-05-30T10:34:00+08:00", "source": "image", "confidence": 0.95, "tags": [], "created_at": "2026-07-09T07:56:19+08:00", "updated_at": "2026-07-09T07:56:19+08:00", "merchant": "赵一鸣", "note": "赵一鸣", "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"}], "categories": []};
+
+    const txs = Array.isArray(LEDGER_DATA.transactions) ? LEDGER_DATA.transactions : [];
+    const formatMoney = (value) => new Intl.NumberFormat("zh-CN", {
+      style: "currency",
+      currency: LEDGER_DATA.currency || "CNY"
+    }).format(Number(value || 0));
+    const formatDate = (value) => (value || "").slice(0, 10);
+    const monthOf = (tx) => (tx.occurred_at || "").slice(0, 7);
+    const typeLabel = {
+      expense: "支出",
+      income: "收入",
+      refund: "退款",
+      transfer: "转账"
+    };
+
+    const monthFilter = document.getElementById("monthFilter");
+    const typeFilter = document.getElementById("typeFilter");
+    const categoryFilter = document.getElementById("categoryFilter");
+    const searchInput = document.getElementById("searchInput");
+
+    function unique(values) {
+      return [...new Set(values.filter(Boolean))].sort().reverse();
+    }
+
+    function fillFilters() {
+      const months = unique(txs.map(monthOf));
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const defaultMonth = months.includes(currentMonth) ? currentMonth : (months[0] || "");
+      monthFilter.innerHTML = `<option value="">全部月份</option>` + months.map((m) => `<option value="${m}">${m}</option>`).join("");
+      monthFilter.value = defaultMonth;
+
+      const categories = unique(txs.map((tx) => tx.category || "其他")).sort();
+      categoryFilter.innerHTML = `<option value="">全部分类</option>` + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function filteredRows() {
+      const month = monthFilter.value;
+      const type = typeFilter.value;
+      const category = categoryFilter.value;
+      const query = searchInput.value.trim().toLowerCase();
+      return txs.filter((tx) => {
+        if (month && monthOf(tx) !== month) return false;
+        if (type && tx.type !== type) return false;
+        if (category && (tx.category || "其他") !== category) return false;
+        if (query) {
+          const haystack = [tx.amount, tx.category, tx.merchant, tx.note, tx.type].join(" ").toLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
+        return true;
+      }).sort((a, b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")));
+    }
+
+    function render() {
+      const rows = filteredRows();
+      const totals = { expense: 0, income: 0, refund: 0, transfer: 0 };
+      const byCategory = {};
+
+      for (const tx of rows) {
+        const type = tx.type || "expense";
+        const amount = Number(tx.amount || 0);
+        if (Object.prototype.hasOwnProperty.call(totals, type)) totals[type] += amount;
+        if (type === "expense") {
+          const category = tx.category || "其他";
+          byCategory[category] = (byCategory[category] || 0) + amount;
+        }
+      }
+
+      document.getElementById("expenseTotal").textContent = formatMoney(totals.expense);
+      document.getElementById("incomeTotal").textContent = formatMoney(totals.income);
+      document.getElementById("refundTotal").textContent = formatMoney(totals.refund);
+      document.getElementById("transferTotal").textContent = formatMoney(totals.transfer);
+      document.getElementById("netTotal").textContent = formatMoney(totals.income + totals.refund - totals.expense);
+      document.getElementById("rowCount").textContent = `${rows.length} 笔`;
+
+      const categoryRows = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+      const maxCategory = Math.max(...categoryRows.map(([, amount]) => amount), 1);
+      document.getElementById("categoryCount").textContent = `${categoryRows.length} 类`;
+      document.getElementById("categoryBars").innerHTML = categoryRows.length ? categoryRows.map(([category, amount]) => {
+        const width = Math.max(2, (amount / maxCategory) * 100);
+        return `<div class="bar-row">
+          <span>${escapeHtml(category)}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${width}%"></div></div>
+          <strong>${formatMoney(amount)}</strong>
+        </div>`;
+      }).join("") : `<div class="empty">暂无分类支出</div>`;
+
+      document.getElementById("transactionRows").innerHTML = rows.length ? rows.map((tx) => {
+        const type = tx.type || "expense";
+        return `<tr>
+          <td>${escapeHtml(formatDate(tx.occurred_at))}</td>
+          <td>${escapeHtml(typeLabel[type] || type)}</td>
+          <td>${escapeHtml(tx.category || "其他")}</td>
+          <td>${escapeHtml(tx.merchant || "")}</td>
+          <td>${escapeHtml(tx.note || "")}</td>
+          <td class="amount ${escapeHtml(type)}">${formatMoney(tx.amount)}</td>
+        </tr>`;
+      }).join("") : `<tr><td colspan="6"><div class="empty">暂无流水</div></td></tr>`;
+    }
+
+    document.getElementById("ledgerMeta").textContent = `交易 ${txs.length} 笔 · 更新 ${formatDate(LEDGER_DATA.updated_at) || "未知"}`;
+    fillFilters();
+    [monthFilter, typeFilter, categoryFilter, searchInput].forEach((el) => el.addEventListener("input", render));
+    render();
+  </script>
+</body>
+</html>
