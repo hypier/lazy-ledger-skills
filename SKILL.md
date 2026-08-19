@@ -1,39 +1,41 @@
 ---
 name: lazy-ledger
-description: Personal lazy bookkeeping assistant for recording expenses, income, refunds, transfers, and notes into a local JSON ledger, summarizing spending, bulk importing cleaned rows, and generating a self-contained HTML dashboard. Use when the user asks to 记账, 懒人记账, record a purchase, add an expense, batch import payment history, summarize spending, view accounting data, make a ledger report, convert receipts or payment text into transactions, or create an HTML page to inspect ledger data.
+description: Personal lazy bookkeeping assistant. Records expenses, income, refunds, and transfers into a local JSON document ledger from casual Chinese text, receipts, screenshots, or pasted payment history; remembers merchant category habits; tracks accounts and monthly budgets; summarizes spending in chat; serves a localhost page to view and edit the ledger; and can also generate a self-contained HTML snapshot. Use when the user asks to 记账, 懒人记账, 记一笔, 这个月花了多少, 看账, 对账, 预算, 转账, 账户余额, 打开页面, 改账, 删掉刚才那笔, record a purchase, import WeChat/Alipay history, summarize spending, or inspect ledger data.
 ---
 
 # Lazy Ledger
 
-## Overview
+Maintain a local personal ledger with minimal friction. Infer fields, write structured transactions, answer in Chinese with a readable summary, and open the localhost page when the user wants to look at or edit the data.
 
-Use this skill to maintain a lightweight local personal ledger with minimal user effort. Prefer doing the bookkeeping work directly: infer sensible defaults, write structured transactions, summarize results, and render an HTML dashboard when the user wants to see the data.
+## Paths
 
-Default ledger path: use the user's requested file when provided; otherwise use `./lazy-ledger.json` in the current working directory.
+- Tool: `scripts/ledger_tool.py` next to this SKILL.md. Typical invocation: `python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py`
+- Ledger: `./lazy-ledger.json` in the user's working directory unless they name another file
+- Dashboard: `./lazy-ledger-report.html` unless they name another output
+- Live page: `python3 ... serve --ledger ./lazy-ledger.json` on 127.0.0.1 only
 
-## Workflow
+Never write the ledger into the skill directory. The ledger file is a JSON document database (`store: lazy-ledger-docs`) with collections: `transactions`, `accounts`, `budgets`, `categories`.
 
-1. Identify intent: add transaction, revise/delete transaction, summarize, search, import/clean, or render HTML.
-2. Read `references/bookkeeping-rules.md` for field inference and confirmation rules when parsing user text, screenshots, receipts, or messy notes.
-3. Read `references/ledger-schema.md` before changing ledger JSON by hand or mapping external data.
-4. Use `scripts/ledger_tool.py` for deterministic parsing, ledger writes, summaries, validation, bulk TSV import, and HTML rendering.
-5. Read `references/html-report.md` when the user asks to customize or inspect the generated dashboard.
-6. When generating HTML, use `assets/ledger-viewer-template.html` via the script unless the user asks for a custom page.
-7. Report what changed: ledger path, transaction count affected, generated report path, and any assumptions.
+## Route intent
 
-## Add Transactions
+| User intent | Read | Command |
+|---|---|---|
+| Record one or many items | [references/record.md](references/record.md) | `add --text` |
+| Unclear amount / several totals | [references/record.md](references/record.md) | `parse --text` first |
+| Correct or delete | [references/record.md](references/record.md) | `find` then `update` / `delete --yes` |
+| Screenshot, receipt, payment-history paste | [references/record.md](references/record.md), [references/image-batch-import.md](references/image-batch-import.md) | `add --text` or `import-tsv` |
+| "花了多少 / 汇总 / 对账 / 预算" | [references/present.md](references/present.md) | `show --compare` |
+| 账户 / 转账 / 余额 | [references/record.md](references/record.md) | `account list` / `add --text` with 转到 |
+| 设预算 / 这个月还能花多少 | [references/present.md](references/present.md) | `budget set` then `show` |
+| "看数据 / 打开报表 / 改账 / 本地页面" | [references/present.md](references/present.md), [references/html-report.md](references/html-report.md) | `serve` (edit) or `render` (static export) |
+| Schema or manual JSON edits | [references/ledger-schema.md](references/ledger-schema.md) | `doctor --json` |
+| Field inference details | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) | — |
 
-For clear user input like `昨天星巴克 38` or `午饭 26.5 餐饮`, parse the fields and add the entry without asking a follow-up. Prefer `add --text` for casual text so the deterministic parser, duplicate check, and category defaults run together. Ask only when the amount is missing, there are multiple plausible amounts, or the transaction type would materially change totals.
+Do the obvious write when amount and meaning are clear. Do not ask the user to fill a form.
 
-Use defaults:
+## Record
 
-- `type`: `expense`
-- `currency`: ledger default, usually `CNY`
-- `occurred_at`: today if absent; preserve user-provided relative dates
-- `category`: infer from merchant/note; otherwise `其他`
-- `source`: `text`, `image`, `voice`, `manual`, or `import`
-
-Example command:
+Clear input such as `昨天星巴克 38` or a multi-line paste → `add --text` immediately.
 
 ```bash
 python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py add \
@@ -41,80 +43,42 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py add \
   --text "昨天星巴克 38"
 ```
 
-Preview the parsed fields without writing when the input is slightly ambiguous:
+`add` prints `{added, count, month}`. Reply with the recorded line plus this month's expense total from `month.totals.expense`. If `month.budgets` has a matching category, mention remaining.
+
+Ask only when amount is missing, several amounts could be the total, or type (expense/income/refund/transfer) would change totals.
+
+Read [references/record.md](references/record.md) before handling screenshots, stacked WeChat/Alipay pastes, merchant habits, or corrections.
+
+## Present
+
+Always answer in Chinese with a short human summary. Do not dump raw JSON unless the user asks.
+
+For spending questions:
 
 ```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py parse \
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py show \
   --ledger ./lazy-ledger.json \
-  --text "昨天星巴克 38"
+  --compare
 ```
 
-`add` refuses likely duplicates by default. If the user confirms it is a separate purchase, rerun with `--allow-duplicate`.
+`show` defaults to this month. If this month is empty, say so and rerun with `--month YYYY-MM` or omit the default by using `summary`.
 
-## Revise Transactions
-
-Use `list` to find candidate transaction ids, then `update` or `delete` for corrections. If the user's correction clearly identifies one recent transaction, apply it and report the id. If several entries match, show concise candidates and ask which one.
+To look at or edit data in a browser, start the local page in the background (do not block the session on it):
 
 ```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py recent \
-  --ledger ./lazy-ledger.json \
-  --limit 5
-
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py list \
-  --ledger ./lazy-ledger.json \
-  --query 星巴克
-
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py update \
-  --ledger ./lazy-ledger.json \
-  --id tx_20260707_ab12cd34 \
-  --category 餐饮
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
+  --ledger ./lazy-ledger.json
 ```
 
-## View Data
+The command prints `{"url":"http://127.0.0.1:8765/","ledger":"..."}`. Give the user that URL. Bind only to localhost. Use `render` when they want a standalone HTML file to keep or share locally.
 
-For "看一下数据", "生成页面", "做个报表", or similar requests, render the dashboard:
+Then give the file path or URL. Read [references/present.md](references/present.md) for chat templates and when to add the dashboard.
 
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py render \
-  --ledger ./lazy-ledger.json \
-  --output ./lazy-ledger-report.html
-```
+## Safety
 
-The generated HTML is self-contained and can be opened directly in a browser. It includes month filtering, search, category/type filters, summary totals, category bars, and transaction rows.
-
-Run a quick ledger health check when importing, cleaning, or suspecting duplicate/invalid data:
-
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py doctor \
-  --ledger ./lazy-ledger.json \
-  --json
-```
-
-## Batch Import
-
-For multiple known transactions, prefer a TSV batch import instead of dozens of `add` calls:
-
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py import-tsv \
-  --ledger ./lazy-ledger.json \
-  --input ./rows.tsv
-```
-
-Expected TSV header:
-
-```tsv
-occurred_at	type	amount	category	merchant	note	source	confidence
-```
-
-Useful optional columns: `currency`, `tags`, `attachment`, `id`.
-
-For long payment-history screenshots or chat-exported rows, read [references/image-batch-import.md](references/image-batch-import.md).
-
-## Safety Rules
-
-- Never invent exact transactions when the user is asking for factual bookkeeping. If the amount is unknown, ask.
-- Keep amounts numeric and positive; use `type` to express expense/income/refund/transfer.
-- Do not overwrite an existing ledger without preserving its transactions.
-- Do not store secrets, bank login data, card numbers, or full payment credentials.
-- For screenshots or receipts, preserve uncertainty in `note` or `confidence` when fields are inferred.
-- When the user asks for financial advice, limit the answer to descriptive spending analysis unless they explicitly request broader guidance.
+- Never invent exact transactions. If the amount is unknown, ask.
+- Keep amounts positive; use `type` for direction.
+- Do not overwrite an existing ledger's transactions.
+- Do not store secrets, bank logins, card numbers, or payment credentials.
+- Preserve uncertainty in `note` / `confidence` for screenshots and imports.
+- Financial advice stays descriptive unless the user explicitly asks for broader guidance.

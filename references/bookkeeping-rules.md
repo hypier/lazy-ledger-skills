@@ -1,45 +1,50 @@
 # Bookkeeping Rules
 
-Use these rules when translating casual user input into ledger transactions.
+Field inference for casual Chinese input. Workflows live in [record.md](record.md).
 
-## Minimal Friction
+## Minimal friction
 
-Do the obvious bookkeeping action when the amount and rough meaning are clear. Do not ask the user to fill a formal form.
+Do the obvious write when amount and meaning are clear. Prefer `add --text` so parsing, duplicate checks, and category defaults run together. Use explicit `--amount` / `--category` / `--merchant` / `--date` only to override or for non-text sources.
 
-Use `ledger_tool.py parse --text ...` to preview casual text and `ledger_tool.py add --text ...` to write clear casual entries. Prefer explicit `--amount`, `--category`, `--merchant`, and `--date` only when overriding parser output or handling non-text sources.
+Ask only when:
 
-Ask a follow-up only when:
+- No amount is present
+- Several amounts could be the transaction total (`一共`, two prices with no 实付)
+- The entry may be income / refund / transfer rather than expense
+- A correction target is ambiguous
 
-- No amount is present.
-- Multiple amounts could be the transaction total.
-- The entry may be income/refund/transfer rather than expense.
-- The user asks to modify or delete a transaction but the target is ambiguous.
+## Types
 
-## Transaction Types
+Store a positive `amount` for every type. Reports apply the sign.
 
-- `expense`: spending, default.
-- `income`: salary, reimbursement received, interest income, side income.
-- `refund`: money returned from an earlier expense.
-- `transfer`: movement between own accounts; exclude from spending totals.
+- `expense`: spending, default
+- `income`: salary, reimbursement received, interest, side income
+- `refund`: money returned from an earlier expense
+- `transfer`: movement between own accounts; listed but excluded from spend totals
 
-Store positive `amount` for every type. Let reports decide how the type affects net totals.
+## Dates
 
-## Date Rules
+- No date → today at 12:00 local
+- Keep explicit dates and times
+- `今天` / `昨天` / `前天`
+- `上周五`, `周一` / `这周一` (most recent that weekday, including today)
+- `7月7日`, `7月7号`, `7/7` (current year; if the date is far in the future, use last year)
 
-- If no date is given, use today.
-- Preserve explicit dates.
-- Interpret casual Chinese dates:
-  - `今天`: today
-  - `昨天`: yesterday
-  - `前天`: two days ago
-  - `上周五`: the previous Friday
-  - `这个月`: current month; if recording a transaction and no day is given, ask or use today only if the user implies it happened now
+## Amounts
 
-## Category Inference
+- One amount → that amount
+- `原价45 实付38` or `券后` → paid amount, drop 原价
+- `一共` / `合计` / `总计` with several numbers → last number
+- Newline or `；` → separate transactions
+- `午饭26 晚饭38` → two expenses
+- Otherwise several amounts on one line → ask
 
-Use these defaults unless the user has customized categories:
+## Category
 
-- 餐饮: 饭, 午饭, 晚饭, 早餐, 外卖, 火锅, 奶茶, 咖啡, 餐厅, 美团, 饿了么
+User `preferences.merchant_categories` wins. Then keywords:
+
+- 咖啡: 星巴克, 瑞幸, 咖啡, 拿铁, 美式
+- 餐饮: 饭, 午饭, 晚饭, 早餐, 外卖, 火锅, 奶茶, 餐厅, 美团, 饿了么
 - 交通: 地铁, 公交, 打车, 滴滴, 高铁, 火车, 机票, 停车, 加油
 - 购物: 淘宝, 京东, 拼多多, 超市, 便利店, 衣服, 数码
 - 居住: 房租, 水电, 燃气, 物业, 宽带
@@ -48,60 +53,36 @@ Use these defaults unless the user has customized categories:
 - 教育: 课程, 书, 学费, 培训
 - 人情: 红包, 礼物, 请客
 - 收入: 工资, 奖金, 报销, 利息
-- 其他: cannot infer confidently
+- 其他: cannot infer; lower confidence
 
-If merchant and category conflict, prefer explicit user category over inferred merchant category.
+Explicit user category beats merchant inference. `prefer` and `update --category` remember the merchant habit.
 
-## Screenshots And Receipts
+## Method, account, tags
 
-When a screenshot or receipt is provided:
+Infer when the text names them; leave unset otherwise.
 
-- Extract amount, merchant, date/time, payment channel, and order note when available.
-- Do not force the user to classify receipt vs payment screenshot.
-- If the image contains both original price and paid amount, use paid amount.
-- If the image contains multiple transactions, ask whether to record all or which one.
-- Put uncertain extraction details in `note` and lower `confidence`.
+- method: 微信 → `wechat`; 支付宝 / 花呗 → `alipay`; 现金 → `cash`; 信用卡 / 刷卡 → `card`; 银行卡 → `bank`
+- account: map method/name onto ledger accounts. Default new expenses to `preferences.default_account_id` (微信零钱)
+- transfer route: `从微信转到支付宝 500`, `微信转支付宝`, `还信用卡`
+- tags: 报销 / 对公 → `报销`; 出差 / 差旅 → `出差`; 订阅 → `订阅`
 
-When the image is a long payment-history list and the user wants every visible transaction:
+## Screenshots
 
-- Transcribe only fully visible rows.
-- Preserve the visible merchant text even if it is truncated with `...`.
-- Lower `confidence` for truncated merchant names or ambiguous payment counterparts.
-- Convert the cleaned rows into TSV and use `ledger_tool.py import-tsv ...` for deterministic writes.
+- Do not force receipt vs payment-history classification
+- Visible paid amount wins over original price
+- Multiple visible rows: ask all vs which one, unless they already said import all
+- Truncated merchants stay truncated; lower `confidence`
 
-## Duplicate Detection
+## Duplicates
 
-Before adding a transaction, scan recent transactions for likely duplicates:
-
-- Same amount.
-- Same date or within a few minutes.
-- Same merchant or very similar note.
-- Same source image/note if available.
-
-If likely duplicate, ask before adding unless the user explicitly says it is a separate purchase.
-
-The CLI enforces this by refusing likely duplicates unless `--allow-duplicate` is provided. Treat that refusal as a prompt to confirm with the user, not as a hard failure.
-
-## Corrections
-
-When the user says a transaction was wrong:
-
-- Find likely matches by amount, merchant, category, note, and recency.
-- If one clear match exists, update it.
-- If multiple matches exist, list concise candidates and ask which one.
-- Keep the original transaction id unless deleting/recreating is necessary.
+Likely duplicate = same amount, same day, and same merchant or very similar note (or same attachment). Ask before adding. CLI refuses unless `--allow-duplicate`.
 
 ## Summaries
 
-For summaries:
-
-- Expense total includes only `expense`.
-- Income total includes `income`.
-- Refund total includes `refund`.
-- Net cashflow = income + refund - expense.
-- Transfers are listed but excluded from expense and income totals.
-- Mention the date range used.
-
-## Validation
-
-Use `ledger_tool.py doctor --ledger ... --json` after imports, manual edits, or suspicious totals. It reports missing required fields, invalid amounts/types/confidence values, and likely duplicates.
+- Expense total: `expense` only
+- Income total: `income` only
+- Refund total: `refund` only
+- Net = income + refund − expense
+- Transfers listed, excluded from expense/income
+- Always name the date range
+- `show` / `summary --compare` contrast with the previous equal period

@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>懒人记账</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #e6ebf1;
+      --panel: #f7f9fb;
+      --ink: #1b2740;
+      --muted: #5d6b80;
+      --line: #c5d0dc;
+      --expense: #b4453a;
+      --income: #1e7a62;
+      --refund: #2c6bb0;
+      --transfer: #675889;
+      --chip: #dfe6ee;
+      --focus: #2c6bb0;
+      --shadow: 0 10px 30px rgba(27, 39, 64, 0.06);
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --paper: #121820;
+        --panel: #1b232e;
+        --ink: #e7edf4;
+        --muted: #9aa7b8;
+        --line: #324155;
+        --expense: #e07a70;
+        --income: #4db69a;
+        --chip: #243040;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.5;
+    }
+    button, select, input, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 32px) 64px; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.03em; }
+    .sub { color: var(--muted); font-size: 14px; margin-top: 6px; }
+    .composer, .panel, .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .composer { padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 18px 0; }
+    textarea, input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--paper);
+      padding: 10px 12px;
+    }
+    textarea { min-height: 48px; resize: vertical; }
+    .btn, .chip {
+      height: 44px;
+      border: 1px solid var(--line);
+      background: var(--chip);
+      border-radius: 10px;
+      padding: 0 14px;
+      min-width: 44px;
+    }
+    .btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+    .btn.danger { color: var(--expense); }
+    .period { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+    .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .field { display: grid; gap: 4px; }
+    .field span { font-size: 12px; color: var(--muted); }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .metric { padding: 14px; }
+    .metric-label { color: var(--muted); font-size: 13px; }
+    .metric-value { margin-top: 6px; font-family: var(--mono); font-size: 24px; font-weight: 700; }
+    .expense { color: var(--expense); }
+    .income { color: var(--income); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .panel-head { display: flex; justify-content: space-between; gap: 12px; padding: 13px 14px; border-bottom: 1px solid var(--line); }
+    .panel-head h2 { margin: 0; font-size: 16px; }
+    .panel-kicker { color: var(--muted); font-size: 13px; }
+    .rows { padding: 8px 0; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .row:hover { background: color-mix(in srgb, var(--chip) 55%, transparent); }
+    .meta { color: var(--muted); font-size: 12px; }
+    .amount { font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .empty { padding: 24px; text-align: center; color: var(--muted); }
+    .msg { min-height: 20px; color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+    .msg.err { color: var(--expense); }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+    dialog { border: 1px solid var(--line); border-radius: 16px; padding: 0; background: var(--panel); color: var(--ink); width: min(480px, 92vw); }
+    .dialog-body { padding: 16px; display: grid; gap: 10px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 16px; }
+    @media (max-width: 800px) {
+      .filters, .metrics, .grid-2, .composer { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="sub">本机文档库 · 可改账</div>
+      <h1>懒人记账</h1>
+      <div class="sub" id="ledgerMeta">正在读取本地账本</div>
+    </header>
+
+    <form class="composer" id="addForm">
+      <label class="sr" for="textInput">记一笔</label>
+      <textarea id="textInput" placeholder="昨天星巴克 38，或从微信转到支付宝 500" required></textarea>
+      <button class="btn primary" type="submit">记账</button>
+    </form>
+    <p class="msg" id="addMsg"></p>
+
+    <div class="period" role="group" aria-label="时间范围">
+      <button class="chip" type="button" data-range="this-month">本月</button>
+      <button class="chip" type="button" data-range="last-month">上月</button>
+      <button class="chip" type="button" data-range="last7">近7天</button>
+      <button class="chip" type="button" data-range="last30">近30天</button>
+      <button class="chip" type="button" data-range="all">全部</button>
+    </div>
+    <div class="filters">
+      <label class="field"><span>类型</span>
+        <select id="typeFilter">
+          <option value="">全部类型</option>
+          <option value="expense">支出</option>
+          <option value="income">收入</option>
+          <option value="refund">退款</option>
+          <option value="transfer">转账</option>
+        </select>
+      </label>
+      <label class="field"><span>分类</span><select id="categoryFilter"></select></label>
+      <label class="field"><span>账户</span><select id="accountFilter"></select></label>
+      <label class="field"><span>搜索</span><input id="searchInput" type="search" placeholder="商户、备注、金额"></label>
+    </div>
+
+    <section class="metrics">
+      <div class="metric"><div class="metric-label">支出</div><div class="metric-value expense" id="expenseTotal">¥0.00</div></div>
+      <div class="metric"><div class="metric-label">收入</div><div class="metric-value income" id="incomeTotal">¥0.00</div></div>
+      <div class="metric"><div class="metric-label">净额</div><div class="metric-value" id="netTotal">¥0.00</div></div>
+      <div class="metric"><div class="metric-label">笔数</div><div class="metric-value" id="countTotal">0</div></div>
+    </section>
+
+    <div class="grid-2">
+      <section class="panel">
+        <div class="panel-head"><h2>账户余额</h2><span class="panel-kicker">含期初</span></div>
+        <div class="rows" id="accountRows"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>预算</h2><span class="panel-kicker" id="budgetLabel">本月</span></div>
+        <form class="dialog-body" id="budgetForm">
+          <input id="budgetAmount" type="number" min="0.01" step="0.01" placeholder="本月总预算，例如 8000">
+          <input id="budgetCategory" placeholder="分类，可空">
+          <button class="btn" type="submit">保存预算</button>
+        </form>
+        <div class="rows" id="budgetRows"></div>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:12px">
+      <div class="panel-head"><h2>流水</h2><span class="panel-kicker" id="rowCount">0 笔</span></div>
+      <div class="rows" id="txRows"></div>
+    </section>
+  </div>
+
+  <dialog id="editDialog">
+    <form class="dialog-body" id="editForm">
+      <strong>改这一笔</strong>
+      <input id="editAmount" type="number" step="0.01" min="0.01" required>
+      <input id="editMerchant" placeholder="商户">
+      <input id="editCategory" placeholder="分类">
+      <select id="editType">
+        <option value="expense">支出</option>
+        <option value="income">收入</option>
+        <option value="refund">退款</option>
+        <option value="transfer">转账</option>
+      </select>
+      <select id="editAccount"></select>
+      <input id="editNote" placeholder="备注">
+      <div class="dialog-actions">
+        <button class="btn danger" type="button" id="deleteBtn">删除</button>
+        <button class="btn" type="button" id="cancelBtn">取消</button>
+        <button class="btn primary" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const typeLabel = { expense: "支出", income: "收入", refund: "退款", transfer: "转账" };
+    let LEDGER = { transactions: [], accounts: [], budgets: [], currency: "CNY" };
+    let rangeMode = "this-month";
+    let editingId = null;
+    const chips = [...document.querySelectorAll(".chip[data-range]")];
+    const typeFilter = document.getElementById("typeFilter");
+    const categoryFilter = document.getElementById("categoryFilter");
+    const accountFilter = document.getElementById("accountFilter");
+    const searchInput = document.getElementById("searchInput");
+    const dialog = document.getElementById("editDialog");
+
+    const money = (value) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: LEDGER.currency || "CNY" }).format(Number(value || 0));
+    const dayOf = (tx) => (tx.occurred_at || "").slice(0, 10);
+    const monthOf = (tx) => (tx.occurred_at || "").slice(0, 7);
+    const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        ...options,
+        body: options.body ? JSON.stringify(options.body) : undefined
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || payload.message || "请求失败");
+      return payload;
+    }
+
+    function periodBounds() {
+      const today = new Date();
+      const first = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+      const last = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      if (rangeMode === "this-month") return { start: iso(first(today)), end: iso(today), month: iso(today).slice(0, 7) };
+      if (rangeMode === "last-month") {
+        const pivot = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        return { start: iso(first(pivot)), end: iso(last(pivot)), month: iso(pivot).slice(0, 7) };
+      }
+      if (rangeMode === "last7") { const start = new Date(today); start.setDate(today.getDate() - 6); return { start: iso(start), end: iso(today) }; }
+      if (rangeMode === "last30") { const start = new Date(today); start.setDate(today.getDate() - 29); return { start: iso(start), end: iso(today) }; }
+      return { start: "", end: "" };
+    }
+
+    function filteredRows() {
+      const bounds = periodBounds();
+      const type = typeFilter.value;
+      const category = categoryFilter.value;
+      const account = accountFilter.value;
+      const query = searchInput.value.trim().toLowerCase();
+      return (LEDGER.transactions || []).filter((tx) => {
+        const day = dayOf(tx);
+        if (bounds.start && day < bounds.start) return false;
+        if (bounds.end && day > bounds.end) return false;
+        if (type && tx.type !== type) return false;
+        if (category && (tx.category || "其他") !== category) return false;
+        if (account && ![tx.account_id, tx.account, tx.to_account_id, tx.to_account].includes(account)) return false;
+        if (query && ![tx.merchant, tx.note, tx.category, tx.amount, tx.account].join(" ").toLowerCase().includes(query)) return false;
+        return true;
+      }).sort((a, b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")));
+    }
+
+    function accountBalances() {
+      const accounts = (LEDGER.accounts || []).filter((item) => item && !item.archived);
+      const state = Object.fromEntries(accounts.map((item) => [item.id, { name: item.name, balance: Number(item.opening_balance || 0) }]));
+      const nameToId = Object.fromEntries(accounts.map((item) => [item.name, item.id]));
+      const resolve = (id, name) => (id && state[id] ? id : nameToId[name]);
+      for (const tx of LEDGER.transactions || []) {
+        const amount = Number(tx.amount || 0);
+        const source = resolve(tx.account_id, tx.account);
+        const dest = resolve(tx.to_account_id, tx.to_account);
+        if (tx.type === "expense" && source) state[source].balance -= amount;
+        if ((tx.type === "income" || tx.type === "refund") && source) state[source].balance += amount;
+        if (tx.type === "transfer") {
+          if (source) state[source].balance -= amount;
+          if (dest) state[dest].balance += amount;
+        }
+      }
+      return accounts.map((item) => ({ id: item.id, name: item.name, balance: state[item.id].balance }));
+    }
+
+    function render() {
+      chips.forEach((chip) => chip.setAttribute("aria-pressed", chip.dataset.range === rangeMode ? "true" : "false"));
+      const rows = filteredRows();
+      const totals = { expense: 0, income: 0, refund: 0 };
+      for (const tx of rows) {
+        if (totals[tx.type] !== undefined) totals[tx.type] += Number(tx.amount || 0);
+      }
+      document.getElementById("expenseTotal").textContent = money(totals.expense);
+      document.getElementById("incomeTotal").textContent = money(totals.income);
+      document.getElementById("netTotal").textContent = money(totals.income + totals.refund - totals.expense);
+      document.getElementById("countTotal").textContent = String(rows.length);
+      document.getElementById("rowCount").textContent = `${rows.length} 笔`;
+      document.getElementById("ledgerMeta").textContent = `交易 ${(LEDGER.transactions || []).length} 笔 · 更新 ${(LEDGER.updated_at || "").slice(0, 10) || "刚刚"}`;
+
+      const categories = [...new Set((LEDGER.transactions || []).map((tx) => tx.category || "其他"))].sort();
+      const currentCategory = categoryFilter.value;
+      categoryFilter.innerHTML = `<option value="">全部分类</option>` + categories.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("");
+      categoryFilter.value = currentCategory;
+      const accounts = (LEDGER.accounts || []).filter((item) => !item.archived);
+      const currentAccount = accountFilter.value;
+      accountFilter.innerHTML = `<option value="">全部账户</option>` + accounts.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+      accountFilter.value = currentAccount;
+      document.getElementById("editAccount").innerHTML = accounts.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+
+      document.getElementById("accountRows").innerHTML = accountBalances().map((item) =>
+        `<div class="row"><div>${escapeHtml(item.name)}</div><div class="amount">${money(item.balance)}</div><span></span></div>`
+      ).join("") || `<div class="empty">还没有账户</div>`;
+
+      const bounds = periodBounds();
+      const month = bounds.month;
+      document.getElementById("budgetLabel").textContent = month || "选择月份";
+      const budgets = (LEDGER.budgets || []).filter((item) => !month || !item.month || item.month === month);
+      document.getElementById("budgetRows").innerHTML = budgets.length ? budgets.map((item) => {
+        const spent = rows.filter((tx) => tx.type === "expense" && (!item.category || tx.category === item.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+        const left = Number(item.amount) - spent;
+        return `<div class="row"><div>${escapeHtml(item.category || "本月总额")}<div class="meta">限额 ${money(item.amount)}</div></div><div class="amount ${left < 0 ? "expense" : ""}">${left < 0 ? "超支 " : "剩余 "}${money(Math.abs(left))}</div><button class="btn" data-del-budget="${escapeHtml(item.id)}" type="button">删</button></div>`;
+      }).join("") : `<div class="empty">还没有预算</div>`;
+
+      document.getElementById("txRows").innerHTML = rows.length ? rows.map((tx) => {
+        const type = tx.type || "expense";
+        return `<div class="row">
+          <div><strong>${escapeHtml(tx.merchant || tx.category || "未命名")}</strong>
+            <div class="meta">${escapeHtml(dayOf(tx))} · ${escapeHtml(typeLabel[type] || type)} · ${escapeHtml(tx.category || "")}${tx.account ? " · " + escapeHtml(tx.to_account ? `${tx.account}→${tx.to_account}` : tx.account) : ""}</div>
+          </div>
+          <div class="amount ${escapeHtml(type)}">${money(tx.amount)}</div>
+          <button class="btn" data-edit="${escapeHtml(tx.id)}" type="button">改</button>
+        </div>`;
+      }).join("") : `<div class="empty">这段时间没有流水。上面记一笔即可。</div>`;
+    }
+
+    async function refresh() {
+      LEDGER = await api("/api/ledger");
+      render();
+    }
+
+    document.getElementById("addForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const msg = document.getElementById("addMsg");
+      msg.textContent = "";
+      msg.className = "msg";
+      try {
+        await api("/api/transactions", { method: "POST", body: { text: document.getElementById("textInput").value } });
+        document.getElementById("textInput").value = "";
+        msg.textContent = "已记下。";
+        await refresh();
+      } catch (error) {
+        msg.textContent = error.message === "likely_duplicate" ? "可能重复了。确认是另一笔的话再记一次。" : error.message;
+        msg.className = "msg err";
+      }
+    });
+
+    document.getElementById("budgetForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const amount = document.getElementById("budgetAmount").value;
+      const category = document.getElementById("budgetCategory").value.trim();
+      await api("/api/budgets", { method: "POST", body: { amount, category: category || null, month: periodBounds().month || null } });
+      document.getElementById("budgetAmount").value = "";
+      document.getElementById("budgetCategory").value = "";
+      await refresh();
+    });
+
+    document.getElementById("txRows").addEventListener("click", (event) => {
+      const id = event.target.dataset.edit;
+      if (!id) return;
+      const tx = (LEDGER.transactions || []).find((item) => item.id === id);
+      if (!tx) return;
+      editingId = id;
+      document.getElementById("editAmount").value = tx.amount;
+      document.getElementById("editMerchant").value = tx.merchant || "";
+      document.getElementById("editCategory").value = tx.category || "";
+      document.getElementById("editType").value = tx.type || "expense";
+      document.getElementById("editAccount").value = tx.account_id || "";
+      document.getElementById("editNote").value = tx.note || "";
+      dialog.showModal();
+    });
+
+    document.getElementById("budgetRows").addEventListener("click", async (event) => {
+      const id = event.target.dataset.delBudget;
+      if (!id) return;
+      await api(`/api/budgets/${id}`, { method: "DELETE" });
+      await refresh();
+    });
+
+    document.getElementById("cancelBtn").addEventListener("click", () => dialog.close());
+    document.getElementById("deleteBtn").addEventListener("click", async () => {
+      if (!editingId) return;
+      await api(`/api/transactions/${editingId}`, { method: "DELETE" });
+      dialog.close();
+      await refresh();
+    });
+    document.getElementById("editForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await api(`/api/transactions/${editingId}`, {
+        method: "PATCH",
+        body: {
+          amount: document.getElementById("editAmount").value,
+          merchant: document.getElementById("editMerchant").value,
+          category: document.getElementById("editCategory").value,
+          type: document.getElementById("editType").value,
+          account: document.getElementById("editAccount").value,
+          note: document.getElementById("editNote").value
+        }
+      });
+      dialog.close();
+      await refresh();
+    });
+
+    chips.forEach((chip) => chip.addEventListener("click", () => { rangeMode = chip.dataset.range; render(); }));
+    [typeFilter, categoryFilter, accountFilter, searchInput].forEach((el) => el.addEventListener("input", render));
+    refresh().catch((error) => {
+      document.getElementById("ledgerMeta").textContent = error.message;
+    });
+  </script>
+</body>
+</html>

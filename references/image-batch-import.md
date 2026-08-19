@@ -16,19 +16,20 @@ Turn many visible rows into deterministic ledger writes with one TSV import, ins
    - `amount`
    - `category`
    - `merchant`
+   - `method` when the channel is visible
    - `note`
    - `source`
    - `confidence`
 4. Save the cleaned rows as TSV with this header:
 
 ```tsv
-occurred_at	type	amount	category	merchant	note	source	confidence
+occurred_at	type	amount	category	merchant	note	source	confidence	method	account
 ```
 
 5. Import the file:
 
 ```bash
-python3 scripts/ledger_tool.py import-tsv \
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py import-tsv \
   --ledger ./lazy-ledger.json \
   --input ./rows.tsv
 ```
@@ -36,7 +37,7 @@ python3 scripts/ledger_tool.py import-tsv \
 6. Run a health check after import:
 
 ```bash
-python3 scripts/ledger_tool.py doctor \
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py doctor \
   --ledger ./lazy-ledger.json \
   --json
 ```
