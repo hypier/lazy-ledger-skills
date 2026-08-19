@@ -4,11 +4,13 @@ import csv
 import io
 import json
 import re
+import shutil
 import sys
 import uuid
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 from ledger_db import STORE_KIND, STORE_VERSION, atomic_write_json, read_json
 
@@ -20,7 +22,19 @@ VALID_TYPES = {"expense", "income", "refund", "transfer"}
 VALID_SOURCES = {"text", "image", "voice", "manual", "import"}
 VALID_METHODS = {"wechat", "alipay", "cash", "card", "bank", "other"}
 VALID_ACCOUNT_TYPES = {"cash", "wechat", "alipay", "bank", "credit", "other"}
-RANGE_PRESETS = ("this-month", "last-month", "last7", "last30")
+RANGE_PRESETS = (
+    "this-month",
+    "last-month",
+    "last7",
+    "last30",
+    "this-quarter",
+    "last-quarter",
+    "this-year",
+    "last-year",
+)
+REIMBURSE_TAGS = {"报销", "待报销", "对公"}
+REIMBURSED_TAGS = {"已报销", "报销已回", "报销到账"}
+WEEKDAY_LABELS = ("一", "二", "三", "四", "五", "六", "日")
 METHOD_TO_ACCOUNT_TYPE = {
     "wechat": "wechat",
     "alipay": "alipay",
@@ -109,6 +123,8 @@ TAG_KEYWORDS = {
 TOTAL_HINTS = ("一共", "共", "合计", "总计", "券后", "实付", "满减")
 NOISY_MERCHANT_RE = re.compile(r"有限公司|股份有限|分公司|信息科技|集团|销售有限")
 MAX_LEARNABLE_PHRASE = 8
+MEMORY_TX_GAP = 10
+MEMORY_MAX_AGE_DAYS = 7
 HABIT_PHRASES = (
     "早饭",
     "早餐",
@@ -270,6 +286,7 @@ def empty_ledger(currency="CNY"):
         "accounts": default_accounts(currency),
         "budgets": [],
         "habits": [],
+        "bills": [],
         "store": STORE_KIND,
         "store_version": STORE_VERSION,
         "preferences": {"merchant_categories": {}, "merchant_aliases": {}, "default_account_id": "acc_wechat"},
@@ -515,6 +532,7 @@ def normalize_ledger(data, currency="CNY"):
     data.setdefault("categories", [])
     data.setdefault("budgets", [])
     data.setdefault("habits", [])
+    data.setdefault("bills", [])
     data["store"] = STORE_KIND
     data.setdefault("store_version", STORE_VERSION)
     ledger_preferences(data)
@@ -527,6 +545,8 @@ def normalize_ledger(data, currency="CNY"):
         data["budgets"] = []
     if not isinstance(data["habits"], list):
         data["habits"] = []
+    if not isinstance(data["bills"], list):
+        data["bills"] = []
     return data
 
 
@@ -868,6 +888,127 @@ def refresh_usage_profile(ledger, *, force=False, summary=None):
     if summary:
         prefs["usage_profile"]["summary"] = summary
     return True
+
+
+def habit_memory_path(ledger_path):
+    path = Path(ledger_path)
+    return path.with_name(f"{path.stem}-memory.md")
+
+
+def parse_habit_memory_meta(text):
+    match = re.match(r"^---\s*\n(.*?)\n---\s*\n", text or "", re.DOTALL)
+    if not match:
+        return {}
+    meta = {}
+    for line in match.group(1).splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        meta[key.strip()] = value.strip().strip('"')
+    return meta
+
+
+def habit_memory_is_stale(memory_path, ledger):
+    path = Path(memory_path)
+    if not path.exists():
+        return True
+    try:
+        meta = parse_habit_memory_meta(path.read_text(encoding="utf-8"))
+    except OSError:
+        return True
+    tx_count = len(ledger.get("transactions") or [])
+    remembered = int(float(meta["tx_count"])) if meta.get("tx_count") not in (None, "") else -1
+    if remembered < 0 or tx_count - remembered >= MEMORY_TX_GAP:
+        return True
+    updated = meta.get("updated_at") or ""
+    try:
+        written = datetime.fromisoformat(updated)
+        if written.tzinfo is None:
+            written = written.astimezone()
+        if datetime.now().astimezone() - written >= timedelta(days=MEMORY_MAX_AGE_DAYS):
+            return True
+    except ValueError:
+        return True
+    return False
+
+
+def render_habit_memory(ledger, profile=None):
+    prefs = ledger_preferences(ledger or {})
+    profile = profile or prefs.get("usage_profile") or build_usage_profile(ledger)
+    defaults = profile.get("defaults") or {}
+    method = defaults.get("method")
+    method_label = METHOD_LABELS.get(method, method) if method else ""
+    lines = [
+        "---",
+        f"updated_at: {profile.get('updated_at') or now_iso()}",
+        f"tx_count: {profile.get('tx_count') if profile.get('tx_count') is not None else len(ledger.get('transactions') or [])}",
+        "kind: lazy-ledger-memory",
+        "---",
+        "",
+        "# 记账习惯",
+        "",
+        "给记账助手读的定期总结。流水仍以账本 JSON 为准；这里只写默认怎么记。",
+        "",
+        "## 画像",
+        "",
+        (profile.get("summary") or "流水还少。按字面记，账户用默认，缺金额就问。").strip(),
+        "",
+        "## 默认",
+        "",
+        f"- 账户：{defaults.get('account') or '微信零钱'}",
+    ]
+    if method_label:
+        lines.append(f"- 支付：{method_label}")
+    categories = profile.get("top_categories") or []
+    if categories:
+        lines.append(f"- 常见分类：{'、'.join(categories[:4])}")
+    lines.extend(["", "## 稳定金额", "", "仅下列短说法在用户没写金额时可以默认。不要猜这里没有的金额。", ""])
+    stable = profile.get("stable_amounts") or []
+    if stable:
+        for item in stable:
+            amount = item.get("amount")
+            price = f"¥{amount:.0f}" if isinstance(amount, (int, float)) else ""
+            bits = [item.get("phrase"), item.get("category"), price]
+            lines.append("- " + " · ".join(str(bit) for bit in bits if bit))
+    else:
+        lines.append("- （还没有稳定金额）")
+    lines.extend(["", "## 不要猜金额", ""])
+    variable = profile.get("variable_merchants") or []
+    if variable:
+        for item in variable:
+            lines.append(f"- {item.get('phrase')}：常去但金额不固定")
+    else:
+        lines.append("- （暂无）")
+    mapping = prefs.get("merchant_categories") or {}
+    lines.extend(["", "## 商户分类", ""])
+    if mapping:
+        for merchant, category in list(mapping.items())[:20]:
+            lines.append(f"- {merchant} → {category}")
+    else:
+        lines.append("- （还没有显式规则）")
+    lines.extend(
+        [
+            "",
+            "## 助手怎么用",
+            "",
+            "- 缺账户、缺支付方式时用「默认」",
+            "- 只有「稳定金额」里的短说法可以补金额",
+            "- 「不要猜金额」和支付公司全称一律问金额",
+            "- 不要向用户展示常用按钮，也不要要求存为常用",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def write_habit_memory(ledger_path, ledger, *, force=False, summary=None):
+    path = habit_memory_path(ledger_path)
+    refresh_usage_profile(ledger, force=force or bool(summary), summary=summary)
+    if not force and not habit_memory_is_stale(path, ledger):
+        return path, False
+    profile = ledger_preferences(ledger).get("usage_profile") or build_usage_profile(ledger)
+    path.write_text(render_habit_memory(ledger, profile), encoding="utf-8")
+    return path, True
 
 
 def habits_payload(ledger):
@@ -1535,6 +1676,7 @@ def add_transaction(args):
     ledger["transactions"].sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
     refresh_usage_profile(ledger, force=True)
     save_ledger(args.ledger, ledger)
+    write_habit_memory(args.ledger, ledger, force=False)
     month = month_key(added[0].get("occurred_at")) if added else month_key(now_iso())
     payload = {"added": added, "count": len(added), "month": month_snapshot(ledger, month)}
     used = [item.get("_habit") for item in proposals if item.get("_habit")]
@@ -1552,6 +1694,17 @@ def shift_month(year, month, delta):
         month -= 12
         year += 1
     return year, month
+
+
+def shift_date_years(value, delta):
+    try:
+        return value.replace(year=value.year + delta)
+    except ValueError:
+        return date(value.year + delta, 2, 28)
+
+
+def quarter_index(month):
+    return (month - 1) // 3
 
 
 def resolve_period(month=None, range_name=None, start=None, end=None, now=None):
@@ -1593,6 +1746,46 @@ def resolve_period(month=None, range_name=None, start=None, end=None, now=None):
     if range_name == "last30":
         start_day = today - timedelta(days=29)
         return {"label": "近30天", "start": start_day.isoformat(), "end": today.isoformat(), "month": None}
+    if range_name == "this-quarter":
+        start_month = quarter_index(today.month) * 3 + 1
+        start_day = date(today.year, start_month, 1)
+        qn = quarter_index(today.month) + 1
+        return {
+            "label": f"{today.year} Q{qn}",
+            "start": start_day.isoformat(),
+            "end": today.isoformat(),
+            "month": None,
+            "kind": "this-quarter",
+        }
+    if range_name == "last-quarter":
+        start_month = quarter_index(today.month) * 3 + 1
+        year, mon = shift_month(today.year, start_month, -3)
+        last = last_day_of_month(year, mon + 2)
+        qn = quarter_index(mon) + 1
+        return {
+            "label": f"{year} Q{qn}",
+            "start": date(year, mon, 1).isoformat(),
+            "end": date(year, mon + 2, last).isoformat(),
+            "month": None,
+            "kind": "last-quarter",
+        }
+    if range_name == "this-year":
+        return {
+            "label": f"{today.year}年至今",
+            "start": date(today.year, 1, 1).isoformat(),
+            "end": today.isoformat(),
+            "month": None,
+            "kind": "this-year",
+        }
+    if range_name == "last-year":
+        year = today.year - 1
+        return {
+            "label": f"{year}年",
+            "start": date(year, 1, 1).isoformat(),
+            "end": date(year, 12, 31).isoformat(),
+            "month": None,
+            "kind": "last-year",
+        }
     if start or end:
         label = f"{start or '…'} ~ {end or '…'}"
         return {"label": label, "start": start, "end": end, "month": None}
@@ -1602,6 +1795,28 @@ def resolve_period(month=None, range_name=None, start=None, end=None, now=None):
 def previous_period(period):
     start = period.get("start")
     end = period.get("end")
+    kind = period.get("kind")
+    if kind in {"this-year", "last-year"} and start and end:
+        start_d = datetime.strptime(start, "%Y-%m-%d").date()
+        end_d = datetime.strptime(end, "%Y-%m-%d").date()
+        prev_start = shift_date_years(start_d, -1)
+        prev_end = shift_date_years(end_d, -1)
+        label = f"{prev_start.year}年至今" if kind == "this-year" else f"{prev_start.year}年"
+        return {"label": label, "start": prev_start.isoformat(), "end": prev_end.isoformat(), "month": None, "kind": kind}
+    if kind in {"this-quarter", "last-quarter"} and start and end:
+        start_d = datetime.strptime(start, "%Y-%m-%d").date()
+        end_d = datetime.strptime(end, "%Y-%m-%d").date()
+        year, mon = shift_month(start_d.year, start_d.month, -3)
+        prev_start = date(year, mon, 1)
+        prev_end = prev_start + timedelta(days=(end_d - start_d).days)
+        qn = quarter_index(mon) + 1
+        return {
+            "label": f"{year} Q{qn}",
+            "start": prev_start.isoformat(),
+            "end": prev_end.isoformat(),
+            "month": None,
+            "kind": kind,
+        }
     if period.get("month"):
         year, mon = shift_month(int(period["month"][:4]), int(period["month"][5:7]), -1)
         last = last_day_of_month(year, mon)
@@ -1711,6 +1926,8 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
     by_merchant = defaultdict(float)
     by_day = defaultdict(float)
     by_method = defaultdict(float)
+    by_month = defaultdict(float)
+    by_weekday = defaultdict(float)
     expenses = []
     needs_review = []
     for tx in transactions:
@@ -1722,10 +1939,19 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             category = tx.get("category") or "其他"
             merchant = tx.get("merchant") or "未填商户"
             method = tx.get("method") or "未填渠道"
+            day = tx_day(tx)
             by_category[category] += amount
             by_merchant[merchant] += amount
-            by_day[tx_day(tx) or "未知"] += amount
+            by_day[day or "未知"] += amount
             by_method[method] += amount
+            month = month_key(tx.get("occurred_at"))
+            if month:
+                by_month[month] += amount
+            if day:
+                try:
+                    by_weekday[datetime.strptime(day, "%Y-%m-%d").weekday()] += amount
+                except ValueError:
+                    pass
             expenses.append(amount)
         confidence = tx.get("confidence")
         low_confidence = False
@@ -1762,6 +1988,14 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             {"merchant": name, "amount": round(amount, 2)}
             for name, amount in sorted(by_merchant.items(), key=lambda item: item[1], reverse=True)[:8]
         ],
+        "by_month": {key: round(value, 2) for key, value in sorted(by_month.items())},
+        "by_weekday": {
+            WEEKDAY_LABELS[index]: round(by_weekday.get(index, 0.0), 2) for index in range(7)
+        },
+        "weekday": {
+            "weekday": round(sum(by_weekday.get(index, 0.0) for index in range(5)), 2),
+            "weekend": round(by_weekday.get(5, 0.0) + by_weekday.get(6, 0.0), 2),
+        },
         "count": len(transactions),
         "daily_average": daily_average,
         "needs_review": needs_review[:20],
@@ -1778,6 +2012,267 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             "net_change_pct": pct_change(totals["net"], previous["totals"]["net"]),
         }
     return result
+
+
+def tx_tags(tx):
+    tags = tx.get("tags") or []
+    if isinstance(tags, str):
+        return {part.strip() for part in tags.split(",") if part.strip()}
+    return {str(item).strip() for item in tags if str(item).strip()}
+
+
+def detect_recurring(transactions, today=None, lookback_months=8):
+    today = (today or local_today()).date()
+    cutoff_year, cutoff_month = shift_month(today.year, today.month, -lookback_months)
+    cutoff = f"{cutoff_year:04d}-{cutoff_month:02d}-01"
+    groups = defaultdict(list)
+    for tx in transactions:
+        if tx.get("type") != "expense":
+            continue
+        day = tx_day(tx)
+        if not day or day < cutoff:
+            continue
+        merchant = normalized_text(tx.get("merchant") or "")
+        if merchant:
+            key = ("merchant", merchant)
+        else:
+            try:
+                amount_key = round(float(tx.get("amount") or 0))
+            except (TypeError, ValueError):
+                continue
+            key = ("category", tx.get("category") or "其他", amount_key)
+        groups[key].append(tx)
+
+    current_month = today.strftime("%Y-%m")
+    rows = []
+    for items in groups.values():
+        dated = []
+        for tx in items:
+            day = tx_day(tx)
+            if not day:
+                continue
+            try:
+                dated.append((datetime.strptime(day, "%Y-%m-%d").date(), tx))
+            except ValueError:
+                continue
+        dated.sort(key=lambda item: item[0])
+        if len(dated) < 3:
+            continue
+        months = sorted({value.strftime("%Y-%m") for value, _tx in dated})
+        if len(months) < 3:
+            continue
+        amounts = [float(tx.get("amount") or 0) for _day, tx in dated]
+        median_amount = sorted(amounts)[len(amounts) // 2]
+        if median_amount <= 0:
+            continue
+        spread = (max(amounts) - min(amounts)) / median_amount
+        if spread > 0.35:
+            continue
+        gaps = [(dated[index][0] - dated[index - 1][0]).days for index in range(1, len(dated))]
+        median_gap = sorted(gaps)[len(gaps) // 2] if gaps else 0
+        if median_gap < 5:
+            continue
+        if 25 <= median_gap <= 40:
+            cadence = "monthly"
+        elif 6 <= median_gap <= 9:
+            cadence = "weekly"
+        elif 13 <= median_gap <= 17:
+            cadence = "biweekly"
+        elif len(months) >= 3 and len(dated) <= len(months) + 1:
+            cadence = "monthly"
+        else:
+            continue
+        last_date = dated[-1][0]
+        sample = dated[-1][1]
+        recorded_this_month = any(value.strftime("%Y-%m") == current_month for value, _tx in dated)
+        expected_day = sorted(value.day for value, _tx in dated)[len(dated) // 2]
+        missing = cadence == "monthly" and not recorded_this_month and today.day >= max(expected_day - 3, 1)
+        rows.append(
+            {
+                "label": sample.get("merchant") or sample.get("category") or "周期支出",
+                "cadence": cadence,
+                "typical_amount": round(median_amount, 2),
+                "months": len(months),
+                "count": len(dated),
+                "last_date": last_date.isoformat(),
+                "expected_day": expected_day,
+                "recorded_this_month": recorded_this_month,
+                "missing_this_month": missing,
+                "category": sample.get("category"),
+            }
+        )
+    rows.sort(key=lambda item: (not item["missing_this_month"], -item["typical_amount"]))
+    return rows[:12]
+
+
+def unmatched_refunds(transactions, period_rows):
+    expenses = [tx for tx in transactions if tx.get("type") == "expense"]
+    rows = []
+    for refund in period_rows:
+        if refund.get("type") != "refund":
+            continue
+        refund_day = tx_day(refund)
+        try:
+            refund_amount = float(refund.get("amount") or 0)
+            refund_date = datetime.strptime(refund_day, "%Y-%m-%d").date() if refund_day else None
+        except (TypeError, ValueError):
+            refund_amount = 0.0
+            refund_date = None
+        refund_merchant = normalized_text(refund.get("merchant") or "")
+        matched = False
+        for expense in expenses:
+            expense_day = tx_day(expense)
+            if not refund_date or not expense_day:
+                continue
+            try:
+                expense_date = datetime.strptime(expense_day, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if expense_date > refund_date or (refund_date - expense_date).days > 90:
+                continue
+            try:
+                expense_amount = float(expense.get("amount") or 0)
+            except (TypeError, ValueError):
+                continue
+            amount_ok = abs(expense_amount - refund_amount) < 0.01 or (
+                expense_amount and abs(expense_amount - refund_amount) / expense_amount < 0.05
+            )
+            expense_merchant = normalized_text(expense.get("merchant") or "")
+            merchant_ok = (
+                not refund_merchant
+                or not expense_merchant
+                or refund_merchant in expense_merchant
+                or expense_merchant in refund_merchant
+            )
+            if amount_ok and merchant_ok:
+                matched = True
+                break
+        if not matched:
+            rows.append(compact_candidate(refund))
+    return rows[:8]
+
+
+def pending_reimbursements(transactions):
+    rows = []
+    for tx in transactions:
+        if tx.get("type") != "expense":
+            continue
+        tags = tx_tags(tx)
+        if tags & REIMBURSED_TAGS:
+            continue
+        if tags & REIMBURSE_TAGS:
+            rows.append(compact_candidate(tx))
+    return rows[:12]
+
+
+def month_trend(transactions, end_date=None, months=6):
+    today = end_date or (local_today()).date()
+    keys = []
+    year, month = today.year, today.month
+    for offset in range(months - 1, -1, -1):
+        item_year, item_month = shift_month(year, month, -offset)
+        keys.append(f"{item_year:04d}-{item_month:02d}")
+    totals = {key: 0.0 for key in keys}
+    for tx in transactions:
+        if tx.get("type") != "expense":
+            continue
+        key = month_key(tx.get("occurred_at"))
+        if key in totals:
+            totals[key] += float(tx.get("amount") or 0)
+    return [{"month": key, "expense": round(totals[key], 2)} for key in keys]
+
+
+def spending_pace(period, daily_average, budgets, today=None):
+    today = (today or local_today()).date()
+    month = period.get("month")
+    kind = period.get("kind")
+    if month:
+        year, mon = int(month[:4]), int(month[5:7])
+        month_days = last_day_of_month(year, mon)
+        month_start = date(year, mon, 1)
+        month_end = date(year, mon, month_days)
+        cursor = min(max(today, month_start), month_end)
+        elapsed = (cursor - month_start).days + 1
+        remaining_days = max((month_end - cursor).days, 0)
+        projected = round(daily_average * month_days, 2)
+        payload = {
+            "scope": "month",
+            "elapsed_days": elapsed,
+            "total_days": month_days,
+            "remaining_days": remaining_days,
+            "projected_expense": projected,
+            "complete": remaining_days == 0 or today >= month_end,
+        }
+        overall = next((item for item in budgets or [] if item.get("category") == "本月总额"), None)
+        if overall:
+            payload["budget_limit"] = overall["limit"]
+            payload["spent"] = overall["spent"]
+            payload["projected_remaining"] = round(overall["limit"] - projected, 2)
+            payload["on_track"] = projected <= overall["limit"] + 0.009
+            payload["spent_pct"] = overall.get("pct")
+        return payload
+    if kind == "this-year" and period.get("start"):
+        year_start = datetime.strptime(period["start"], "%Y-%m-%d").date()
+        year_end = date(year_start.year, 12, 31)
+        elapsed = (min(today, year_end) - year_start).days + 1
+        remaining_days = max((year_end - today).days, 0)
+        projected = round(daily_average * ((year_end - year_start).days + 1), 2)
+        return {
+            "scope": "year",
+            "elapsed_days": elapsed,
+            "total_days": (year_end - year_start).days + 1,
+            "remaining_days": remaining_days,
+            "projected_expense": projected,
+            "complete": remaining_days == 0,
+        }
+    return None
+
+
+def build_insight_lines(data, currency="CNY"):
+    lines = []
+    totals = data.get("totals") or {}
+    expense = float(totals.get("expense") or 0)
+    categories = data.get("by_category") or {}
+    if categories and expense:
+        top_name, top_amount = next(iter(categories.items()))
+        share = top_amount / expense * 100
+        lines.append(f"支出最多的是{top_name}，占 {share:.0f}%。")
+    comparison = data.get("comparison") or {}
+    change = comparison.get("expense_change_pct")
+    if change is not None:
+        previous = comparison.get("previous_label") or "上期"
+        if change > 8:
+            lines.append(f"比{previous}多花了 {abs(change):.0f}%。")
+        elif change < -8:
+            lines.append(f"比{previous}少花了 {abs(change):.0f}%。")
+    pace = data.get("pace") or {}
+    if pace.get("budget_limit") is not None and not pace.get("complete"):
+        if pace.get("on_track") is False:
+            lines.append(
+                f"按现在日均，月底大约 {format_money(pace.get('projected_expense'), currency)}，可能超预算。"
+            )
+        elif pace.get("projected_remaining", 0) > 0:
+            lines.append(
+                f"按现在日均，月底大约还能剩 {format_money(pace.get('projected_remaining'), currency)}。"
+            )
+    elif pace and pace.get("scope") == "year" and not pace.get("complete") and expense:
+        lines.append(f"按现在日均，今年大约会花 {format_money(pace.get('projected_expense'), currency)}。")
+    missing = [item for item in data.get("recurring") or [] if item.get("missing_this_month")]
+    if missing:
+        names = "、".join(item["label"] for item in missing[:3])
+        lines.append(f"周期账这月还没记：{names}。")
+    pending = data.get("pending_reimbursement") or []
+    if pending:
+        total = sum(float(item.get("amount") or 0) for item in pending)
+        lines.append(f"待报销 {len(pending)} 笔，共 {format_money(total, currency)}。")
+    unmatched = data.get("unmatched_refunds") or []
+    if unmatched:
+        lines.append(f"有 {len(unmatched)} 笔退款对不上近期支出。")
+    weekday = data.get("weekday") or {}
+    weekend = float(weekday.get("weekend") or 0)
+    if expense and weekend / expense >= 0.4:
+        lines.append(f"周末支出占 {weekend / expense * 100:.0f}%。")
+    return lines[:4]
 
 
 def format_money(amount, currency="CNY"):
@@ -1806,6 +2301,32 @@ def render_show(data, currency="CNY"):
         lines.append(
             f"较{comparison.get('previous_label') or '上期'}：支出 {format_pct(comparison.get('expense_change_pct'))} · 净额 {format_pct(comparison.get('net_change_pct'))}"
         )
+    pace = data.get("pace") or {}
+    if pace.get("projected_expense") is not None and not pace.get("complete"):
+        if pace.get("budget_limit") is not None:
+            status = "预计不超" if pace.get("on_track") else "预计超支"
+            lines.append(
+                f"按日均推算月底 {format_money(pace['projected_expense'], currency)} · {status}"
+            )
+        elif pace.get("scope") == "year":
+            lines.append(f"按日均推算全年 {format_money(pace['projected_expense'], currency)}")
+    if data.get("insights"):
+        lines.extend(["", "### 观察"])
+        for item in data["insights"]:
+            lines.append(f"- {item}")
+    if data.get("month_trend") and len(data.get("by_month") or {}) >= 2:
+        lines.extend(["", "### 月度支出"])
+        for item in data["month_trend"]:
+            lines.append(f"- {item['month']} {format_money(item['expense'], currency)}")
+    if data.get("recurring"):
+        lines.extend(["", "### 周期账"])
+        cadence_label = {"monthly": "每月", "weekly": "每周", "biweekly": "每两周"}
+        for item in data["recurring"][:6]:
+            status = "这月还没记" if item.get("missing_this_month") else ("这月已记" if item.get("recorded_this_month") else "")
+            extra = f" · {status}" if status else ""
+            lines.append(
+                f"- {item['label']} {format_money(item['typical_amount'], currency)} · {cadence_label.get(item['cadence'], item['cadence'])}{extra}"
+            )
     if data["by_category"]:
         lines.extend(["", "### 分类支出"])
         for category, amount in data["by_category"].items():
@@ -1830,6 +2351,20 @@ def render_show(data, currency="CNY"):
             status = "超支" if item["over"] else "剩余"
             lines.append(
                 f"- {item['category']} {format_money(item['limit'], currency)} · 已花 {format_money(item['spent'], currency)} · {status} {format_money(abs(item['remaining']), currency)}"
+            )
+    if data.get("pending_reimbursement"):
+        lines.extend(["", "### 待报销"])
+        for item in data["pending_reimbursement"][:5]:
+            date = (item.get("occurred_at") or "")[:10]
+            lines.append(
+                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} {format_money(item.get('amount'), currency)}"
+            )
+    if data.get("unmatched_refunds"):
+        lines.extend(["", "### 未对上的退款"])
+        for item in data["unmatched_refunds"][:5]:
+            date = (item.get("occurred_at") or "")[:10]
+            lines.append(
+                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} {format_money(item.get('amount'), currency)}"
             )
     if data.get("outliers"):
         lines.extend(["", "### 偏大支出"])
@@ -1886,6 +2421,12 @@ def build_summary(ledger, args, default_range=None):
     data = summarize(rows, period=period, previous_transactions=previous_rows, previous_period_info=previous_info)
     data["accounts"] = account_balances(ledger)
     data["budgets"] = budget_progress(ledger, rows, period)
+    data["recurring"] = detect_recurring(ledger.get("transactions") or [])
+    data["pending_reimbursement"] = pending_reimbursements(rows)
+    data["unmatched_refunds"] = unmatched_refunds(ledger.get("transactions") or [], rows)
+    data["month_trend"] = month_trend(ledger.get("transactions") or [])
+    data["pace"] = spending_pace(period, data.get("daily_average") or 0, data["budgets"])
+    data["insights"] = build_insight_lines(data, ledger.get("currency", "CNY"))
     return data
 
 
@@ -1911,6 +2452,177 @@ def show_command(args):
         if months:
             text += f"\n最近有记录的月份是 {max(months)}。"
     print(text)
+
+
+def available_months(ledger):
+    months = {
+        month_key(tx.get("occurred_at"))
+        for tx in ledger.get("transactions") or []
+        if month_key(tx.get("occurred_at"))
+    }
+    return sorted(months, reverse=True)
+
+
+def default_bill_month(ledger, month=None):
+    if month:
+        return month[:7]
+    today = local_today().strftime("%Y-%m")
+    months = available_months(ledger)
+    if today in months or not months:
+        return today
+    return months[0]
+
+
+def find_bill(ledger, month):
+    for bill in ledger.get("bills") or []:
+        if isinstance(bill, dict) and bill.get("month") == month:
+            return bill
+    return None
+
+
+def build_bill_pack(ledger, month=None):
+    month = default_bill_month(ledger, month)
+    args = SimpleNamespace(
+        month=month,
+        range=None,
+        start=None,
+        end=None,
+        query=None,
+        type=None,
+        category=None,
+        method=None,
+        account=None,
+        compare=True,
+    )
+    summary = build_summary(ledger, args)
+    profile = ledger_preferences(ledger).get("usage_profile") or {}
+    saved = find_bill(ledger, month)
+    currency = ledger.get("currency", "CNY")
+    brief = (
+        f"根据 {month} 的记账事实写一份月度账单，给用户看，不是给会计看。"
+        "先写这月怎么花钱、习惯有没有变，再写和上月的差别，最后一句下月可以留意的事。"
+        "不要说教，不要编造账本里没有的数字。正文大约 400 到 800 字，结构可以像一封短信，不必套表格。"
+    )
+    return {
+        "month": month,
+        "months": available_months(ledger),
+        "currency": currency,
+        "facts": {
+            "period": summary.get("period"),
+            "totals": summary.get("totals"),
+            "count": summary.get("count"),
+            "daily_average": summary.get("daily_average"),
+            "by_category": summary.get("by_category"),
+            "by_weekday": summary.get("by_weekday"),
+            "weekday": summary.get("weekday"),
+            "top_merchants": summary.get("top_merchants"),
+            "comparison": summary.get("comparison"),
+            "budgets": summary.get("budgets"),
+            "recurring": summary.get("recurring"),
+            "outliers": summary.get("outliers"),
+            "insights": summary.get("insights"),
+            "pace": summary.get("pace"),
+            "pending_reimbursement": summary.get("pending_reimbursement"),
+        },
+        "habit_summary": profile.get("summary"),
+        "brief": brief,
+        "bill": saved,
+    }
+
+
+def render_bill_pack(pack, currency="CNY"):
+    month = pack.get("month")
+    facts = pack.get("facts") or {}
+    totals = facts.get("totals") or {}
+    saved = pack.get("bill") or {}
+    lines = [f"# {month} 月度账单", ""]
+    if saved.get("body"):
+        title = saved.get("title")
+        if title:
+            lines.extend([f"**{title}**", ""])
+        lines.append(saved["body"].rstrip())
+        return "\n".join(lines) + "\n"
+    lines.extend(
+        [
+            "还没有文字结论。用下面的事实写完后执行 `bill save`。",
+            "",
+            f"支出 {format_money(totals.get('expense') or 0, currency)} · 收入 {format_money(totals.get('income') or 0, currency)} · 共 {facts.get('count') or 0} 笔",
+        ]
+    )
+    comparison = facts.get("comparison") or {}
+    if comparison:
+        lines.append(
+            f"较{comparison.get('previous_label') or '上月'}：支出 {format_pct(comparison.get('expense_change_pct'))}"
+        )
+    if facts.get("insights"):
+        lines.extend(["", "## 事实要点"])
+        for item in facts["insights"]:
+            lines.append(f"- {item}")
+    if pack.get("habit_summary"):
+        lines.extend(["", "## 记账习惯", pack["habit_summary"]])
+    lines.extend(["", "## 写作要求", pack.get("brief") or ""])
+    return "\n".join(lines) + "\n"
+
+
+def bill_show_command(args):
+    ledger = load_ledger(args.ledger, create=False)
+    pack = build_bill_pack(ledger, args.month)
+    if args.json:
+        print(json.dumps(pack, ensure_ascii=False, indent=2))
+        return
+    print(render_bill_pack(pack, ledger.get("currency", "CNY")).rstrip())
+
+
+def bill_list_command(args):
+    ledger = load_ledger(args.ledger, create=False)
+    rows = [
+        {
+            "id": item.get("id"),
+            "month": item.get("month"),
+            "title": item.get("title"),
+            "updated_at": item.get("updated_at"),
+            "has_body": bool(item.get("body")),
+        }
+        for item in ledger.get("bills") or []
+        if isinstance(item, dict)
+    ]
+    rows.sort(key=lambda item: item.get("month") or "", reverse=True)
+    if args.json:
+        print(json.dumps({"bills": rows}, ensure_ascii=False, indent=2))
+        return
+    if not rows:
+        print("还没有月度账单。")
+        return
+    for item in rows:
+        mark = "已写" if item["has_body"] else "仅数字"
+        print(f"{item['month']} | {item.get('title') or '月度账单'} | {mark}")
+
+
+def bill_save_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    month = default_bill_month(ledger, args.month)
+    body = (args.body or "").strip()
+    if not body:
+        raise SystemExit("Bill body is required")
+    existing = find_bill(ledger, month)
+    ts = now_iso()
+    if existing:
+        existing["title"] = args.title or existing.get("title") or f"{month} 月度账单"
+        existing["body"] = body
+        existing["updated_at"] = ts
+        bill = existing
+    else:
+        bill = {
+            "id": f"bill_{month.replace('-', '')}",
+            "month": month,
+            "title": args.title or f"{month} 月度账单",
+            "body": body,
+            "created_at": ts,
+            "updated_at": ts,
+        }
+        ledger.setdefault("bills", []).append(bill)
+    save_ledger(args.ledger, ledger)
+    print(json.dumps(bill, ensure_ascii=False, indent=2))
 
 
 def format_list_row(tx):
@@ -2051,6 +2763,7 @@ def update_command(args):
     learn_habits_from_transaction(ledger, tx)
     refresh_usage_profile(ledger, force=True)
     save_ledger(args.ledger, ledger)
+    write_habit_memory(args.ledger, ledger, force=False)
     print(json.dumps(tx, ensure_ascii=False, indent=2))
 
 
@@ -2317,11 +3030,33 @@ def habit_profile_command(args):
     summary = (args.summary or "").strip() or None
     refresh_usage_profile(ledger, force=True, summary=summary)
     save_ledger(args.ledger, ledger)
+    write_habit_memory(args.ledger, ledger, force=True, summary=summary)
     payload = habits_payload(ledger)
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
     print((payload.get("profile") or {}).get("summary") or "")
+
+
+def habit_memory_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    seed_habits_if_needed(ledger)
+    summary = (getattr(args, "summary", None) or "").strip() or None
+    refresh_usage_profile(ledger, force=True, summary=summary)
+    save_ledger(args.ledger, ledger)
+    path, written = write_habit_memory(args.ledger, ledger, force=True, summary=summary)
+    print(
+        json.dumps(
+            {
+                "path": str(path.resolve()),
+                "written": written,
+                "tx_count": len(ledger.get("transactions") or []),
+                "summary": (ledger_preferences(ledger).get("usage_profile") or {}).get("summary"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 def habit_set_command(args):
@@ -2360,6 +3095,7 @@ def habit_set_command(args):
         learn_merchant_category(ledger, args.merchant, args.category)
     refresh_usage_profile(ledger, force=True)
     save_ledger(args.ledger, ledger)
+    write_habit_memory(args.ledger, ledger, force=True)
     print(json.dumps(habit, ensure_ascii=False, indent=2))
 
 
@@ -2387,6 +3123,7 @@ def habit_rebuild_command(args):
     rebuild_learned_habits(ledger)
     ledger_preferences(ledger)["habits_seeded"] = True
     save_ledger(args.ledger, ledger)
+    write_habit_memory(args.ledger, ledger, force=True)
     print(json.dumps(habits_payload(ledger), ensure_ascii=False, indent=2))
 
 
@@ -2519,6 +3256,17 @@ def budget_delete_command(args):
     print(json.dumps(removed, ensure_ascii=False, indent=2))
 
 
+def backup_command(args):
+    src = Path(args.ledger)
+    if not src.exists():
+        raise SystemExit(f"Ledger not found: {src}")
+    stamp = local_today().strftime("%Y%m%d")
+    dest = Path(args.output) if args.output else src.with_name(f"{src.stem}-{stamp}{src.suffix or '.json'}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dest)
+    print(json.dumps({"ok": True, "ledger": str(src.resolve()), "backup": str(dest.resolve())}, ensure_ascii=False, indent=2))
+
+
 def init_command(args):
     path = Path(args.ledger)
     if path.exists() and not args.force:
@@ -2611,6 +3359,24 @@ def build_parser():
     add_filter_flags(p_show, json_flag=True, compare=True)
     p_show.set_defaults(func=show_command)
 
+    p_bill = sub.add_parser("bill", help="Monthly statement: facts plus an AI-written letter")
+    bill_sub = p_bill.add_subparsers(dest="bill_command", required=True)
+    p_bill_show = bill_sub.add_parser("show", help="Facts and saved letter for one month")
+    p_bill_show.add_argument("--ledger", required=True)
+    p_bill_show.add_argument("--month", default=None, help="YYYY-MM")
+    p_bill_show.add_argument("--json", action="store_true")
+    p_bill_show.set_defaults(func=bill_show_command)
+    p_bill_list = bill_sub.add_parser("list", help="List saved monthly bills")
+    p_bill_list.add_argument("--ledger", required=True)
+    p_bill_list.add_argument("--json", action="store_true")
+    p_bill_list.set_defaults(func=bill_list_command)
+    p_bill_save = bill_sub.add_parser("save", help="Save the AI-written monthly letter")
+    p_bill_save.add_argument("--ledger", required=True)
+    p_bill_save.add_argument("--month", default=None, help="YYYY-MM")
+    p_bill_save.add_argument("--title", default=None)
+    p_bill_save.add_argument("--body", required=True)
+    p_bill_save.set_defaults(func=bill_save_command)
+
     p_list = sub.add_parser("list", help="List transactions")
     add_filter_flags(p_list, limit=20, json_flag=True)
     p_list.set_defaults(func=list_command)
@@ -2643,6 +3409,10 @@ def build_parser():
     p_hab_profile.add_argument("--json", action="store_true")
     p_hab_profile.add_argument("--summary", default=None, help="Optional 2-4 sentence portrait written by the agent")
     p_hab_profile.set_defaults(func=habit_profile_command)
+    p_hab_memory = hab.add_parser("memory", help="Write the periodic habit memory markdown next to the ledger")
+    p_hab_memory.add_argument("--ledger", required=True)
+    p_hab_memory.add_argument("--summary", default=None, help="Optional 2-4 sentence portrait written by the agent")
+    p_hab_memory.set_defaults(func=habit_memory_command)
     p_hab_set = hab.add_parser("set", help="Remember an explicit user rule")
     p_hab_set.add_argument("--ledger", required=True)
     p_hab_set.add_argument("--phrase", default=None)
@@ -2726,6 +3496,11 @@ def build_parser():
     p_export.add_argument("--format", default="csv", choices=["csv", "json"])
     p_export.add_argument("--output", default=None)
     p_export.set_defaults(func=export_command)
+
+    p_backup = sub.add_parser("backup", help="Copy the ledger JSON to a timestamped backup")
+    p_backup.add_argument("--ledger", required=True)
+    p_backup.add_argument("--output", default=None)
+    p_backup.set_defaults(func=backup_command)
 
     p_render = sub.add_parser("render", help="Generate a self-contained HTML dashboard")
     p_render.add_argument("--ledger", required=True)

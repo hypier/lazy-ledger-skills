@@ -15,8 +15,8 @@ How to turn user input into ledger writes. Read [bookkeeping-rules.md](bookkeepi
 | Receipt/screenshot of one purchase | Extract fields, `add` with `--source image` and `--attachment` |
 | Long payment-history screenshot | [image-batch-import.md](image-batch-import.md) → TSV → `import-tsv` |
 | "以后星巴克都记咖啡" | `prefer --merchant 星巴克 --category 咖啡` |
-| "午饭一般 16" / "地铁都是 4 块" | `habit set --phrase 午饭 --amount 16` (explicit rule, not a UI shortcut) |
-| "我平时怎么记 / 记账习惯" | `habit profile` and reply with the portrait only |
+| "午饭一般 16" / "地铁都是 4 块" | `habit set --phrase 午饭 --amount 16` then `habit memory` |
+| "我平时怎么记 / 记账习惯" | Read `lazy-ledger-memory.md`; refresh with `habit memory` if stale |
 | "把昨天星巴克改成餐饮" | `find --text` then `update --id` |
 | "从微信转到支付宝 500" / 还信用卡 | `add --text`; sets `account` and `to_account` |
 | "餐饮预算 2000" / "这个月预算 8000" | `budget set --amount` |
@@ -82,33 +82,40 @@ Updating a category while a merchant is set remembers that habit for later parse
 
 ## Habits
 
-Habits are a **usage portrait**, not shortcut buttons. The live page must not show 常用 chips or 存为常用.
+Two layers:
 
-1. `prefer` for explicit merchant → category / alias
-2. `habit profile` for a 2–4 sentence portrait plus structured defaults, computed from the ledger
-3. `habit set` only when the user states a rule in words (`午饭一般 16`)
+1. **Ledger stats** in `lazy-ledger.json` (`habits`, `preferences.usage_profile`) — updated when recording, used by the parser.
+2. **Memory document** `lazy-ledger-memory.md` next to the ledger — a periodic markdown portrait. This is what the agent Reads before recording.
 
-Before `add`, read:
+The live page must not show 常用 chips or 存为常用.
+
+Before `add`, Read the memory file. Refresh it only when missing/stale:
 
 ```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py habit profile \
-  --ledger ./lazy-ledger.json \
-  --json
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py habit memory \
+  --ledger ./lazy-ledger.json
 ```
 
-Use `profile.summary` as context. Apply silently:
+Stale = file missing, or `tx_count` behind the ledger by 10+, or `updated_at` older than 7 days. The command prints `{"path":"..."}`.
 
-- missing account / method → `profile.defaults`
-- known short phrase with `stable_amounts` → fill amount and category; do not ask
-- names in `variable_merchants` (超市、喜茶金额乱跳) → never invent amount
-- long payment-processor names (`有限公司`) are not habits
+Apply silently from the markdown:
 
-Do not list merchants as buttons. Do not ask the user to 存为常用. Confirm in one line if you used a default (`按你习惯记到微信零钱`).
+- 默认 → missing account / method
+- 稳定金额 → fill amount and category; do not ask
+- 不要猜金额 / 支付公司全称 → never invent amount
 
-If the portrait is thin or the user asks to refresh, `habit rebuild` then optionally write a better portrait:
+Do not list merchants as buttons. Confirm in one line if you used a default (`按你习惯记到微信零钱`).
+
+If the user states a rule (`午饭一般 16`) or you rewrite the portrait:
 
 ```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py habit profile \
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py habit set \
+  --ledger ./lazy-ledger.json \
+  --phrase 午饭 \
+  --amount 16 \
+  --category 餐饮
+
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py habit memory \
   --ledger ./lazy-ledger.json \
   --summary "通常用微信零钱记餐饮和交通。午饭大约 16 元。超市金额不固定，缺数字就问。"
 ```
@@ -145,7 +152,11 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py account u
 
 `--type`: `cash`, `wechat`, `alipay`, `bank`, `credit`, `other`.
 
+The live page can also add an account and edit opening / default. CLI is still fine for chat.
+
 Balance = opening + income/refund/transfer-in − expense/transfer-out. Credit cards go negative as you spend.
+
+Tag `报销` on an expense to keep it in the 待报销 queue until you add `已报销`.
 
 ## Budgets
 

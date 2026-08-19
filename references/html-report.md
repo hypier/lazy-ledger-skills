@@ -15,7 +15,10 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
 - Binds 127.0.0.1 only
 - Uses `assets/ledger-app.html`
 - Reads and writes the same ledger file as the CLI
-- Add from casual text, edit/delete rows, set/delete budgets
+- Four tabs: 记账 / 报表 / 月度账单 / 账本 (`#ledger` `#charts` `#bill` `#book`)
+- 报表: category donut, merchant bars, daily/monthly line, weekday and method charts (SVG, no libraries)
+- 月度账单: month facts plus the saved AI letter
+- 账本: add/edit accounts (opening, default) and budgets
 - No shortcut chips; habits stay in the background
 
 Start it in the background and give the printed URL.
@@ -39,11 +42,13 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py render \
 
 The template includes:
 
-- Period chips: 本月 / 上月 / 近7天 / 近30天 / 全部
+- Period chips: 本月 / 上月 / 本季 / 今年 / 近7天 / 近30天 / 全部
 - Month, type, category, method, account, and search filters with visible labels
 - Expense vs previous period, income, net, daily average, review count
+- Insight bullets: pace, recurring due, weekend share, vs previous
 - Account balances (opening + all history)
 - Budget bars for the selected month
+- Recurring charges and a 6-month spend trend
 - Month spend calendar (heatmap)
 - Category bars with amounts
 - Top merchants

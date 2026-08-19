@@ -173,7 +173,12 @@
       background: color-mix(in srgb, var(--chip) 35%, var(--paper));
     }
     .panel-head h2 { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 600; }
-    .calendar, .bars, .ranks, .review, .daily { padding: 14px 16px 16px; }
+    .insight-list { margin: 0; padding: 12px 16px 16px; display: grid; gap: 8px; list-style: none; }
+    .insight-list li {
+      padding: 10px 12px; border-radius: 12px;
+      background: color-mix(in srgb, var(--chip) 55%, var(--paper));
+      font-size: 14px;
+    }
     .weekdays, .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
     .weekdays span, .day { text-align: center; font-size: 12px; color: var(--muted); }
     .day {
@@ -258,6 +263,8 @@
     <div class="period-row" role="group" aria-label="时间范围">
       <button class="chip" type="button" data-range="this-month">本月</button>
       <button class="chip" type="button" data-range="last-month">上月</button>
+      <button class="chip" type="button" data-range="this-quarter">本季</button>
+      <button class="chip" type="button" data-range="this-year">今年</button>
       <button class="chip" type="button" data-range="last7">近7天</button>
       <button class="chip" type="button" data-range="last30">近30天</button>
       <button class="chip" type="button" data-range="all">全部</button>
@@ -330,6 +337,14 @@
       </div>
     </section>
 
+    <section class="panel" style="margin-bottom:12px" id="insightPanel">
+      <div class="panel-head">
+        <h2>账本观察</h2>
+        <span class="panel-kicker" id="insightKicker">按当前范围</span>
+      </div>
+      <ul class="insight-list" id="insightList"></ul>
+    </section>
+
     <div class="grid-2">
       <section class="panel">
         <div class="panel-head">
@@ -385,6 +400,23 @@
           <span class="panel-kicker" id="dailyCount">0 天</span>
         </div>
         <div class="daily" id="dailyBars"></div>
+      </section>
+    </div>
+
+    <div class="grid-2" style="margin-top:12px">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>周期账</h2>
+          <span class="panel-kicker">稳定的每月支出</span>
+        </div>
+        <div class="ranks" id="recurringList"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>月度走势</h2>
+          <span class="panel-kicker">近几个月支出</span>
+        </div>
+        <div class="bars" id="monthTrend"></div>
       </section>
     </div>
 
@@ -486,6 +518,13 @@
         start.setDate(today.getDate() - 29);
         return { start: iso(start), end: iso(today) };
       }
+      if (rangeMode === "this-quarter") {
+        const startMonth = Math.floor(today.getMonth() / 3) * 3;
+        return { start: iso(new Date(today.getFullYear(), startMonth, 1)), end: iso(today), kind: "this-quarter" };
+      }
+      if (rangeMode === "this-year") {
+        return { start: iso(new Date(today.getFullYear(), 0, 1)), end: iso(today), kind: "this-year" };
+      }
       if (rangeMode.startsWith("month:")) {
         const month = rangeMode.slice(6);
         const [year, mon] = month.split("-").map(Number);
@@ -499,6 +538,17 @@
       if (!bounds.start || !bounds.end) return null;
       const start = new Date(`${bounds.start}T12:00:00`);
       const end = new Date(`${bounds.end}T12:00:00`);
+      if (bounds.kind === "this-year") {
+        const prevStart = new Date(start.getFullYear() - 1, 0, 1);
+        const prevEnd = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate());
+        return { start: iso(prevStart), end: iso(prevEnd) };
+      }
+      if (bounds.kind === "this-quarter") {
+        const prevStart = new Date(start.getFullYear(), start.getMonth() - 3, 1);
+        const prevEnd = new Date(prevStart);
+        prevEnd.setDate(prevStart.getDate() + Math.round((end - start) / 86400000));
+        return { start: iso(prevStart), end: iso(prevEnd) };
+      }
       if (bounds.month) {
         const pivot = new Date(start.getFullYear(), start.getMonth() - 1, 1);
         const last = new Date(pivot.getFullYear(), pivot.getMonth() + 1, 0);
@@ -537,6 +587,100 @@
         }
         return true;
       }).sort((a, b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")));
+    }
+
+    function detectRecurring(source) {
+      const cutoffDate = new Date(today);
+      cutoffDate.setMonth(today.getMonth() - 8);
+      const cutoff = iso(cutoffDate);
+      const groups = new Map();
+      for (const tx of source) {
+        if ((tx.type || "expense") !== "expense") continue;
+        const day = formatDate(tx.occurred_at);
+        if (!day || day < cutoff) continue;
+        const merchant = String(tx.merchant || "").trim().toLowerCase();
+        const key = merchant ? `m:${merchant}` : `c:${tx.category || "其他"}:${Math.round(Number(tx.amount || 0))}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ day, tx });
+      }
+      const currentMonth = iso(today).slice(0, 7);
+      const rows = [];
+      for (const items of groups.values()) {
+        const dated = items.filter((item) => item.day).sort((a, b) => a.day.localeCompare(b.day));
+        const months = unique(dated.map((item) => item.day.slice(0, 7)));
+        if (months.length < 3) continue;
+        const amounts = dated.map((item) => Number(item.tx.amount || 0));
+        const sorted = [...amounts].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        if (!median) continue;
+        if ((Math.max(...amounts) - Math.min(...amounts)) / median > 0.35) continue;
+        const gaps = [];
+        for (let index = 1; index < dated.length; index += 1) {
+          gaps.push(Math.round((new Date(`${dated[index].day}T12:00:00`) - new Date(`${dated[index - 1].day}T12:00:00`)) / 86400000));
+        }
+        const medianGap = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)] || 0;
+        if (medianGap < 5) continue;
+        let cadence = "";
+        if (medianGap >= 25 && medianGap <= 40) cadence = "monthly";
+        else if (medianGap >= 6 && medianGap <= 9) cadence = "weekly";
+        else if (medianGap >= 13 && medianGap <= 17) cadence = "biweekly";
+        else if (months.length >= 3 && dated.length <= months.length + 1) cadence = "monthly";
+        else continue;
+        const last = dated.at(-1);
+        const recorded = dated.some((item) => item.day.slice(0, 7) === currentMonth);
+        const expectedDay = [...dated.map((item) => Number(item.day.slice(8)))].sort((a, b) => a - b)[Math.floor(dated.length / 2)];
+        const missing = cadence === "monthly" && !recorded && today.getDate() >= Math.max(expectedDay - 3, 1);
+        rows.push({
+          label: last.tx.merchant || last.tx.category || "周期支出",
+          cadence,
+          typical: median,
+          missing,
+          recorded
+        });
+      }
+      return rows.sort((a, b) => Number(b.missing) - Number(a.missing) || b.typical - a.typical).slice(0, 8);
+    }
+
+    function monthTrendRows(source) {
+      const keys = [];
+      for (let offset = 5; offset >= 0; offset -= 1) {
+        const pivot = new Date(today.getFullYear(), today.getMonth() - offset, 1);
+        keys.push(iso(pivot).slice(0, 7));
+      }
+      const totals = Object.fromEntries(keys.map((key) => [key, 0]));
+      for (const tx of source) {
+        if ((tx.type || "expense") !== "expense") continue;
+        const key = monthOf(tx);
+        if (key in totals) totals[key] += Number(tx.amount || 0);
+      }
+      return keys.map((key) => [key, totals[key]]);
+    }
+
+    function insightLines({ totals, prevTotals, categoryRows, bounds, recurring, pendingCount, weekendShare }) {
+      const lines = [];
+      if (categoryRows.length && totals.expense) {
+        const share = categoryRows[0][1] / totals.expense * 100;
+        lines.push(`支出最多的是${categoryRows[0][0]}，占 ${share.toFixed(0)}%。`);
+      }
+      if (prevTotals) {
+        const change = pct(totals.expense, prevTotals.expense);
+        if (change > 8) lines.push(`比上期多花了 ${Math.abs(change).toFixed(0)}%。`);
+        else if (change < -8) lines.push(`比上期少花了 ${Math.abs(change).toFixed(0)}%。`);
+      }
+      const missing = recurring.filter((item) => item.missing);
+      if (missing.length) lines.push(`周期账这月还没记：${missing.slice(0, 3).map((item) => item.label).join("、")}。`);
+      if (pendingCount) lines.push(`待报销 ${pendingCount} 笔。`);
+      if (weekendShare >= 40) lines.push(`周末支出占 ${weekendShare.toFixed(0)}%。`);
+      if (bounds.month) {
+        const [year, month] = bounds.month.split("-").map(Number);
+        const last = new Date(year, month, 0).getDate();
+        const elapsed = Math.min(today.getDate(), last);
+        if (elapsed < last && totals.expense) {
+          const projected = totals.expense / elapsed * last;
+          lines.push(`按现在日均，月底大约 ${formatMoney(projected)}。`);
+        }
+      }
+      return lines.slice(0, 4);
     }
 
     function fillFilters() {
@@ -721,6 +865,39 @@
       const dailyRows = Object.entries(byDay).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 10);
       document.getElementById("dailyCount").textContent = `${Object.keys(byDay).length} 天`;
       document.getElementById("dailyBars").innerHTML = barList(dailyRows.map(([day, amount]) => [day.slice(5), amount]), "暂无每日支出");
+
+      const recurring = detectRecurring(txs);
+      const pending = rows.filter((tx) => {
+        const tags = Array.isArray(tx.tags) ? tx.tags : [];
+        return tx.type === "expense" && tags.some((tag) => ["报销", "待报销", "对公"].includes(tag)) && !tags.some((tag) => ["已报销", "报销已回", "报销到账"].includes(tag));
+      });
+      let weekend = 0;
+      for (const tx of rows) {
+        if ((tx.type || "expense") !== "expense") continue;
+        const day = formatDate(tx.occurred_at);
+        if (!day) continue;
+        const weekday = new Date(`${day}T12:00:00`).getDay();
+        if (weekday === 0 || weekday === 6) weekend += Number(tx.amount || 0);
+      }
+      const insights = insightLines({
+        totals,
+        prevTotals: previous ? prevTotals : null,
+        categoryRows,
+        bounds,
+        recurring,
+        pendingCount: pending.length,
+        weekendShare: totals.expense ? weekend / totals.expense * 100 : 0
+      });
+      document.getElementById("insightKicker").textContent = bounds.month || bounds.kind || "当前范围";
+      document.getElementById("insightList").innerHTML = insights.length
+        ? insights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+        : `<li class="empty" style="background:transparent;padding:8px 0">这段时间还没有足够的观察。</li>`;
+      const cadenceLabel = { monthly: "每月", weekly: "每周", biweekly: "每两周" };
+      document.getElementById("recurringList").innerHTML = recurring.length ? recurring.map((item) => {
+        const status = item.missing ? "这月还没记" : (item.recorded ? "这月已记" : "");
+        return `<div class="rank-row"><span>${escapeHtml(item.label)}</span><span>${escapeHtml(cadenceLabel[item.cadence] || "")}${status ? " · " + status : ""}</span><span class="amount">${formatMoney(item.typical)}</span></div>`;
+      }).join("") : `<div class="empty">还没有稳定的周期支出</div>`;
+      document.getElementById("monthTrend").innerHTML = barList(monthTrendRows(txs), "暂无月度数据");
 
       const balances = accountBalances();
       document.getElementById("accountBalances").innerHTML = balances.length ? balances.map(([name, amount]) => {

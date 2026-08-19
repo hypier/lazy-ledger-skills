@@ -364,6 +364,75 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("咖啡", result.stdout)
             self.assertIn("剩余", result.stdout)
 
+    def test_show_this_year_and_insights_include_recurring(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-05-10 腾讯视频 18")
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-06-10 腾讯视频 18")
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-10 腾讯视频 18")
+            year = run_tool("show", "--ledger", str(ledger), "--range", "this-year", "--json")
+            payload = json.loads(year.stdout)
+            self.assertIn("年至今", payload["period"]["label"])
+            labels = [item["label"] for item in payload.get("recurring") or []]
+            self.assertIn("腾讯视频", labels)
+            missing = next(item for item in payload["recurring"] if item["label"] == "腾讯视频")
+            self.assertTrue(missing["missing_this_month"])
+            markdown = run_tool("show", "--ledger", str(ledger), "--range", "this-year").stdout
+            self.assertIn("### 观察", markdown)
+            self.assertIn("### 周期账", markdown)
+
+    def test_show_lists_pending_reimbursement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool(
+                "add",
+                "--ledger",
+                str(ledger),
+                "--text",
+                "2026-08-03 高铁 553",
+                "--tags",
+                "报销",
+            )
+            result = run_tool("show", "--ledger", str(ledger), "--month", "2026-08", "--json")
+            payload = json.loads(result.stdout)
+            self.assertEqual(len(payload.get("pending_reimbursement") or []), 1)
+            self.assertIn("待报销", run_tool("show", "--ledger", str(ledger), "--month", "2026-08").stdout)
+
+    def test_backup_copies_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            dest = Path(tmp) / "copy.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 星巴克 38")
+            payload = json.loads(run_tool("backup", "--ledger", str(ledger), "--output", str(dest)).stdout)
+            self.assertTrue(Path(payload["backup"]).exists())
+            self.assertEqual(json.loads(dest.read_text(encoding="utf-8"))["transactions"][0]["merchant"], "星巴克")
+
+    def test_bill_saves_letter_and_show_prints_body(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-08-03 午饭 16")
+            pack = json.loads(
+                run_tool("bill", "show", "--ledger", str(ledger), "--month", "2026-08", "--json").stdout
+            )
+            self.assertEqual(pack["month"], "2026-08")
+            self.assertIsNone(pack["bill"])
+            self.assertIn("facts", pack)
+            run_tool(
+                "bill",
+                "save",
+                "--ledger",
+                str(ledger),
+                "--month",
+                "2026-08",
+                "--title",
+                "八月午饭还是那些",
+                "--body",
+                "这月午饭比较固定，没有乱花。",
+            )
+            shown = run_tool("bill", "show", "--ledger", str(ledger), "--month", "2026-08")
+            self.assertIn("这月午饭比较固定", shown.stdout)
+            self.assertIn("八月午饭还是那些", shown.stdout)
+
     def test_render_includes_accounts_and_budgets(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
@@ -374,6 +443,8 @@ class LedgerToolTest(unittest.TestCase):
             html = output.read_text(encoding="utf-8")
             self.assertIn("账户余额", html)
             self.assertIn("预算", html)
+            self.assertIn("账本观察", html)
+            self.assertIn("周期账", html)
             self.assertIn("微信零钱", html)
 
     def test_init_marks_json_as_document_store(self):
@@ -402,6 +473,21 @@ class LedgerToolTest(unittest.TestCase):
             self.assertEqual(parsed["category"], "餐饮")
             added = json.loads(run_tool("add", "--ledger", str(ledger), "--text", "午饭").stdout)
             self.assertEqual(added["added"][0]["amount"], 16.0)
+
+    def test_habit_memory_markdown_is_written_beside_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 午饭 16")
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-08 午饭 16")
+            payload = json.loads(run_tool("habit", "memory", "--ledger", str(ledger)).stdout)
+            memory = Path(payload["path"])
+            self.assertEqual(memory.name, "ledger-memory.md")
+            self.assertTrue(memory.exists())
+            text = memory.read_text(encoding="utf-8")
+            self.assertIn("kind: lazy-ledger-memory", text)
+            self.assertIn("## 画像", text)
+            self.assertIn("午饭", text)
+            self.assertIn("稳定金额", text)
 
     def test_long_company_merchant_is_not_an_amount_default(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -521,6 +607,9 @@ class LiveServerTest(unittest.TestCase):
                 with urllib.request.urlopen(base + "/", timeout=2) as resp:
                     html = resp.read().decode("utf-8")
                 self.assertIn("懒人记账", html)
+                self.assertIn('role="tab"', html)
+                self.assertIn("月度账单", html)
+                self.assertIn("pieChart", html)
 
                 add_req = urllib.request.Request(
                     base + "/api/transactions",
@@ -556,6 +645,44 @@ class LiveServerTest(unittest.TestCase):
                 with urllib.request.urlopen(base + "/api/ledger", timeout=5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                 self.assertEqual(data["transactions"], [])
+
+                add_acc = urllib.request.Request(
+                    base + "/api/accounts",
+                    data=json.dumps({"name": "招行储蓄卡", "type": "bank", "opening": "1200"}).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(add_acc, timeout=5) as resp:
+                    account = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(account["name"], "招行储蓄卡")
+                self.assertEqual(account["opening_balance"], 1200.0)
+                patch_acc = urllib.request.Request(
+                    base + f"/api/accounts/{account['id']}",
+                    data=json.dumps({"opening": "1500", "default": True}).encode("utf-8"),
+                    method="PATCH",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(patch_acc, timeout=5) as resp:
+                    updated_acc = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(updated_acc["opening_balance"], 1500.0)
+                with urllib.request.urlopen(base + "/api/ledger", timeout=5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(data["preferences"]["default_account_id"], account["id"])
+                with urllib.request.urlopen(base + "/api/summary?range=this-year&compare=1", timeout=5) as resp:
+                    summary = json.loads(resp.read().decode("utf-8"))
+                self.assertIn("insights", summary)
+                with urllib.request.urlopen(base + "/api/bill?month=2026-08", timeout=5) as resp:
+                    bill = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(bill["month"], "2026-08")
+                save_bill = urllib.request.Request(
+                    base + "/api/bills",
+                    data=json.dumps({"month": "2026-08", "title": "八月", "body": "花得不多。"}).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(save_bill, timeout=5) as resp:
+                    saved = json.loads(resp.read().decode("utf-8"))
+                self.assertIn("花得不多", saved["body"])
             finally:
                 server.shutdown()
                 server.server_close()

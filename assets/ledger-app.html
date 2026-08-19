@@ -190,6 +190,18 @@
     .panel-head h2 { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 600; }
     .panel-kicker { color: var(--muted); font-size: 13px; }
     .budget-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .account-form { display: grid; grid-template-columns: 1.2fr 0.9fr 0.8fr auto; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .insight-list, .mini-rows { margin: 0; padding: 12px 16px 16px; display: grid; gap: 8px; list-style: none; }
+    .insight-list li, .note-card {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--chip) 55%, var(--paper));
+      color: var(--ink);
+      font-size: 14px;
+    }
+    .note-card .meta { margin-top: 2px; }
+    .default-mark { color: var(--pine); font-size: 12px; margin-left: 6px; }
+    .row-actions { display: flex; gap: 6px; }
     .rows { padding: 6px 0; }
     .row {
       display: grid;
@@ -235,8 +247,51 @@
     .dialog-body { padding: 20px 18px 8px; display: grid; gap: 12px; }
     .dialog-body strong { font-family: var(--serif); font-size: 22px; }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 18px 18px; }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      margin: 0 0 18px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 8px;
+      z-index: 6;
+    }
+    .tabs button {
+      flex: 1;
+      height: 44px;
+      border: 0;
+      background: transparent;
+      border-radius: 999px;
+      color: var(--muted);
+    }
+    .tabs button[aria-selected="true"] {
+      background: var(--ink);
+      color: var(--paper);
+    }
+    [hidden] { display: none !important; }
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .chart-wide { grid-column: 1 / -1; }
+    .chart-body { padding: 16px; }
+    .chart-split { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: center; }
+    .legend { display: grid; gap: 8px; font-size: 13px; }
+    .legend-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; }
+    .swatch { width: 12px; height: 12px; border-radius: 4px; }
+    .chart-svg { width: 100%; height: auto; display: block; }
+    .bill-article { padding: 22px 20px 28px; }
+    .bill-article h2, .bill-article h3 { font-family: var(--serif); margin: 0 0 10px; }
+    .bill-article h2 { font-size: 28px; }
+    .bill-article h3 { font-size: 18px; margin-top: 18px; }
+    .bill-article p { margin: 0 0 12px; line-height: 1.7; }
+    .bill-article ul { margin: 0 0 12px; padding-left: 1.1em; }
+    .bill-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+    .bill-facts .metric { min-height: 0; }
+    .hint { color: var(--muted); font-size: 14px; padding: 4px 2px 12px; }
     @media (max-width: 800px) {
-      .filters, .metrics, .grid-2, .composer-row, .budget-form { grid-template-columns: 1fr; }
+      .filters, .metrics, .grid-2, .composer-row, .budget-form, .account-form, .chart-grid, .chart-split, .bill-facts { grid-template-columns: 1fr; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before { transition: none !important; }
@@ -262,6 +317,14 @@
     </header>
 
     <main id="main">
+      <div class="tabs" role="tablist" aria-label="账本分区">
+        <button type="button" role="tab" id="tab-ledger" aria-controls="panel-ledger" data-tab="ledger">记账</button>
+        <button type="button" role="tab" id="tab-charts" aria-controls="panel-charts" data-tab="charts">报表</button>
+        <button type="button" role="tab" id="tab-bill" aria-controls="panel-bill" data-tab="bill">月度账单</button>
+        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" data-tab="book">账本</button>
+      </div>
+
+      <section class="panel-tab" id="panel-ledger" role="tabpanel" aria-labelledby="tab-ledger">
       <form class="composer" id="addForm">
         <label class="field">
           <span>记一笔</span>
@@ -277,6 +340,8 @@
         <div class="period" role="group" aria-label="时间范围">
           <button class="chip" type="button" data-range="this-month">本月</button>
           <button class="chip" type="button" data-range="last-month">上月</button>
+          <button class="chip" type="button" data-range="this-quarter">本季</button>
+          <button class="chip" type="button" data-range="this-year">今年</button>
           <button class="chip" type="button" data-range="last7">近7天</button>
           <button class="chip" type="button" data-range="last30">近30天</button>
           <button class="chip" type="button" data-range="all">全部</button>
@@ -301,12 +366,105 @@
         <div class="metric spend"><div class="metric-label">支出</div><div class="metric-value expense" id="expenseTotal">¥0.00</div></div>
         <div class="metric"><div class="metric-label">收入</div><div class="metric-value income" id="incomeTotal">¥0.00</div></div>
         <div class="metric"><div class="metric-label">净额</div><div class="metric-value" id="netTotal">¥0.00</div></div>
-        <div class="metric"><div class="metric-label">笔数</div><div class="metric-value" id="countTotal">0</div></div>
+        <div class="metric"><div class="metric-label" id="paceLabel">日均</div><div class="metric-value" id="paceValue">¥0.00</div></div>
       </section>
 
-      <div class="grid-2">
+      <section class="panel" style="margin-top:12px">
+        <div class="panel-head"><h2>流水</h2><span class="panel-kicker" id="rowCount">0 笔</span></div>
+        <div class="rows" id="txRows"></div>
+      </section>
+      </section>
+
+      <section class="panel-tab" id="panel-charts" role="tabpanel" aria-labelledby="tab-charts" hidden>
+        <p class="hint">直接看这段时间的结构：分类占比、商户、每日走势。</p>
+        <div class="period" role="group" aria-label="报表时间范围">
+          <button class="chip" type="button" data-range="this-month">本月</button>
+          <button class="chip" type="button" data-range="last-month">上月</button>
+          <button class="chip" type="button" data-range="this-quarter">本季</button>
+          <button class="chip" type="button" data-range="this-year">今年</button>
+          <button class="chip" type="button" data-range="last7">近7天</button>
+          <button class="chip" type="button" data-range="last30">近30天</button>
+          <button class="chip" type="button" data-range="all">全部</button>
+        </div>
+        <section class="metrics" aria-label="报表汇总">
+          <div class="metric spend"><div class="metric-label">支出</div><div class="metric-value expense" id="chartExpense">¥0.00</div></div>
+          <div class="metric"><div class="metric-label">收入</div><div class="metric-value income" id="chartIncome">¥0.00</div></div>
+          <div class="metric"><div class="metric-label">净额</div><div class="metric-value" id="chartNet">¥0.00</div></div>
+          <div class="metric"><div class="metric-label">较上期</div><div class="metric-value" id="chartDelta">—</div></div>
+        </section>
+        <div class="chart-grid">
+          <section class="panel">
+            <div class="panel-head"><h2>分类占比</h2><span class="panel-kicker">支出</span></div>
+            <div class="chart-body chart-split">
+              <div id="pieChart"></div>
+              <div class="legend" id="pieLegend"></div>
+            </div>
+            <p class="sr" id="pieSummary"></p>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>商户排行</h2><span class="panel-kicker">柱状</span></div>
+            <div class="chart-body" id="merchantChart"></div>
+          </section>
+          <section class="panel chart-wide">
+            <div class="panel-head"><h2 id="trendTitle">每日支出</h2><span class="panel-kicker">折线</span></div>
+            <div class="chart-body" id="trendChart"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>星期分布</h2><span class="panel-kicker">柱状</span></div>
+            <div class="chart-body" id="weekdayChart"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>支付渠道</h2><span class="panel-kicker">柱状</span></div>
+            <div class="chart-body" id="methodChart"></div>
+          </section>
+        </div>
+        <section class="panel" style="margin-top:12px" id="insightPanel">
+          <div class="panel-head"><h2>账本观察</h2><span class="panel-kicker" id="insightKicker">按当前范围</span></div>
+          <ul class="insight-list" id="insightList"></ul>
+        </section>
+        <div class="grid-2">
+          <section class="panel">
+            <div class="panel-head"><h2>周期账</h2><span class="panel-kicker">稳定的每月支出</span></div>
+            <div class="rows" id="recurringRows"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>待办</h2><span class="panel-kicker">报销和退款</span></div>
+            <div class="rows" id="todoRows"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel-tab" id="panel-bill" role="tabpanel" aria-labelledby="tab-bill" hidden>
+        <div class="toolbar" style="margin-top:0">
+          <label class="field" style="max-width:220px"><span>月份</span><select id="billMonth"></select></label>
+        </div>
+        <p class="hint" id="billHint">账单分两层：上面是数字，下面是助手写的结论。还没写的话，在对话里说「出一份这个月的账单」。</p>
+        <div class="bill-facts" id="billFacts"></div>
         <section class="panel">
-          <div class="panel-head"><h2>账户余额</h2><span class="panel-kicker">含期初</span></div>
+          <div class="panel-head"><h2 id="billTitle">月度账单</h2><span class="panel-kicker" id="billStatus">结论</span></div>
+          <article class="bill-article" id="billBody"></article>
+        </section>
+      </section>
+
+      <section class="panel-tab" id="panel-book" role="tabpanel" aria-labelledby="tab-book" hidden>
+      <div class="grid-2" style="margin-top:0">
+        <section class="panel">
+          <div class="panel-head"><h2>账户余额</h2><span class="panel-kicker" id="accountKicker">含期初</span></div>
+          <form class="account-form" id="accountForm">
+            <label class="field"><span>名称</span><input id="accountName" placeholder="招行储蓄卡" required></label>
+            <label class="field"><span>类型</span>
+              <select id="accountType">
+                <option value="bank">银行卡</option>
+                <option value="wechat">微信</option>
+                <option value="alipay">支付宝</option>
+                <option value="cash">现金</option>
+                <option value="credit">信用卡</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+            <label class="field"><span>期初</span><input id="accountOpening" type="number" step="0.01" value="0"></label>
+            <button class="btn" type="submit">添加</button>
+          </form>
           <div class="rows" id="accountRows"></div>
         </section>
         <section class="panel">
@@ -323,14 +481,36 @@
           <div class="rows" id="budgetRows"></div>
         </section>
       </div>
-
-      <section class="panel" style="margin-top:12px">
-        <div class="panel-head"><h2>流水</h2><span class="panel-kicker" id="rowCount">0 笔</span></div>
-        <div class="rows" id="txRows"></div>
       </section>
     </main>
   </div>
 
+  <dialog id="accountDialog">
+    <form class="dialog-body" id="accountEditForm">
+      <strong>改账户</strong>
+      <label class="field"><span>名称</span><input id="editAccountName" required></label>
+      <label class="field"><span>类型</span>
+        <select id="editAccountType">
+          <option value="bank">银行卡</option>
+          <option value="wechat">微信</option>
+          <option value="alipay">支付宝</option>
+          <option value="cash">现金</option>
+          <option value="credit">信用卡</option>
+          <option value="other">其他</option>
+        </select>
+      </label>
+      <label class="field"><span>期初余额</span><input id="editAccountOpening" type="number" step="0.01" required></label>
+      <label class="field" style="grid-template-columns: auto 1fr; align-items: center;">
+        <input id="editAccountDefault" type="checkbox">
+        <span>设为记账默认账户</span>
+      </label>
+      <div class="dialog-actions">
+        <button class="btn danger" type="button" id="archiveAccountBtn">归档</button>
+        <button class="btn" type="button" id="cancelAccountBtn">取消</button>
+        <button class="btn primary" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="editDialog">
     <form class="dialog-body" id="editForm">
       <strong>改这一笔</strong>
@@ -357,15 +537,147 @@
 
   <script>
     const typeLabel = { expense: "支出", income: "收入", refund: "退款", transfer: "转账" };
-    let LEDGER = { transactions: [], accounts: [], budgets: [], currency: "CNY" };
+    const cadenceLabel = { monthly: "每月", weekly: "每周", biweekly: "每两周" };
+    const methodLabel = { wechat: "微信", alipay: "支付宝", cash: "现金", card: "信用卡", bank: "银行卡", other: "其他" };
+    const TAB_IDS = ["ledger", "charts", "bill", "book"];
+    const CHART_COLORS = ["#2c5c4f", "#9e3a32", "#3d5a80", "#c4a35a", "#6b8f71", "#6a5470"];
+    let LEDGER = { transactions: [], accounts: [], budgets: [], bills: [], currency: "CNY" };
+    let INSIGHTS = null;
+    let BILL = null;
     let rangeMode = "this-month";
+    let currentTab = "ledger";
     let editingId = null;
+    let editingAccountId = null;
+    function palette() {
+      const styles = getComputedStyle(document.documentElement);
+      const pine = styles.getPropertyValue("--pine").trim();
+      const expense = styles.getPropertyValue("--expense").trim();
+      const refund = styles.getPropertyValue("--refund").trim();
+      const transfer = styles.getPropertyValue("--transfer").trim();
+      return [pine || CHART_COLORS[0], expense || CHART_COLORS[1], refund || CHART_COLORS[2], "#c4a35a", "#6b8f71", transfer || CHART_COLORS[5]];
+    }
+
+    function setTab(name, writeHash = true) {
+      const aliases = { 记账: "ledger", 报表: "charts", 账单: "bill", 月度账单: "bill", 账本: "book" };
+      currentTab = TAB_IDS.includes(name) ? name : (aliases[name] || "ledger");
+      document.querySelectorAll("[role=tab]").forEach((tab) => {
+        const on = tab.dataset.tab === currentTab;
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll("[role=tabpanel]").forEach((panel) => {
+        panel.hidden = panel.id !== `panel-${currentTab}`;
+      });
+      if (writeHash && location.hash.replace("#", "") !== currentTab) {
+        history.replaceState(null, "", `#${currentTab}`);
+      }
+      if (currentTab === "charts") renderCharts();
+      if (currentTab === "bill") loadBill();
+    }
+
+    function topSlices(map, limit = 5) {
+      const rows = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
+      if (rows.length <= limit) return rows;
+      const head = rows.slice(0, limit - 1);
+      const rest = rows.slice(limit - 1).reduce((sum, item) => sum + item[1], 0);
+      return head.concat([["其他", rest]]);
+    }
+
+    function donutSvg(entries) {
+      const colors = palette();
+      const total = entries.reduce((sum, item) => sum + item[1], 0) || 1;
+      const r = 54;
+      const c = 2 * Math.PI * r;
+      let offset = 0;
+      const rings = entries.map((item, index) => {
+        const len = (item[1] / total) * c;
+        const circle = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${colors[index % colors.length]}" stroke-width="22" stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)"></circle>`;
+        offset += len;
+        return circle;
+      }).join("");
+      return `<svg class="chart-svg" viewBox="0 0 140 140" role="img" aria-hidden="true">${rings}</svg>`;
+    }
+
+    function hbarSvg(entries, emptyText) {
+      if (!entries.length) return `<div class="empty">${emptyText}</div>`;
+      const colors = palette();
+      const max = Math.max(...entries.map((item) => item[1]), 1);
+      const height = Math.max(120, entries.length * 36 + 8);
+      const bars = entries.map((item, index) => {
+        const y = 8 + index * 36;
+        const width = Math.max(4, (item[1] / max) * 220);
+        return `<text x="0" y="${y + 14}" font-size="12" fill="currentColor">${escapeHtml(item[0])}</text>
+          <rect x="72" y="${y}" width="${width}" height="18" rx="6" fill="${colors[index % colors.length]}"></rect>
+          <text x="${80 + width}" y="${y + 14}" font-size="12" fill="currentColor">${money(item[1])}</text>`;
+      }).join("");
+      return `<svg class="chart-svg" viewBox="0 0 360 ${height}" role="img">${bars}</svg>`;
+    }
+
+    function columnSvg(entries, emptyText) {
+      if (!entries.length) return `<div class="empty">${emptyText}</div>`;
+      const colors = palette();
+      const max = Math.max(...entries.map((item) => item[1]), 1);
+      const gap = 360 / entries.length;
+      const bars = entries.map((item, index) => {
+        const h = Math.max(2, (item[1] / max) * 140);
+        const x = index * gap + 8;
+        const w = Math.max(12, gap - 16);
+        return `<rect x="${x}" y="${160 - h}" width="${w}" height="${h}" rx="6" fill="${colors[index % colors.length]}"></rect>
+          <text x="${x + w / 2}" y="178" text-anchor="middle" font-size="11" fill="currentColor">${escapeHtml(item[0])}</text>`;
+      }).join("");
+      return `<svg class="chart-svg" viewBox="0 0 360 190" role="img">${bars}</svg>`;
+    }
+
+    function lineSvg(entries, emptyText) {
+      if (!entries.length) return `<div class="empty">${emptyText}</div>`;
+      const max = Math.max(...entries.map((item) => item[1]), 1);
+      const pad = 28;
+      const w = 640;
+      const h = 200;
+      const span = Math.max(entries.length - 1, 1);
+      const points = entries.map((item, index) => {
+        const x = pad + (index / span) * (w - pad * 2);
+        const y = h - pad - (item[1] / max) * (h - pad * 2);
+        return [x, y];
+      });
+      const color = palette()[0];
+      const poly = points.map((point) => point.join(",")).join(" ");
+      const area = `${pad},${h - pad} ${poly} ${points.at(-1)[0]},${h - pad}`;
+      const labels = entries.filter((_, index) => index === 0 || index === entries.length - 1 || index % Math.ceil(entries.length / 6) === 0).map((item, _, list) => {
+        const index = entries.indexOf(item);
+        return `<text x="${points[index][0]}" y="${h - 8}" text-anchor="middle" font-size="11" fill="currentColor">${escapeHtml(String(item[0]).slice(-5))}</text>`;
+      }).join("");
+      return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" role="img">
+        <polygon points="${area}" fill="${color}" opacity="0.12"></polygon>
+        <polyline points="${poly}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"></polyline>
+        ${labels}
+      </svg>`;
+    }
+
+    function inlineMarkdown(text) {
+      return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    }
+
+    function renderMarkdown(text) {
+      const blocks = String(text || "").trim().split(/\n{2,}/);
+      if (!blocks[0]) return `<p class="empty">还没有文字结论。</p>`;
+      return blocks.map((block) => {
+        const lines = block.split("\n");
+        if (block.startsWith("### ")) return `<h3>${inlineMarkdown(block.slice(4))}</h3>`;
+        if (block.startsWith("## ")) return `<h2>${inlineMarkdown(block.slice(3))}</h2>`;
+        if (block.startsWith("# ")) return `<h2>${inlineMarkdown(block.slice(2))}</h2>`;
+        if (lines.every((line) => line.startsWith("- ") || line.startsWith("* "))) {
+          return `<ul>${lines.map((line) => `<li>${inlineMarkdown(line.slice(2))}</li>`).join("")}</ul>`;
+        }
+        return `<p>${inlineMarkdown(block).replace(/\n/g, "<br>")}</p>`;
+      }).join("");
+    }
     const chips = [...document.querySelectorAll(".chip[data-range]")];
     const typeFilter = document.getElementById("typeFilter");
     const categoryFilter = document.getElementById("categoryFilter");
     const accountFilter = document.getElementById("accountFilter");
     const searchInput = document.getElementById("searchInput");
     const dialog = document.getElementById("editDialog");
+    const accountDialog = document.getElementById("accountDialog");
     const addBtn = document.getElementById("addBtn");
 
     const money = (value) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: LEDGER.currency || "CNY" }).format(Number(value || 0));
@@ -395,6 +707,11 @@
       }
       if (rangeMode === "last7") { const start = new Date(today); start.setDate(today.getDate() - 6); return { start: iso(start), end: iso(today) }; }
       if (rangeMode === "last30") { const start = new Date(today); start.setDate(today.getDate() - 29); return { start: iso(start), end: iso(today) }; }
+      if (rangeMode === "this-quarter") {
+        const startMonth = Math.floor(today.getMonth() / 3) * 3;
+        return { start: iso(new Date(today.getFullYear(), startMonth, 1)), end: iso(today) };
+      }
+      if (rangeMode === "this-year") return { start: iso(new Date(today.getFullYear(), 0, 1)), end: iso(today) };
       return { start: "", end: "" };
     }
 
@@ -437,17 +754,44 @@
 
     function render() {
       chips.forEach((chip) => chip.setAttribute("aria-pressed", chip.dataset.range === rangeMode ? "true" : "false"));
+      const bounds = periodBounds();
       const rows = filteredRows();
       const totals = { expense: 0, income: 0, refund: 0 };
       for (const tx of rows) {
         if (totals[tx.type] !== undefined) totals[tx.type] += Number(tx.amount || 0);
       }
+      const daySpan = bounds.start && bounds.end
+        ? Math.max(1, Math.round((new Date(`${bounds.end}T12:00:00`) - new Date(`${bounds.start}T12:00:00`)) / 86400000) + 1)
+        : 1;
+      const pace = INSIGHTS && INSIGHTS.pace;
       document.getElementById("expenseTotal").textContent = money(totals.expense);
       document.getElementById("incomeTotal").textContent = money(totals.income);
       document.getElementById("netTotal").textContent = money(totals.income + totals.refund - totals.expense);
-      document.getElementById("countTotal").textContent = String(rows.length);
+      document.getElementById("paceLabel").textContent = pace && !pace.complete && pace.projected_expense != null ? "预计月底" : "日均";
+      document.getElementById("paceValue").textContent = pace && !pace.complete && pace.projected_expense != null
+        ? money(pace.projected_expense)
+        : money(totals.expense / daySpan);
       document.getElementById("rowCount").textContent = `${rows.length} 笔`;
       document.getElementById("ledgerMeta").textContent = `交易 ${(LEDGER.transactions || []).length} 笔 · 更新 ${(LEDGER.updated_at || "").slice(0, 10) || "刚刚"}`;
+
+      const insights = (INSIGHTS && INSIGHTS.insights) || [];
+      document.getElementById("insightKicker").textContent = (INSIGHTS && INSIGHTS.period && INSIGHTS.period.label) || "按当前范围";
+      document.getElementById("insightList").innerHTML = insights.length
+        ? insights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+        : `<li class="empty" style="background:transparent;padding:8px 0">这段时间还没有足够的观察。</li>`;
+
+      const recurring = (INSIGHTS && INSIGHTS.recurring) || [];
+      document.getElementById("recurringRows").innerHTML = recurring.length ? recurring.map((item) => {
+        const status = item.missing_this_month ? "这月还没记" : (item.recorded_this_month ? "这月已记" : "");
+        return `<div class="row"><div>${escapeHtml(item.label)}<div class="meta">${escapeHtml(cadenceLabel[item.cadence] || item.cadence)}${status ? " · " + status : ""}</div></div><div class="amount">${money(item.typical_amount)}</div><span></span></div>`;
+      }).join("") : `<div class="empty">还没有稳定的周期支出</div>`;
+
+      const pending = (INSIGHTS && INSIGHTS.pending_reimbursement) || [];
+      const unmatched = (INSIGHTS && INSIGHTS.unmatched_refunds) || [];
+      const todos = pending.map((item) => ({ ...item, kind: "待报销" })).concat(unmatched.map((item) => ({ ...item, kind: "未对上的退款" })));
+      document.getElementById("todoRows").innerHTML = todos.length ? todos.map((item) => {
+        return `<div class="row"><div>${escapeHtml(item.merchant || item.note || item.id)}<div class="meta">${escapeHtml(item.kind)} · ${escapeHtml((item.occurred_at || "").slice(0, 10))}</div></div><div class="amount">${money(item.amount)}</div><span></span></div>`;
+      }).join("") : `<div class="empty">没有待报销或未对上的退款</div>`;
 
       const categories = [...new Set((LEDGER.transactions || []).map((tx) => tx.category || "其他"))].sort();
       const currentCategory = categoryFilter.value;
@@ -459,11 +803,14 @@
       accountFilter.value = currentAccount;
       document.getElementById("editAccount").innerHTML = accounts.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
 
-      document.getElementById("accountRows").innerHTML = accountBalances().map((item) =>
-        `<div class="row"><div>${escapeHtml(item.name)}</div><div class="amount">${money(item.balance)}</div><span></span></div>`
-      ).join("") || `<div class="empty">还没有账户</div>`;
+      const defaultId = (LEDGER.preferences || {}).default_account_id;
+      const openingById = Object.fromEntries(accounts.map((item) => [item.id, Number(item.opening_balance || 0)]));
+      document.getElementById("accountKicker").textContent = defaultId ? "含期初 · 可改" : "含期初";
+      document.getElementById("accountRows").innerHTML = accountBalances().map((item) => {
+        const mark = item.id === defaultId ? `<span class="default-mark">默认</span>` : "";
+        return `<div class="row"><div>${escapeHtml(item.name)}${mark}<div class="meta">期初 ${money(openingById[item.id] || 0)}</div></div><div class="amount">${money(item.balance)}</div><button class="btn" data-edit-account="${escapeHtml(item.id)}" type="button">改</button></div>`;
+      }).join("") || `<div class="empty">还没有账户</div>`;
 
-      const bounds = periodBounds();
       const month = bounds.month;
       document.getElementById("budgetLabel").textContent = month || "选择月份";
       const budgets = (LEDGER.budgets || []).filter((item) => !month || !item.month || item.month === month);
@@ -483,11 +830,104 @@
           <button class="btn" data-edit="${escapeHtml(tx.id)}" type="button">改</button>
         </div>`;
       }).join("") : `<div class="empty">这段时间没有流水。上面记一笔即可。</div>`;
+      renderCharts();
+    }
+
+    function renderCharts() {
+      const totals = (INSIGHTS && INSIGHTS.totals) || { expense: 0, income: 0, refund: 0, net: 0 };
+      const comparison = (INSIGHTS && INSIGHTS.comparison) || {};
+      document.getElementById("chartExpense").textContent = money(totals.expense);
+      document.getElementById("chartIncome").textContent = money(totals.income);
+      document.getElementById("chartNet").textContent = money(totals.net);
+      const change = comparison.expense_change_pct;
+      document.getElementById("chartDelta").textContent = change == null ? "—" : `${change > 0 ? "+" : ""}${Number(change).toFixed(1)}%`;
+      const slices = topSlices(INSIGHTS && INSIGHTS.by_category);
+      const colors = palette();
+      const pieTotal = slices.reduce((sum, item) => sum + item[1], 0);
+      document.getElementById("pieChart").innerHTML = slices.length ? donutSvg(slices) : `<div class="empty">暂无分类</div>`;
+      document.getElementById("pieLegend").innerHTML = slices.map((item, index) => {
+        const share = pieTotal ? Math.round(item[1] / pieTotal * 100) : 0;
+        return `<div class="legend-row"><span class="swatch" style="background:${colors[index % colors.length]}"></span><span>${escapeHtml(item[0])}</span><span class="amount">${share}% · ${money(item[1])}</span></div>`;
+      }).join("") || `<div class="empty">暂无分类</div>`;
+      document.getElementById("pieSummary").textContent = slices.map((item) => `${item[0]} ${money(item[1])}`).join("，");
+      const merchants = ((INSIGHTS && INSIGHTS.top_merchants) || []).map((item) => [item.merchant, item.amount]);
+      document.getElementById("merchantChart").innerHTML = hbarSvg(merchants, "暂无商户统计");
+      const byMonth = Object.entries((INSIGHTS && INSIGHTS.by_month) || {});
+      const byDay = Object.entries((INSIGHTS && INSIGHTS.by_day) || {});
+      const useMonth = byMonth.length >= 3 || rangeMode === "this-year" || rangeMode === "this-quarter" || rangeMode === "all";
+      document.getElementById("trendTitle").textContent = useMonth && byMonth.length ? "月度支出" : "每日支出";
+      const trend = (useMonth && byMonth.length ? byMonth : byDay).slice(-14);
+      document.getElementById("trendChart").innerHTML = lineSvg(trend, "暂无走势");
+      const weekday = Object.entries((INSIGHTS && INSIGHTS.by_weekday) || {});
+      document.getElementById("weekdayChart").innerHTML = columnSvg(weekday, "暂无星期分布");
+      const methods = Object.entries((INSIGHTS && INSIGHTS.by_method) || {}).map(([key, amount]) => [methodLabel[key] || key, amount]);
+      document.getElementById("methodChart").innerHTML = hbarSvg(methods, "暂无渠道统计");
+    }
+
+    function renderBill() {
+      const pack = BILL || {};
+      const facts = pack.facts || {};
+      const totals = facts.totals || {};
+      const saved = pack.bill || {};
+      const monthSelect = document.getElementById("billMonth");
+      const months = pack.months || [];
+      const current = pack.month || monthSelect.value;
+      monthSelect.innerHTML = (months.length ? months : [current]).map((month) => `<option value="${escapeHtml(month)}">${escapeHtml(month)}</option>`).join("");
+      if (current) monthSelect.value = current;
+      document.getElementById("billFacts").innerHTML = [
+        ["支出", money(totals.expense), "spend"],
+        ["收入", money(totals.income), ""],
+        ["净额", money(totals.net), ""]
+      ].map(([label, value, klass]) => `<div class="metric ${klass}"><div class="metric-label">${label}</div><div class="metric-value">${value}</div></div>`).join("");
+      document.getElementById("billTitle").textContent = saved.title || `${current || ""} 月度账单`;
+      if (saved.body) {
+        document.getElementById("billStatus").textContent = "助手写的结论";
+        document.getElementById("billBody").innerHTML = renderMarkdown(saved.body);
+        document.getElementById("billHint").textContent = "数字来自账本；下面的文字是助手根据这个月的事实写的。";
+      } else {
+        const insights = facts.insights || [];
+        document.getElementById("billStatus").textContent = "还没写结论";
+        document.getElementById("billBody").innerHTML = insights.length
+          ? `<p>数字已经齐了，文字结论还没有。在对话里说「出一份 ${current} 的账单」即可。</p><ul>${insights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+          : `<p class="empty">这个月还没什么可写的。</p>`;
+      }
+    }
+
+    async function loadBill() {
+      const month = document.getElementById("billMonth").value || (periodBounds().month || "");
+      try {
+        BILL = await api("/api/bill" + (month ? `?month=${encodeURIComponent(month)}` : ""));
+      } catch (_error) {
+        BILL = null;
+      }
+      renderBill();
+    }
+
+    async function fetchSummary() {
+      const params = new URLSearchParams();
+      if (["this-month", "last-month", "last7", "last30", "this-quarter", "this-year"].includes(rangeMode)) {
+        params.set("range", rangeMode);
+      }
+      if (typeFilter.value) params.set("type", typeFilter.value);
+      if (categoryFilter.value) params.set("category", categoryFilter.value);
+      if (accountFilter.value) params.set("account", accountFilter.value);
+      params.set("compare", "1");
+      return api("/api/summary?" + params.toString());
+    }
+
+    async function applyView() {
+      try {
+        INSIGHTS = await fetchSummary();
+      } catch (_error) {
+        INSIGHTS = null;
+      }
+      render();
+      if (currentTab === "bill") await loadBill();
     }
 
     async function refresh() {
       LEDGER = await api("/api/ledger");
-      render();
+      await applyView();
     }
 
     document.getElementById("addForm").addEventListener("submit", async (event) => {
@@ -520,6 +960,56 @@
       await api("/api/budgets", { method: "POST", body: { amount, category: category || null, month: periodBounds().month || null } });
       document.getElementById("budgetAmount").value = "";
       document.getElementById("budgetCategory").value = "";
+      await refresh();
+    });
+
+    document.getElementById("accountForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await api("/api/accounts", {
+        method: "POST",
+        body: {
+          name: document.getElementById("accountName").value.trim(),
+          type: document.getElementById("accountType").value,
+          opening: document.getElementById("accountOpening").value || "0"
+        }
+      });
+      document.getElementById("accountName").value = "";
+      document.getElementById("accountOpening").value = "0";
+      await refresh();
+    });
+
+    document.getElementById("accountRows").addEventListener("click", (event) => {
+      const id = event.target.dataset.editAccount;
+      if (!id) return;
+      const account = (LEDGER.accounts || []).find((item) => item.id === id);
+      if (!account) return;
+      editingAccountId = id;
+      document.getElementById("editAccountName").value = account.name || "";
+      document.getElementById("editAccountType").value = account.type || "other";
+      document.getElementById("editAccountOpening").value = account.opening_balance || 0;
+      document.getElementById("editAccountDefault").checked = ((LEDGER.preferences || {}).default_account_id === id);
+      accountDialog.showModal();
+    });
+
+    document.getElementById("cancelAccountBtn").addEventListener("click", () => accountDialog.close());
+    document.getElementById("archiveAccountBtn").addEventListener("click", async () => {
+      if (!editingAccountId) return;
+      await api(`/api/accounts/${editingAccountId}`, { method: "PATCH", body: { archive: true } });
+      accountDialog.close();
+      await refresh();
+    });
+    document.getElementById("accountEditForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await api(`/api/accounts/${editingAccountId}`, {
+        method: "PATCH",
+        body: {
+          name: document.getElementById("editAccountName").value.trim(),
+          type: document.getElementById("editAccountType").value,
+          opening: document.getElementById("editAccountOpening").value,
+          default: document.getElementById("editAccountDefault").checked
+        }
+      });
+      accountDialog.close();
       await refresh();
     });
 
@@ -569,11 +1059,19 @@
       await refresh();
     });
 
-    chips.forEach((chip) => chip.addEventListener("click", () => { rangeMode = chip.dataset.range; render(); }));
-    [typeFilter, categoryFilter, accountFilter, searchInput].forEach((el) => el.addEventListener("input", render));
-    refresh().catch((error) => {
-      document.getElementById("ledgerMeta").textContent = error.message;
+    chips.forEach((chip) => chip.addEventListener("click", () => { rangeMode = chip.dataset.range; applyView(); }));
+    [typeFilter, categoryFilter, accountFilter].forEach((el) => el.addEventListener("input", applyView));
+    searchInput.addEventListener("input", render);
+    document.querySelectorAll("[role=tab]").forEach((tab) => {
+      tab.addEventListener("click", () => setTab(tab.dataset.tab));
     });
+    window.addEventListener("hashchange", () => setTab(location.hash.replace("#", ""), false));
+    document.getElementById("billMonth").addEventListener("change", loadBill);
+    refresh()
+      .then(() => setTab(location.hash.replace("#", "") || "ledger", false))
+      .catch((error) => {
+        document.getElementById("ledgerMeta").textContent = error.message;
+      });
   </script>
 </body>
 </html>

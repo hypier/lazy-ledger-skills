@@ -171,6 +171,10 @@ def make_handler(ledger_path):
                 default_range = None if (args.month or args.start or args.end or args.range) else "this-month"
                 _send(self, 200, tool.build_summary(ledger, args, default_range=default_range))
                 return
+            if path == "/api/bill":
+                ledger = tool.load_ledger(ledger_path, create=True)
+                _send(self, 200, tool.build_bill_pack(ledger, query.get("month")))
+                return
             _send(self, 404, {"error": "not_found"})
 
         def do_POST(self):
@@ -234,6 +238,16 @@ def make_handler(ledger_path):
                     unpin=bool(body.get("unpin")),
                 )
                 status, payload = _invoke(tool.habit_set_command, args)
+                _send(self, status, payload)
+                return
+            if path == "/api/bills":
+                args = SimpleNamespace(
+                    ledger=str(ledger_path),
+                    month=body.get("month"),
+                    title=body.get("title"),
+                    body=body.get("body"),
+                )
+                status, payload = _invoke(tool.bill_save_command, args)
                 _send(self, status, payload)
                 return
             _send(self, 404, {"error": "not_found"})

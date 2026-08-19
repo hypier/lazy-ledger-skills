@@ -8,11 +8,13 @@ How to show ledger data to the user. Chat is the default. The localhost page is 
 |---|---|
 | 记好了吗 / after any write | One-line confirmation in chat. No HTML. |
 | 这个月花了多少 / 汇总 / 对账 | `show --compare`, paste the markdown. Offer HTML if they want to drill in. |
-| 还能花多少 / 预算 | `show --compare` or `budget list`. Mention remaining/overspend. |
+| 今年 / 这季度花了多少 | `show --range this-year` or `--range this-quarter --compare` |
+| 还能花多少 / 预算 | `show --compare` or `budget list`. Mention remaining/overspend and any 预计超支. |
 | 账户余额 / 各账户还剩多少 | `account list --json`, or `show` which already includes 账户. |
 | 最近花在哪 / 哪个商户最多 | `show --compare` plus `list --limit 10` if they want rows. |
-| 看一下数据 / 打开报表 / 本地页面 / 改账 | `serve` in the background, give the localhost URL. |
-| 我的记账习惯 / 我平时怎么记 | `habit profile`. Reply with the portrait. Do not offer shortcut buttons. |
+| 看一下数据 / 打开报表 / 本地页面 / 改账 | `serve` in the background, give the localhost URL. Add `#charts` for 报表, `#bill` for 月度账单. |
+| 出一份月度账单 / 8月账单 | `bill show --month YYYY-MM --json`. Write the letter from `facts` + `brief`. Then `bill save --body`. Offer the page at `#bill`. |
+| 我的记账习惯 / 我平时怎么记 | Read `lazy-ledger-memory.md`. Reply with the 画像. `habit memory` if the file is missing or stale. |
 | 导出静态页面 | `render`, then give the file path. |
 | More than 15 matching rows | Short totals in chat, then `serve` or `render`. |
 | Export / 导出表格 | `export --format csv --output ./lazy-ledger.csv` |
@@ -42,11 +44,11 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py show \
   --compare
 ```
 
-`show` defaults to this month. Pass `--month YYYY-MM`, `--range last-month|last7|last30`, or `--start / --end` when the user names a period.
+`show` defaults to this month. Pass `--month YYYY-MM`, `--range last-month|last7|last30|this-quarter|this-year`, or `--start / --end` when the user names a period.
 
 If this month is empty, tell them and rerun with the latest month mentioned by the command, or with `--range last30`.
 
-Paste the markdown as-is, then add at most two sentences of observation (biggest category, vs last month, one outlier). Do not moralize.
+Paste the markdown as-is. The `### 观察` bullets already cover the useful takeaways (pace, recurring, vs previous). Do not add extra moralizing. If `### 周期账` lists `这月还没记`, mention it in one sentence.
 
 ## Chat after search / recent
 
@@ -99,7 +101,16 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py summary \
   --json
 ```
 
-Useful fields: `totals`, `by_category`, `by_merchant`, `by_day`, `by_method`, `daily_average`, `comparison`, `accounts`, `budgets`, `needs_review`, `outliers`.
+Useful fields: `totals`, `by_category`, `by_merchant`, `by_day`, `by_method`, `by_month`, `weekday`, `daily_average`, `comparison`, `accounts`, `budgets`, `needs_review`, `outliers`, `insights`, `recurring`, `pace`, `month_trend`, `pending_reimbursement`, `unmatched_refunds`.
+
+## Backup
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py backup \
+  --ledger ./lazy-ledger.json
+```
+
+Writes `lazy-ledger-YYYYMMDD.json` next to the ledger. Pass `--output` to pick another path.
 
 ## Export
 
@@ -112,3 +123,31 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py export \
 ```
 
 `--format json` writes the filtered transaction list, not a replacement ledger file.
+
+## Monthly bill
+
+Two layers:
+
+1. **Facts** — the same numbers as `show`, plus habit summary. Deterministic.
+2. **Letter** — written by the agent. Flexible prose: how they spent, what changed, one thing to watch. Not a table dump.
+
+When the user asks for 月度账单:
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py bill show \
+  --ledger ./lazy-ledger.json \
+  --month 2026-08 \
+  --json
+```
+
+Use `facts` only. Follow `brief`. 400–800 Chinese characters. Do not moralize. Do not invent amounts. Then save:
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py bill save \
+  --ledger ./lazy-ledger.json \
+  --month 2026-08 \
+  --title "八月还是把钱花在吃上" \
+  --body "……写好的正文……"
+```
+
+Reply in chat with the letter. If they have the live page open, point them to `#bill`.

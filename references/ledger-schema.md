@@ -29,13 +29,14 @@ Use this schema for `lazy-ledger.json`. Unknown fields must be preserved.
       "defaults": { "account": "微信零钱", "account_id": "acc_wechat", "method": "wechat" }
     }
   },
-  "habits": []
+  "habits": [],
+  "bills": []
 }
 ```
 
-`preferences` is optional on old files. The tool creates it when missing.
+`preferences` is optional on old files. The tool creates it when missing. `bills` holds monthly letters (`month`, `title`, `body`). Missing `bills` is filled as `[]`.
 
-The file is a JSON document database, not SQL. Collections are `transactions`, `accounts`, `budgets`, `categories`, and `habits`. Each item is a document with an `id`. `store` is `lazy-ledger-docs`. Unknown fields must be preserved.
+The file is a JSON document database, not SQL. Collections are `transactions`, `accounts`, `budgets`, `categories`, `habits`, and `bills`. Each item is a document with an `id`. `store` is `lazy-ledger-docs`. Unknown fields must be preserved.
 
 ## Transaction
 
@@ -145,7 +146,11 @@ Hints only. Transactions store the category name directly. Merchant habits live 
 }
 ```
 
-`phrase` is a short user saying (`午饭`, `地铁`, `喜茶`), not a payment-processor legal name. `source` is `learned` or `manual`. `amount` is the usual price when it is stable. Habits are internal signals for parse/add. Do not render them as shortcut chips. The agent-facing portrait lives in `preferences.usage_profile`.
+`phrase` is a short user saying (`午饭`, `地铁`, `喜茶`), not a payment-processor legal name. `source` is `learned` or `manual`. `amount` is the usual price when it is stable. Habits are internal signals for parse/add. The agent-facing portrait is `lazy-ledger-memory.md` next to the ledger, refreshed periodically (`habit memory`). `preferences.usage_profile` is the structured cache used to generate that file.
+
+## Habit memory
+
+`{ledger-stem}-memory.md` sits beside the ledger (for `./lazy-ledger.json` that is `./lazy-ledger-memory.md`). Markdown so the agent can Read it. Rewrite when missing, when `tx_count` lags by 10+, when older than 7 days, or on `habit memory` / `habit rebuild`. Do not rewrite on every single add unless those rules fire (the first add creates the file).
 
 ## Compatibility
 
