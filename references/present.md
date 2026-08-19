@@ -12,6 +12,7 @@ How to show ledger data to the user. Chat is the default. The localhost page is 
 | 账户余额 / 各账户还剩多少 | `account list --json`, or `show` which already includes 账户. |
 | 最近花在哪 / 哪个商户最多 | `show --compare` plus `list --limit 10` if they want rows. |
 | 看一下数据 / 打开报表 / 本地页面 / 改账 | `serve` in the background, give the localhost URL. |
+| 我的记账习惯 / 我平时怎么记 | `habit profile`. Reply with the portrait. Do not offer shortcut buttons. |
 | 导出静态页面 | `render`, then give the file path. |
 | More than 15 matching rows | Short totals in chat, then `serve` or `render`. |
 | Export / 导出表格 | `export --format csv --output ./lazy-ledger.csv` |
@@ -29,7 +30,7 @@ Use the `added` array and `month` object from `add`:
 餐饮预算剩余 ¥720.00
 ```
 
-Several items: list each line, then the month totals once. Mention inferred fields only when they matter (category `其他`, paid vs 原价, date defaulted).
+Several items: list each line, then the month totals once. Mention inferred fields only when they matter (category `其他`, paid vs 原价, date defaulted). If a stable habit filled the amount, say so in one clause (`午饭按平时的 ¥16`). Do not list other 常用 items.
 
 If `add` exits 2 with `likely_duplicate`, ask whether to keep both. Do not retry with `--allow-duplicate` until they confirm.
 

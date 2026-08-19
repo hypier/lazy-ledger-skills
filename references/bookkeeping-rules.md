@@ -8,7 +8,7 @@ Do the obvious write when amount and meaning are clear. Prefer `add --text` so p
 
 Ask only when:
 
-- No amount is present
+- No amount is present, and no matching habit has a usual amount
 - Several amounts could be the transaction total (`一共`, two prices with no 实付)
 - The entry may be income / refund / transfer rather than expense
 - A correction target is ambiguous
@@ -33,6 +33,7 @@ Store a positive `amount` for every type. Reports apply the sign.
 ## Amounts
 
 - One amount → that amount
+- No amount, but a short stable phrase matches the usage portrait (`午饭`) → that amount, slightly lower confidence
 - `原价45 实付38` or `券后` → paid amount, drop 原价
 - `一共` / `合计` / `总计` with several numbers → last number
 - Newline or `；` → separate transactions
@@ -55,7 +56,7 @@ User `preferences.merchant_categories` wins. Then keywords:
 - 收入: 工资, 奖金, 报销, 利息
 - 其他: cannot infer; lower confidence
 
-Explicit user category beats merchant inference. `prefer` and `update --category` remember the merchant habit.
+Explicit user category beats merchant inference. `prefer` and `update --category` remember the merchant map. The usage portrait fills missing account / method, and fills amount only for short stable phrases. Long company names are not amount defaults.
 
 ## Method, account, tags
 

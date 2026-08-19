@@ -143,7 +143,16 @@ def make_handler(ledger_path):
                 _send(self, 200, {"ok": True, "ledger": str(ledger_path.resolve())})
                 return
             if path == "/api/ledger":
-                _send(self, 200, _store(ledger_path).snapshot())
+                ledger = tool.load_ledger(ledger_path, create=True)
+                if tool.seed_habits_if_needed(ledger):
+                    tool.save_ledger(ledger_path, ledger)
+                _send(self, 200, ledger)
+                return
+            if path == "/api/habits":
+                ledger = tool.load_ledger(ledger_path, create=True)
+                if tool.seed_habits_if_needed(ledger):
+                    tool.save_ledger(ledger_path, ledger)
+                _send(self, 200, tool.habits_payload(ledger))
                 return
             if path == "/api/summary":
                 ledger = tool.load_ledger(ledger_path, create=True)
@@ -209,6 +218,24 @@ def make_handler(ledger_path):
                 status, payload = _invoke(tool.budget_set_command, args)
                 _send(self, status, payload)
                 return
+            if path == "/api/habits":
+                args = SimpleNamespace(
+                    ledger=str(ledger_path),
+                    phrase=body.get("phrase"),
+                    id=body.get("id"),
+                    amount=body.get("amount"),
+                    clear_amount=bool(body.get("clear_amount")),
+                    category=body.get("category"),
+                    merchant=body.get("merchant"),
+                    account=body.get("account"),
+                    type=body.get("type"),
+                    method=body.get("method"),
+                    pin=bool(body.get("pin")),
+                    unpin=bool(body.get("unpin")),
+                )
+                status, payload = _invoke(tool.habit_set_command, args)
+                _send(self, status, payload)
+                return
             _send(self, 404, {"error": "not_found"})
 
         def do_PATCH(self):
@@ -238,6 +265,24 @@ def make_handler(ledger_path):
                 status, payload = _invoke(tool.account_update_command, args)
                 _send(self, status, payload)
                 return
+            if len(parts) == 3 and parts[0] == "api" and parts[1] == "habits":
+                args = SimpleNamespace(
+                    ledger=str(ledger_path),
+                    id=parts[2],
+                    phrase=body.get("phrase"),
+                    amount=body.get("amount"),
+                    clear_amount=bool(body.get("clear_amount")),
+                    category=body.get("category"),
+                    merchant=body.get("merchant"),
+                    account=body.get("account"),
+                    type=body.get("type"),
+                    method=body.get("method"),
+                    pin=bool(body.get("pin")),
+                    unpin=bool(body.get("unpin")),
+                )
+                status, payload = _invoke(tool.habit_set_command, args)
+                _send(self, status, payload)
+                return
             _send(self, 404, {"error": "not_found"})
 
         def do_DELETE(self):
@@ -252,6 +297,11 @@ def make_handler(ledger_path):
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "budgets":
                 args = SimpleNamespace(ledger=str(ledger_path), id=parts[2])
                 status, payload = _invoke(tool.budget_delete_command, args)
+                _send(self, status, payload)
+                return
+            if len(parts) == 3 and parts[0] == "api" and parts[1] == "habits":
+                args = SimpleNamespace(ledger=str(ledger_path), id=parts[2], phrase=None)
+                status, payload = _invoke(tool.habit_delete_command, args)
                 _send(self, status, payload)
                 return
             _send(self, 404, {"error": "not_found"})

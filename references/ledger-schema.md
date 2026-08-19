@@ -23,14 +23,19 @@ Use this schema for `lazy-ledger.json`. Unknown fields must be preserved.
   "preferences": {
     "merchant_categories": { "星巴克": "咖啡" },
     "merchant_aliases": { "sbk": "星巴克" },
-    "default_account_id": "acc_wechat"
-  }
+    "default_account_id": "acc_wechat",
+    "usage_profile": {
+      "summary": "记账默认走微信零钱。支出主要记在餐饮、交通。午饭常记餐饮，金额大约 ¥16。超市金额不固定，缺金额时要问。",
+      "defaults": { "account": "微信零钱", "account_id": "acc_wechat", "method": "wechat" }
+    }
+  },
+  "habits": []
 }
 ```
 
 `preferences` is optional on old files. The tool creates it when missing.
 
-The file is a JSON document database, not SQL. Collections are `transactions`, `accounts`, `budgets`, and `categories`. Each item is a document with an `id`. `store` is `lazy-ledger-docs`. Unknown fields must be preserved.
+The file is a JSON document database, not SQL. Collections are `transactions`, `accounts`, `budgets`, `categories`, and `habits`. Each item is a document with an `id`. `store` is `lazy-ledger-docs`. Unknown fields must be preserved.
 
 ## Transaction
 
@@ -117,6 +122,30 @@ Missing `accounts` on an old file is filled with the five defaults. Do not repla
 ```
 
 Hints only. Transactions store the category name directly. Merchant habits live in `preferences.merchant_categories`, not here.
+
+## Habit
+
+```json
+{
+  "id": "hab_午饭",
+  "phrase": "午饭",
+  "merchant": "食堂",
+  "category": "餐饮",
+  "type": "expense",
+  "amount": 16.0,
+  "amount_locked": false,
+  "method": "wechat",
+  "account": "微信零钱",
+  "account_id": "acc_wechat",
+  "count": 8,
+  "recent_amounts": [16.0, 16.0, 16.0],
+  "pinned": false,
+  "source": "learned",
+  "last_used_at": "2026-08-18T12:00:00+08:00"
+}
+```
+
+`phrase` is a short user saying (`午饭`, `地铁`, `喜茶`), not a payment-processor legal name. `source` is `learned` or `manual`. `amount` is the usual price when it is stable. Habits are internal signals for parse/add. Do not render them as shortcut chips. The agent-facing portrait lives in `preferences.usage_profile`.
 
 ## Compatibility
 

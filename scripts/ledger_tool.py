@@ -6,7 +6,7 @@ import json
 import re
 import sys
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -107,6 +107,25 @@ TAG_KEYWORDS = {
     "订阅": ["订阅"],
 }
 TOTAL_HINTS = ("一共", "共", "合计", "总计", "券后", "实付", "满减")
+NOISY_MERCHANT_RE = re.compile(r"有限公司|股份有限|分公司|信息科技|集团|销售有限")
+MAX_LEARNABLE_PHRASE = 8
+HABIT_PHRASES = (
+    "早饭",
+    "早餐",
+    "午饭",
+    "午餐",
+    "晚饭",
+    "晚餐",
+    "夜宵",
+    "地铁",
+    "公交",
+    "打车",
+    "外卖",
+    "奶茶",
+    "咖啡",
+    "停车",
+    "加油",
+)
 DATE_TOKEN_RE = re.compile(
     r"\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?"
     r"|\d{1,2}月\d{1,2}[日号]?"
@@ -250,6 +269,7 @@ def empty_ledger(currency="CNY"):
         "categories": [],
         "accounts": default_accounts(currency),
         "budgets": [],
+        "habits": [],
         "store": STORE_KIND,
         "store_version": STORE_VERSION,
         "preferences": {"merchant_categories": {}, "merchant_aliases": {}, "default_account_id": "acc_wechat"},
@@ -264,6 +284,7 @@ def ledger_preferences(ledger):
     prefs.setdefault("merchant_categories", {})
     prefs.setdefault("merchant_aliases", {})
     prefs.setdefault("default_account_id", "acc_wechat")
+    prefs.setdefault("habits_seeded", False)
     if not isinstance(prefs["merchant_categories"], dict):
         prefs["merchant_categories"] = {}
     if not isinstance(prefs["merchant_aliases"], dict):
@@ -493,6 +514,7 @@ def normalize_ledger(data, currency="CNY"):
     data.setdefault("transactions", [])
     data.setdefault("categories", [])
     data.setdefault("budgets", [])
+    data.setdefault("habits", [])
     data["store"] = STORE_KIND
     data.setdefault("store_version", STORE_VERSION)
     ledger_preferences(data)
@@ -503,6 +525,8 @@ def normalize_ledger(data, currency="CNY"):
         data["categories"] = []
     if not isinstance(data["budgets"], list):
         data["budgets"] = []
+    if not isinstance(data["habits"], list):
+        data["habits"] = []
     return data
 
 
@@ -582,6 +606,403 @@ def learn_merchant_category(ledger, merchant, category):
     if not merchant or not category or category == "其他":
         return
     ledger_preferences(ledger)["merchant_categories"][merchant] = category
+
+
+def habit_id_for(phrase):
+    slug = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "_", str(phrase or "").strip()).strip("_")
+    if not slug:
+        raise SystemExit("Habit phrase is required")
+    return f"hab_{slug}"[:48]
+
+
+def ensure_habits(ledger):
+    rows = ledger.setdefault("habits", [])
+    if not isinstance(rows, list):
+        rows = []
+        ledger["habits"] = rows
+    return rows
+
+
+def find_habit(ledger, value):
+    if not value:
+        return None
+    needle = str(value).strip()
+    for habit in ensure_habits(ledger):
+        if not isinstance(habit, dict):
+            continue
+        if habit.get("id") == needle or habit.get("phrase") == needle:
+            return habit
+    return None
+
+
+def typical_amount(recent, *, locked_amount=None, amount_locked=False):
+    if amount_locked and locked_amount is not None:
+        return round(float(locked_amount), 2)
+    values = [round(float(value), 2) for value in recent if value is not None]
+    if len(values) < 2:
+        return None
+    value, count = Counter(values).most_common(1)[0]
+    if count >= 2 and count >= (len(values) + 1) // 2:
+        return value
+    return None
+
+
+def is_learnable_phrase(phrase):
+    text = str(phrase or "").strip()
+    if not text:
+        return False
+    if text in HABIT_PHRASES:
+        return True
+    if NOISY_MERCHANT_RE.search(text):
+        return False
+    if len(text) > MAX_LEARNABLE_PHRASE:
+        return False
+    return True
+
+
+def habit_phrases_from_tx(tx):
+    phrases = []
+    merchant = str(tx.get("merchant") or "").strip()
+    if is_learnable_phrase(merchant):
+        phrases.append(merchant)
+    blob = " ".join(str(part) for part in (tx.get("note"), tx.get("merchant"), tx.get("category")) if part)
+    for phrase in HABIT_PHRASES:
+        if phrase in blob and phrase not in phrases:
+            phrases.append(phrase)
+    return phrases
+
+
+def habit_match_score(habit, text, merchant=None):
+    phrase = str(habit.get("phrase") or "").strip()
+    if not phrase:
+        return None
+    in_text = phrase in (text or "")
+    merchant_hit = bool(merchant) and (
+        habit.get("merchant") == merchant or phrase == merchant
+    )
+    if not in_text and not merchant_hit:
+        return None
+    return (
+        1 if habit.get("pinned") else 0,
+        len(phrase) if in_text else 0,
+        habit.get("count") or 0,
+    )
+
+
+def match_habit(ledger, text, merchant=None):
+    ranked = []
+    for habit in ensure_habits(ledger or {}):
+        if not isinstance(habit, dict):
+            continue
+        score = habit_match_score(habit, text, merchant)
+        if score is not None:
+            ranked.append((score, habit))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return ranked[0][1]
+
+
+def apply_habit_to_proposal(proposal, habit, *, amount_from_habit=False):
+    if not habit:
+        return proposal
+    phrase = habit.get("phrase")
+    if amount_from_habit and not is_learnable_phrase(phrase) and habit.get("source") != "manual":
+        amount_from_habit = False
+    proposal["_habit"] = {
+        "id": habit.get("id"),
+        "phrase": phrase,
+        "amount_from_habit": bool(amount_from_habit),
+    }
+    if amount_from_habit and habit.get("amount") is not None:
+        proposal["amount"] = round(float(habit["amount"]), 2)
+        confidence = proposal.get("confidence")
+        if confidence is None or confidence > 0.9:
+            proposal["confidence"] = 0.9
+    if not proposal.get("merchant") and habit.get("merchant") and is_learnable_phrase(habit.get("merchant")):
+        proposal["merchant"] = habit["merchant"]
+    if (not proposal.get("category") or proposal.get("category") == "其他") and habit.get("category"):
+        proposal["category"] = habit["category"]
+    if not proposal.get("method") and habit.get("method"):
+        proposal["method"] = habit["method"]
+    if not proposal.get("account") and not proposal.get("account_id"):
+        if habit.get("account") or habit.get("account_id"):
+            proposal["account"] = habit.get("account")
+            if habit.get("account_id"):
+                proposal["account_id"] = habit["account_id"]
+    return proposal
+
+
+def apply_usage_defaults(proposal, ledger):
+    profile = (ledger_preferences(ledger or {}).get("usage_profile") or {}) if ledger else {}
+    defaults = profile.get("defaults") or {}
+    if not proposal.get("method") and defaults.get("method"):
+        proposal["method"] = defaults["method"]
+    if not proposal.get("account") and not proposal.get("account_id") and defaults.get("account"):
+        proposal["account"] = defaults["account"]
+        if defaults.get("account_id"):
+            proposal["account_id"] = defaults["account_id"]
+    return proposal
+
+
+def is_shortcut_habit(habit):
+    if not isinstance(habit, dict) or not habit.get("phrase"):
+        return False
+    if habit.get("pinned") or habit.get("source") == "manual":
+        return True
+    return (habit.get("count") or 0) >= 2
+
+
+def sort_habits(habits):
+    return sorted(
+        [habit for habit in habits if isinstance(habit, dict)],
+        key=lambda habit: (
+            not habit.get("pinned"),
+            -(habit.get("count") or 0),
+            0 if habit.get("amount") is None else -1,
+            habit.get("phrase") or "",
+        ),
+    )
+
+
+def visible_habits(ledger, limit=8):
+    return sort_habits([habit for habit in ensure_habits(ledger) if is_shortcut_habit(habit)])[:limit]
+
+
+def _mode(values):
+    counted = Counter(value for value in values if value)
+    if not counted:
+        return None, 0
+    value, count = counted.most_common(1)[0]
+    return value, count
+
+
+def build_usage_profile(ledger, summary=None):
+    txs = [tx for tx in ledger.get("transactions", []) if isinstance(tx, dict)]
+    expenses = [tx for tx in txs if tx.get("type") == "expense"]
+    account, account_n = _mode([tx.get("account") for tx in expenses])
+    account_id, _ = _mode([tx.get("account_id") for tx in expenses if tx.get("account") == account])
+    method, method_n = _mode([tx.get("method") for tx in expenses])
+    top_categories = [name for name, _count in Counter((tx.get("category") or "其他") for tx in expenses).most_common(4)]
+    stable = []
+    variable = []
+    for habit in sort_habits(ensure_habits(ledger)):
+        phrase = habit.get("phrase")
+        if not is_learnable_phrase(phrase) and habit.get("source") != "manual":
+            continue
+        if (habit.get("count") or 0) < 2 and habit.get("source") != "manual":
+            continue
+        row = {
+            "phrase": phrase,
+            "category": habit.get("category"),
+            "merchant": habit.get("merchant"),
+            "amount": habit.get("amount"),
+            "count": habit.get("count") or 0,
+        }
+        if habit.get("amount") is not None:
+            stable.append(row)
+        else:
+            variable.append(row)
+    lunch_hours = 0
+    for tx in expenses:
+        try:
+            hour = datetime.fromisoformat(tx.get("occurred_at") or "").hour
+        except ValueError:
+            continue
+        if 11 <= hour <= 14 and (tx.get("category") in {"餐饮", "咖啡"} or "饭" in str(tx.get("note") or "")):
+            lunch_hours += 1
+    parts = []
+    if account and account_n >= 2:
+        method_label = METHOD_LABELS.get(method) if method and method_n >= 2 else None
+        extra = f"（{method_label}）" if method_label else ""
+        parts.append(f"记账默认走{account}{extra}，缺账户时不必再问。")
+    if top_categories:
+        parts.append("支出主要记在" + "、".join(top_categories[:3]) + "。")
+    if lunch_hours >= 3:
+        parts.append("中午前后常记餐饮类，分类含糊时可偏向餐饮。")
+    for item in stable[:3]:
+        category = item.get("category") or "支出"
+        parts.append(f"{item['phrase']}常记{category}，金额大约 ¥{item['amount']:.0f}。")
+    if variable:
+        names = "、".join(item["phrase"] for item in variable[:3] if item.get("phrase"))
+        if names:
+            parts.append(f"{names}去得勤但金额不固定，缺金额时要问，不要猜。")
+    if not parts:
+        parts.append("流水还少。按字面记，账户用默认，缺金额就问。")
+    portrait = summary if summary else "".join(parts)
+    default_acc = find_account(ledger, account_id or account) if ledger else None
+    return {
+        "updated_at": now_iso(),
+        "tx_count": len(txs),
+        "summary": portrait,
+        "defaults": {
+            "account": default_acc["name"] if default_acc else account,
+            "account_id": default_acc["id"] if default_acc else account_id,
+            "method": method if method_n >= 2 else None,
+        },
+        "top_categories": top_categories,
+        "stable_amounts": stable[:8],
+        "variable_merchants": variable[:8],
+        "do_not": [
+            "不要把长商户名、支付公司名做成快捷按钮",
+            "金额不稳定时不要自动填金额",
+            "不要向用户展示常用按钮或要求存为常用",
+        ],
+    }
+
+
+def refresh_usage_profile(ledger, *, force=False, summary=None):
+    prefs = ledger_preferences(ledger or {})
+    current = prefs.get("usage_profile")
+    tx_count = len(ledger.get("transactions") or [])
+    if (
+        not force
+        and not summary
+        and isinstance(current, dict)
+        and current.get("tx_count") == tx_count
+        and current.get("summary")
+    ):
+        return False
+    kept_summary = summary if summary else (current.get("summary") if isinstance(current, dict) and current.get("tx_count") == tx_count else None)
+    prefs["usage_profile"] = build_usage_profile(ledger, summary=kept_summary if summary else None)
+    if summary:
+        prefs["usage_profile"]["summary"] = summary
+    return True
+
+
+def habits_payload(ledger):
+    refresh_usage_profile(ledger)
+    rows = sort_habits(ensure_habits(ledger))
+    profile = ledger_preferences(ledger).get("usage_profile") or {}
+    return {"profile": profile, "habits": rows}
+
+
+def prune_noisy_learned_habits(ledger):
+    kept = []
+    changed = False
+    for habit in ensure_habits(ledger):
+        if not isinstance(habit, dict):
+            changed = True
+            continue
+        if habit.get("source") == "manual" or is_learnable_phrase(habit.get("phrase")):
+            kept.append(habit)
+        else:
+            changed = True
+    ledger["habits"] = kept
+    return changed
+
+
+def rebuild_learned_habits(ledger):
+    kept = [
+        habit
+        for habit in ensure_habits(ledger)
+        if isinstance(habit, dict) and habit.get("source") == "manual"
+    ]
+    ledger["habits"] = kept
+    rows = [tx for tx in ledger.get("transactions", []) if isinstance(tx, dict)]
+    rows.sort(key=lambda tx: tx.get("occurred_at") or "")
+    for tx in rows:
+        if tx.get("source") == "import" or tx.get("type") == "transfer":
+            continue
+        learn_habits_from_transaction(ledger, tx)
+    refresh_usage_profile(ledger, force=True)
+    return ensure_habits(ledger)
+
+
+def seed_habits_if_needed(ledger):
+    prefs = ledger_preferences(ledger or {})
+    pruned = prune_noisy_learned_habits(ledger)
+    if prefs.get("habits_seeded") and not pruned:
+        return refresh_usage_profile(ledger)
+    if ledger.get("transactions"):
+        rebuild_learned_habits(ledger)
+    prefs["habits_seeded"] = True
+    refresh_usage_profile(ledger, force=True)
+    return True
+
+
+def upsert_habit(ledger, phrase, tx=None, **fields):
+    phrase = str(phrase or "").strip()
+    if not phrase:
+        return None
+    habit = find_habit(ledger, phrase)
+    ts = now_iso()
+    created = False
+    if habit is None:
+        habit = {
+            "id": fields.pop("id", None) or habit_id_for(phrase),
+            "phrase": phrase,
+            "count": 0,
+            "recent_amounts": [],
+            "pinned": False,
+            "amount_locked": False,
+            "source": fields.pop("source", "learned"),
+            "created_at": ts,
+        }
+        if any(existing.get("id") == habit["id"] for existing in ensure_habits(ledger) if isinstance(existing, dict)):
+            habit["id"] = f"hab_{uuid.uuid4().hex[:8]}"
+        ensure_habits(ledger).append(habit)
+        created = True
+    overwrite = created or fields.get("source") == "manual"
+    for key in ("merchant", "category", "type", "method", "account", "account_id"):
+        value = fields.get(key)
+        if value in (None, ""):
+            continue
+        if overwrite or not habit.get(key):
+            habit[key] = value
+    if fields.get("pinned") is True:
+        habit["pinned"] = True
+    if fields.get("pinned") is False:
+        habit["pinned"] = False
+    if fields.get("source") == "manual":
+        habit["source"] = "manual"
+    if tx:
+        amount = tx.get("amount")
+        habit["count"] = int(habit.get("count") or 0) + 1
+        habit["last_used_at"] = tx.get("occurred_at") or ts
+        if amount is not None:
+            recent = [round(float(value), 2) for value in (habit.get("recent_amounts") or []) if value is not None]
+            recent.append(round(float(amount), 2))
+            habit["recent_amounts"] = recent[-8:]
+        if not habit.get("merchant") and tx.get("merchant"):
+            habit["merchant"] = tx.get("merchant")
+        if (not habit.get("category") or habit.get("category") == "其他") and tx.get("category") and tx.get("category") != "其他":
+            habit["category"] = tx.get("category")
+        if not habit.get("method") and tx.get("method"):
+            habit["method"] = tx.get("method")
+        if not habit.get("account") and tx.get("account"):
+            habit["account"] = tx.get("account")
+            if tx.get("account_id"):
+                habit["account_id"] = tx.get("account_id")
+        if not habit.get("type") and tx.get("type") and tx.get("type") != "transfer":
+            habit["type"] = tx.get("type")
+    if "amount" in fields:
+        if fields["amount"] is None:
+            habit["amount"] = None
+            habit["amount_locked"] = False
+        else:
+            habit["amount"] = round(float(fields["amount"]), 2)
+            if fields.get("amount_locked") or habit.get("source") == "manual":
+                habit["amount_locked"] = True
+    elif not habit.get("amount_locked"):
+        habit["amount"] = typical_amount(
+            habit.get("recent_amounts") or [],
+            locked_amount=habit.get("amount"),
+            amount_locked=False,
+        )
+    habit["updated_at"] = ts
+    return habit
+
+
+def learn_habits_from_transaction(ledger, tx):
+    if not isinstance(tx, dict):
+        return []
+    if tx.get("source") == "import" or tx.get("type") == "transfer":
+        return []
+    updated = []
+    for phrase in habit_phrases_from_tx(tx):
+        updated.append(upsert_habit(ledger, phrase, tx=tx, source="learned"))
+    return updated
 
 
 def infer_type(text):
@@ -783,23 +1204,38 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
     if not raw_text:
         raise SystemExit("Text is required")
     raw_text = apply_aliases_to_text(ledger, raw_text)
+    if ledger is not None:
+        seed_habits_if_needed(ledger)
     date_token = extract_date_token(raw_text)
     date_text_removed = raw_text.replace(date_token, " ", 1) if date_token else raw_text
     amount, amount_removed = extract_amount(date_text_removed)
-    if amount is None:
-        raise SystemExit("Amount is required")
     tx_type = infer_type(raw_text)
     merchant = infer_merchant(amount_removed, infer_category(raw_text, tx_type), raw_text)
     category = preferred_category(ledger, merchant, infer_category(raw_text, tx_type))
     method = infer_method(raw_text)
     account = infer_account(raw_text, method)
     tags = infer_tags(raw_text)
+    habit = match_habit(ledger, raw_text, merchant)
+    amount_from_habit = False
+    if amount is None:
+        can_fill = (
+            habit
+            and habit.get("amount") is not None
+            and (habit.get("source") == "manual" or is_learnable_phrase(habit.get("phrase")))
+        )
+        if can_fill:
+            amount = round(float(habit["amount"]), 2)
+            amount_from_habit = True
+        else:
+            raise SystemExit("Amount is required")
     if confidence is None:
         confidence = 1.0
         if category == "其他":
             confidence = 0.75
         if not merchant and category == "其他":
             confidence = 0.6
+        if amount_from_habit:
+            confidence = min(confidence, 0.9)
     proposal = {
         "type": tx_type,
         "amount": amount,
@@ -817,6 +1253,8 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
         proposal["method"] = method
     if account:
         proposal["account"] = account
+    apply_habit_to_proposal(proposal, habit, amount_from_habit=amount_from_habit)
+    apply_usage_defaults(proposal, ledger)
     return apply_account_fields(proposal, ledger)
 
 
@@ -1025,6 +1463,7 @@ def month_snapshot(ledger, month):
 
 def add_transaction(args):
     ledger = load_ledger(args.ledger, args.currency)
+    seed_habits_if_needed(ledger)
     if args.text:
         proposals = parse_text_transactions(
             args.text,
@@ -1091,17 +1530,17 @@ def add_transaction(args):
         known.append(tx)
         if args.category and tx.get("merchant"):
             learn_merchant_category(ledger, tx.get("merchant"), tx.get("category"))
+        learn_habits_from_transaction(ledger, tx)
         added.append(tx)
     ledger["transactions"].sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    refresh_usage_profile(ledger, force=True)
     save_ledger(args.ledger, ledger)
     month = month_key(added[0].get("occurred_at")) if added else month_key(now_iso())
-    print(
-        json.dumps(
-            {"added": added, "count": len(added), "month": month_snapshot(ledger, month)},
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    payload = {"added": added, "count": len(added), "month": month_snapshot(ledger, month)}
+    used = [item.get("_habit") for item in proposals if item.get("_habit")]
+    if used:
+        payload["used_habits"] = used
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 def shift_month(year, month, delta):
@@ -1609,6 +2048,8 @@ def update_command(args):
                 tx.pop("to_account_id", None)
     tx["updated_at"] = now_iso()
     ledger["transactions"].sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    learn_habits_from_transaction(ledger, tx)
+    refresh_usage_profile(ledger, force=True)
     save_ledger(args.ledger, ledger)
     print(json.dumps(tx, ensure_ascii=False, indent=2))
 
@@ -1840,12 +2281,113 @@ def prefer_command(args):
     prefs = ledger_preferences(ledger)
     if args.merchant and args.category:
         prefs["merchant_categories"][args.merchant] = args.category
+        upsert_habit(
+            ledger,
+            args.merchant,
+            source="manual",
+            merchant=args.merchant,
+            category=args.category,
+        )
     if args.alias and args.merchant:
         prefs["merchant_aliases"][args.alias] = args.merchant
     if not ((args.merchant and args.category) or (args.alias and args.merchant)):
         raise SystemExit("Provide --merchant with --category, and/or --alias with --merchant")
     save_ledger(args.ledger, ledger)
     print(json.dumps(prefs, ensure_ascii=False, indent=2))
+
+
+def habit_list_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    seed_habits_if_needed(ledger)
+    payload = habits_payload(ledger)
+    save_ledger(args.ledger, ledger)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    summary = (payload.get("profile") or {}).get("summary") or ""
+    if summary:
+        print(summary)
+        return
+    print("流水还少。按字面记，账户用默认，缺金额就问。")
+
+
+def habit_profile_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    seed_habits_if_needed(ledger)
+    summary = (args.summary or "").strip() or None
+    refresh_usage_profile(ledger, force=True, summary=summary)
+    save_ledger(args.ledger, ledger)
+    payload = habits_payload(ledger)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    print((payload.get("profile") or {}).get("summary") or "")
+
+
+def habit_set_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    seed_habits_if_needed(ledger)
+    phrase = (args.phrase or "").strip() or None
+    habit = find_habit(ledger, args.id) if args.id else find_habit(ledger, phrase)
+    if not phrase:
+        phrase = (habit or {}).get("phrase")
+    if not phrase:
+        raise SystemExit("Provide --phrase, or --id of an existing habit")
+    account = find_account(ledger, args.account) if args.account else None
+    fields = {
+        "source": "manual",
+        "merchant": args.merchant,
+        "category": args.category,
+        "type": args.type,
+        "method": args.method,
+        "account": account["name"] if account else args.account,
+        "account_id": account["id"] if account else None,
+    }
+    if args.pin:
+        fields["pinned"] = True
+    if args.unpin:
+        fields["pinned"] = False
+    if args.clear_amount:
+        fields["amount"] = None
+        fields["amount_locked"] = False
+    elif args.amount is not None:
+        fields["amount"] = args.amount
+        fields["amount_locked"] = True
+    if args.id and habit:
+        fields["id"] = habit["id"]
+    habit = upsert_habit(ledger, phrase, **{key: value for key, value in fields.items() if value is not None or key == "amount" and args.clear_amount})
+    if args.merchant and args.category:
+        learn_merchant_category(ledger, args.merchant, args.category)
+    refresh_usage_profile(ledger, force=True)
+    save_ledger(args.ledger, ledger)
+    print(json.dumps(habit, ensure_ascii=False, indent=2))
+
+
+def habit_delete_command(args):
+    ledger = load_ledger(args.ledger, create=False)
+    remaining = []
+    removed = None
+    needle = args.id or args.phrase
+    if not needle:
+        raise SystemExit("Provide --id or --phrase")
+    for habit in ensure_habits(ledger):
+        if habit.get("id") == needle or habit.get("phrase") == needle:
+            removed = habit
+        else:
+            remaining.append(habit)
+    if not removed:
+        raise SystemExit(f"Habit not found: {needle}")
+    ledger["habits"] = remaining
+    save_ledger(args.ledger, ledger)
+    print(json.dumps(removed, ensure_ascii=False, indent=2))
+
+
+def habit_rebuild_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    rebuild_learned_habits(ledger)
+    ledger_preferences(ledger)["habits_seeded"] = True
+    save_ledger(args.ledger, ledger)
+    print(json.dumps(habits_payload(ledger), ensure_ascii=False, indent=2))
 
 
 def account_list_command(args):
@@ -2089,6 +2631,40 @@ def build_parser():
     p_prefer.add_argument("--category", default=None)
     p_prefer.add_argument("--alias", default=None)
     p_prefer.set_defaults(func=prefer_command)
+
+    p_habit = sub.add_parser("habit", help="Summarize usage habits from the ledger")
+    hab = p_habit.add_subparsers(dest="habit_command", required=True)
+    p_hab_list = hab.add_parser("list", help="Show the usage portrait used when recording")
+    p_hab_list.add_argument("--ledger", required=True)
+    p_hab_list.add_argument("--json", action="store_true")
+    p_hab_list.set_defaults(func=habit_list_command)
+    p_hab_profile = hab.add_parser("profile", help="Refresh or write the usage portrait")
+    p_hab_profile.add_argument("--ledger", required=True)
+    p_hab_profile.add_argument("--json", action="store_true")
+    p_hab_profile.add_argument("--summary", default=None, help="Optional 2-4 sentence portrait written by the agent")
+    p_hab_profile.set_defaults(func=habit_profile_command)
+    p_hab_set = hab.add_parser("set", help="Remember an explicit user rule")
+    p_hab_set.add_argument("--ledger", required=True)
+    p_hab_set.add_argument("--phrase", default=None)
+    p_hab_set.add_argument("--id", default=None)
+    p_hab_set.add_argument("--amount", type=float, default=None)
+    p_hab_set.add_argument("--clear-amount", action="store_true")
+    p_hab_set.add_argument("--category", default=None)
+    p_hab_set.add_argument("--merchant", default=None)
+    p_hab_set.add_argument("--account", default=None)
+    p_hab_set.add_argument("--type", default=None, choices=sorted(VALID_TYPES))
+    p_hab_set.add_argument("--method", default=None, choices=sorted(VALID_METHODS))
+    p_hab_set.add_argument("--pin", action="store_true")
+    p_hab_set.add_argument("--unpin", action="store_true")
+    p_hab_set.set_defaults(func=habit_set_command)
+    p_hab_del = hab.add_parser("delete", help="Delete a habit by id or phrase")
+    p_hab_del.add_argument("--ledger", required=True)
+    p_hab_del.add_argument("--id", default=None)
+    p_hab_del.add_argument("--phrase", default=None)
+    p_hab_del.set_defaults(func=habit_delete_command)
+    p_hab_rebuild = hab.add_parser("rebuild", help="Rebuild learned habits from existing transactions")
+    p_hab_rebuild.add_argument("--ledger", required=True)
+    p_hab_rebuild.set_defaults(func=habit_rebuild_command)
 
     p_account = sub.add_parser("account", help="List, add, or update accounts")
     acc = p_account.add_subparsers(dest="account_command", required=True)

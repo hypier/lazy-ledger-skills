@@ -385,6 +385,79 @@ class LedgerToolTest(unittest.TestCase):
             self.assertEqual(data["store_version"], 1)
             self.assertIn("transactions", data)
             self.assertIn("accounts", data)
+            self.assertIn("habits", data)
+
+    def test_repeated_lunch_fills_amount_silently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 午饭 16")
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-08 午饭 16")
+            payload = json.loads(run_tool("habit", "list", "--ledger", str(ledger), "--json").stdout)
+            profile = payload["profile"]
+            self.assertIn("午饭", profile["summary"])
+            lunch = next(item for item in profile["stable_amounts"] if item["phrase"] == "午饭")
+            self.assertEqual(lunch["amount"], 16.0)
+            parsed = json.loads(run_tool("parse", "--ledger", str(ledger), "--text", "午饭").stdout)
+            self.assertEqual(parsed["amount"], 16.0)
+            self.assertEqual(parsed["category"], "餐饮")
+            added = json.loads(run_tool("add", "--ledger", str(ledger), "--text", "午饭").stdout)
+            self.assertEqual(added["added"][0]["amount"], 16.0)
+
+    def test_long_company_merchant_is_not_an_amount_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 深圳市顺易通信息科技有限公司 3")
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-08 深圳市顺易通信息科技有限公司 3")
+            failed = run_tool(
+                "parse",
+                "--ledger",
+                str(ledger),
+                "--text",
+                "深圳市顺易通信息科技有限公司",
+                check=False,
+            )
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("Amount is required", failed.stderr)
+            payload = json.loads(run_tool("habit", "list", "--ledger", str(ledger), "--json").stdout)
+            phrases = [item.get("phrase") for item in payload.get("habits") or []]
+            self.assertNotIn("深圳市顺易通信息科技有限公司", phrases)
+
+    def test_habit_set_allows_recording_without_amount(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("init", "--ledger", str(ledger))
+            saved = json.loads(
+                run_tool(
+                    "habit",
+                    "set",
+                    "--ledger",
+                    str(ledger),
+                    "--phrase",
+                    "地铁",
+                    "--amount",
+                    "4",
+                    "--category",
+                    "交通",
+                    "--pin",
+                ).stdout
+            )
+            self.assertEqual(saved["phrase"], "地铁")
+            self.assertEqual(saved["amount"], 4.0)
+            parsed = json.loads(run_tool("parse", "--ledger", str(ledger), "--text", "地铁").stdout)
+            self.assertEqual(parsed["amount"], 4.0)
+            self.assertEqual(parsed["category"], "交通")
+
+    def test_habit_does_not_fill_amount_when_prices_differ(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 午饭 16")
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-07-08 午饭 20")
+            payload = json.loads(run_tool("habit", "list", "--ledger", str(ledger), "--json").stdout)
+            lunch = next(item for item in payload["habits"] if item["phrase"] == "午饭")
+            self.assertIsNone(lunch.get("amount"))
+            failed = run_tool("parse", "--ledger", str(ledger), "--text", "午饭", check=False)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("Amount is required", failed.stderr)
 
 
 def _scripts_on_path():

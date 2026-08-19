@@ -16,6 +16,7 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
 - Uses `assets/ledger-app.html`
 - Reads and writes the same ledger file as the CLI
 - Add from casual text, edit/delete rows, set/delete budgets
+- No shortcut chips; habits stay in the background
 
 Start it in the background and give the printed URL.
 

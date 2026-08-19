@@ -2,8 +2,26 @@
   "schema_version": 1,
   "currency": "CNY",
   "created_at": "2026-07-09T07:47:20+08:00",
-  "updated_at": "2026-07-09T07:56:19+08:00",
+  "updated_at": "2026-08-19T08:34:37+08:00",
   "transactions": [
+    {
+      "id": "tx_20260819_a0b9f654",
+      "type": "expense",
+      "amount": 18.0,
+      "currency": "CNY",
+      "category": "餐饮",
+      "occurred_at": "2026-08-19T08:34:37+08:00",
+      "source": "text",
+      "confidence": 0.75,
+      "tags": [],
+      "created_at": "2026-08-19T08:34:37+08:00",
+      "updated_at": "2026-08-19T08:34:37+08:00",
+      "merchant": "夏计清补凉",
+      "note": "夏计清补凉",
+      "method": "wechat",
+      "account": "微信零钱",
+      "account_id": "acc_wechat"
+    },
     {
       "id": "tx_20260708_8444f602",
       "type": "expense",
@@ -852,5 +870,688 @@
       "attachment": "/Users/barry/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/dex-hypier_f32c/temp/RWTemp/2026-07/9e20f478899dc29eb19741386f9343c8/a518d015645619ef54af7990fad83904.jpg"
     }
   ],
-  "categories": []
+  "categories": [],
+  "budgets": [],
+  "habits": [
+    {
+      "id": "hab_赵一鸣",
+      "phrase": "赵一鸣",
+      "count": 2,
+      "recent_amounts": [
+        5.8,
+        15.9
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-05-30T10:36:00+08:00",
+      "merchant": "赵一鸣",
+      "category": "购物",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_夏计清补凉",
+      "phrase": "夏计清补凉",
+      "count": 3,
+      "recent_amounts": [
+        18.0,
+        18.0,
+        18.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-08-19T08:34:37+08:00",
+      "merchant": "夏计清补凉",
+      "category": "餐饮",
+      "type": "expense",
+      "amount": 18.0,
+      "updated_at": "2026-08-19T08:34:37+08:00",
+      "method": "wechat",
+      "account": "微信零钱",
+      "account_id": "acc_wechat"
+    },
+    {
+      "id": "hab_陵水百佳汇超市",
+      "phrase": "陵水百佳汇超市",
+      "count": 5,
+      "recent_amounts": [
+        199.61,
+        87.39,
+        20.9,
+        129.26,
+        246.75
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-01T11:25:00+08:00",
+      "merchant": "陵水百佳汇超市",
+      "category": "购物",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_深圳市顺易通信息科技有限",
+      "phrase": "深圳市顺易通信息科技有限...",
+      "count": 3,
+      "recent_amounts": [
+        3.0,
+        3.0,
+        6.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-01T11:45:00+08:00",
+      "merchant": "深圳市顺易通信息科技有限...",
+      "category": "交通",
+      "type": "expense",
+      "amount": 3.0,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_中国石化销售海南石油分",
+      "phrase": "中国石化销售海南石油分...",
+      "count": 2,
+      "recent_amounts": [
+        442.15,
+        386.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-01T10:26:00+08:00",
+      "merchant": "中国石化销售海南石油分...",
+      "category": "交通",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_陈超",
+      "phrase": "陈超",
+      "count": 3,
+      "recent_amounts": [
+        50.0,
+        591.0,
+        45.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-03T15:55:00+08:00",
+      "merchant": "陈超",
+      "category": "红包",
+      "type": "income",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_妹歌",
+      "phrase": "妹歌",
+      "count": 1,
+      "recent_amounts": [
+        8.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-08T10:48:00+08:00",
+      "merchant": "妹歌",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_URBAN_REVIVO",
+      "phrase": "URBAN REVIVO",
+      "count": 1,
+      "recent_amounts": [
+        446.1
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-09T16:03:00+08:00",
+      "merchant": "URBAN REVIVO",
+      "category": "购物",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_速停车",
+      "phrase": "速停车",
+      "count": 1,
+      "recent_amounts": [
+        3.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-09T16:16:00+08:00",
+      "merchant": "速停车",
+      "category": "交通",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_停车",
+      "phrase": "停车",
+      "count": 1,
+      "recent_amounts": [
+        3.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-09T16:16:00+08:00",
+      "merchant": "速停车",
+      "category": "交通",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_芳",
+      "phrase": "芳",
+      "count": 1,
+      "recent_amounts": [
+        15.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-09T16:18:00+08:00",
+      "merchant": "芳",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_果树",
+      "phrase": "果树",
+      "count": 1,
+      "recent_amounts": [
+        22.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-10T17:26:00+08:00",
+      "merchant": "果树",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_陵水菜篮子_北斗市场",
+      "phrase": "陵水菜篮子-北斗市场",
+      "count": 1,
+      "recent_amounts": [
+        2.6
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-10T17:29:00+08:00",
+      "merchant": "陵水菜篮子-北斗市场",
+      "category": "买菜",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_卖菜",
+      "phrase": "卖菜",
+      "count": 2,
+      "recent_amounts": [
+        5.0,
+        12.5
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-13T17:25:00+08:00",
+      "merchant": "卖菜",
+      "category": "买菜",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_Ho",
+      "phrase": "Ho。。。",
+      "count": 2,
+      "recent_amounts": [
+        42.0,
+        89.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-22T19:15:00+08:00",
+      "merchant": "Ho。。。",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_中国邮政",
+      "phrase": "中国邮政",
+      "count": 1,
+      "recent_amounts": [
+        22.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-11T08:39:00+08:00",
+      "merchant": "中国邮政",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_洋卡优选",
+      "phrase": "洋卡优选",
+      "count": 1,
+      "recent_amounts": [
+        10.34
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-11T09:07:00+08:00",
+      "merchant": "洋卡优选",
+      "category": "购物",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_途虎养车",
+      "phrase": "途虎养车",
+      "count": 1,
+      "recent_amounts": [
+        17.5
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-11T10:20:00+08:00",
+      "merchant": "途虎养车",
+      "category": "交通",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_喜茶",
+      "phrase": "喜茶",
+      "count": 3,
+      "recent_amounts": [
+        29.0,
+        23.0,
+        19.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-01T11:33:00+08:00",
+      "merchant": "喜茶",
+      "category": "餐饮",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_烧腊美食",
+      "phrase": "烧腊美食",
+      "count": 2,
+      "recent_amounts": [
+        25.0,
+        24.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-02T17:25:00+08:00",
+      "merchant": "烧腊美食",
+      "category": "餐饮",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_月亮",
+      "phrase": "月亮",
+      "count": 2,
+      "recent_amounts": [
+        15.0,
+        10.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-02T17:27:00+08:00",
+      "merchant": "月亮",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_众安保险",
+      "phrase": "众安保险",
+      "count": 1,
+      "recent_amounts": [
+        47.33
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-16T08:54:00+08:00",
+      "merchant": "众安保险",
+      "category": "保险",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_王晓蓉157371",
+      "phrase": "王晓蓉157371...",
+      "count": 1,
+      "recent_amounts": [
+        15500.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-23T10:46:00+08:00",
+      "merchant": "王晓蓉157371...",
+      "category": "转账",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_王晓蓉15737139",
+      "phrase": "王晓蓉15737139...",
+      "count": 2,
+      "recent_amounts": [
+        500.0,
+        167.47
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-25T17:37:00+08:00",
+      "merchant": "王晓蓉15737139...",
+      "category": "转账",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_梦相随百货",
+      "phrase": "梦相随百货...",
+      "count": 1,
+      "recent_amounts": [
+        4.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-23T16:02:00+08:00",
+      "merchant": "梦相随百货...",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_杭州深度求索",
+      "phrase": "杭州深度求索",
+      "count": 2,
+      "recent_amounts": [
+        10.0,
+        10.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-28T14:12:00+08:00",
+      "merchant": "杭州深度求索",
+      "type": "expense",
+      "amount": 10.0,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_广州天力物业陵水分公司",
+      "phrase": "广州天力物业陵水分公司",
+      "count": 2,
+      "recent_amounts": [
+        1000.0,
+        93.5
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-26T14:59:00+08:00",
+      "merchant": "广州天力物业陵水分公司",
+      "category": "居住",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_鲜果园",
+      "phrase": "鲜果园",
+      "count": 1,
+      "recent_amounts": [
+        33.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-27T17:54:00+08:00",
+      "merchant": "鲜果园",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_美团平台商户",
+      "phrase": "美团平台商户",
+      "count": 1,
+      "recent_amounts": [
+        188.9
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-29T13:35:00+08:00",
+      "merchant": "美团平台商户",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_牟新麟",
+      "phrase": "牟新麟",
+      "count": 1,
+      "recent_amounts": [
+        394.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-06-29T16:28:00+08:00",
+      "merchant": "牟新麟",
+      "category": "转账",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_一麦滋烘焙店",
+      "phrase": "一麦滋烘焙店",
+      "count": 1,
+      "recent_amounts": [
+        83.3
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-01T11:38:00+08:00",
+      "merchant": "一麦滋烘焙店",
+      "category": "餐饮",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_亚连",
+      "phrase": "亚连",
+      "count": 1,
+      "recent_amounts": [
+        2.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-02T17:27:00+08:00",
+      "merchant": "亚连",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_星巴克",
+      "phrase": "星巴克",
+      "count": 1,
+      "recent_amounts": [
+        38.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-08T12:00:00+08:00",
+      "merchant": "星巴克",
+      "category": "咖啡",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "hab_咖啡",
+      "phrase": "咖啡",
+      "count": 1,
+      "recent_amounts": [
+        38.0
+      ],
+      "pinned": false,
+      "amount_locked": false,
+      "source": "learned",
+      "created_at": "2026-08-19T08:34:22+08:00",
+      "last_used_at": "2026-07-08T12:00:00+08:00",
+      "merchant": "星巴克",
+      "category": "咖啡",
+      "type": "expense",
+      "amount": null,
+      "updated_at": "2026-08-19T08:34:22+08:00"
+    }
+  ],
+  "store": "lazy-ledger-docs",
+  "store_version": 1,
+  "preferences": {
+    "merchant_categories": {},
+    "merchant_aliases": {},
+    "default_account_id": "acc_wechat",
+    "habits_seeded": true
+  },
+  "accounts": [
+    {
+      "id": "acc_cash",
+      "name": "现金",
+      "type": "cash",
+      "currency": "CNY",
+      "opening_balance": 0.0,
+      "archived": false,
+      "created_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "acc_wechat",
+      "name": "微信零钱",
+      "type": "wechat",
+      "currency": "CNY",
+      "opening_balance": 0.0,
+      "archived": false,
+      "created_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "acc_alipay",
+      "name": "支付宝",
+      "type": "alipay",
+      "currency": "CNY",
+      "opening_balance": 0.0,
+      "archived": false,
+      "created_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "acc_bank",
+      "name": "银行卡",
+      "type": "bank",
+      "currency": "CNY",
+      "opening_balance": 0.0,
+      "archived": false,
+      "created_at": "2026-08-19T08:34:22+08:00"
+    },
+    {
+      "id": "acc_credit",
+      "name": "信用卡",
+      "type": "credit",
+      "currency": "CNY",
+      "opening_balance": 0.0,
+      "archived": false,
+      "created_at": "2026-08-19T08:34:22+08:00"
+    }
+  ]
 }

@@ -15,6 +15,8 @@ How to turn user input into ledger writes. Read [bookkeeping-rules.md](bookkeepi
 | Receipt/screenshot of one purchase | Extract fields, `add` with `--source image` and `--attachment` |
 | Long payment-history screenshot | [image-batch-import.md](image-batch-import.md) → TSV → `import-tsv` |
 | "以后星巴克都记咖啡" | `prefer --merchant 星巴克 --category 咖啡` |
+| "午饭一般 16" / "地铁都是 4 块" | `habit set --phrase 午饭 --amount 16` (explicit rule, not a UI shortcut) |
+| "我平时怎么记 / 记账习惯" | `habit profile` and reply with the portrait only |
 | "把昨天星巴克改成餐饮" | `find --text` then `update --id` |
 | "从微信转到支付宝 500" / 还信用卡 | `add --text`; sets `account` and `to_account` |
 | "餐饮预算 2000" / "这个月预算 8000" | `budget set --amount` |
@@ -80,21 +82,45 @@ Updating a category while a merchant is set remembers that habit for later parse
 
 ## Habits
 
-User rules beat built-in keywords.
+Habits are a **usage portrait**, not shortcut buttons. The live page must not show 常用 chips or 存为常用.
+
+1. `prefer` for explicit merchant → category / alias
+2. `habit profile` for a 2–4 sentence portrait plus structured defaults, computed from the ledger
+3. `habit set` only when the user states a rule in words (`午饭一般 16`)
+
+Before `add`, read:
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py habit profile \
+  --ledger ./lazy-ledger.json \
+  --json
+```
+
+Use `profile.summary` as context. Apply silently:
+
+- missing account / method → `profile.defaults`
+- known short phrase with `stable_amounts` → fill amount and category; do not ask
+- names in `variable_merchants` (超市、喜茶金额乱跳) → never invent amount
+- long payment-processor names (`有限公司`) are not habits
+
+Do not list merchants as buttons. Do not ask the user to 存为常用. Confirm in one line if you used a default (`按你习惯记到微信零钱`).
+
+If the portrait is thin or the user asks to refresh, `habit rebuild` then optionally write a better portrait:
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py habit profile \
+  --ledger ./lazy-ledger.json \
+  --summary "通常用微信零钱记餐饮和交通。午饭大约 16 元。超市金额不固定，缺数字就问。"
+```
 
 ```bash
 python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py prefer \
   --ledger ./lazy-ledger.json \
   --merchant 星巴克 \
   --category 咖啡
-
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py prefer \
-  --ledger ./lazy-ledger.json \
-  --alias sbk \
-  --merchant 星巴克
 ```
 
-Do not learn from a guessed `其他` category. Only learn from explicit `--category`, `update --category`, or `prefer`.
+Do not learn merchant categories from a guessed `其他`. Only learn those from explicit `--category`, `update --category`, or `prefer`. Amount defaults come from repeated short phrases with a stable price, or from `habit set`.
 
 ## Accounts
 
