@@ -7,192 +7,346 @@
   <style>
     :root {
       color-scheme: light;
-      --paper: #e6ebf1;
-      --panel: #f7f9fb;
-      --ink: #1b2740;
-      --muted: #5d6b80;
-      --line: #c5d0dc;
-      --expense: #b4453a;
-      --income: #1e7a62;
-      --refund: #2c6bb0;
-      --transfer: #675889;
-      --chip: #dfe6ee;
-      --focus: #2c6bb0;
-      --shadow: 0 10px 30px rgba(27, 39, 64, 0.06);
+      --bg: #efe8dc;
+      --paper: #fbf7f0;
+      --ink: #1f1a14;
+      --muted: #6a5f54;
+      --line: #d9cfc0;
+      --pine: #2c5c4f;
+      --pine-soft: color-mix(in srgb, var(--pine) 12%, var(--paper));
+      --expense: #9e3a32;
+      --income: #2c5c4f;
+      --refund: #3d5a80;
+      --transfer: #6a5470;
+      --chip: #eadfcf;
+      --focus: #2c5c4f;
+      --shadow: 0 1px 0 rgba(31, 26, 20, 0.05), 0 14px 36px rgba(31, 26, 20, 0.08);
+      --radius: 20px;
+      --radius-sm: 12px;
+      --serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC", Georgia, serif;
+      --sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", sans-serif;
       --mono: ui-monospace, "SF Mono", Menlo, monospace;
-      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         color-scheme: dark;
-        --paper: #121820;
-        --panel: #1b232e;
-        --ink: #e7edf4;
-        --muted: #9aa7b8;
-        --line: #324155;
-        --expense: #e07a70;
-        --income: #4db69a;
-        --chip: #243040;
+        --bg: #161310;
+        --paper: #201c18;
+        --ink: #f4ece3;
+        --muted: #b6aa9c;
+        --line: #3c342c;
+        --pine: #86c4b0;
+        --expense: #e08a82;
+        --income: #86c4b0;
+        --refund: #8eb0d8;
+        --transfer: #c2b0cc;
+        --chip: #2b251f;
+        --shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 18px 40px rgba(0, 0, 0, 0.35);
       }
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
     body {
-      background: var(--paper);
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 420px at 12% -10%, color-mix(in srgb, var(--pine) 10%, transparent), transparent 55%),
+        repeating-linear-gradient(0deg, transparent, transparent 27px, color-mix(in srgb, var(--line) 35%, transparent) 28px),
+        var(--bg);
       color: var(--ink);
       font-family: var(--sans);
-      line-height: 1.5;
+      font-size: 16px;
+      line-height: 1.55;
     }
     button, select, input, textarea { font: inherit; color: inherit; }
+    button, a, select, input, textarea { touch-action: manipulation; }
     button { cursor: pointer; }
-    :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 32px) 64px; }
-    h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.03em; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .skip {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      transform: translateY(-120%);
+      background: var(--ink);
+      color: var(--paper);
+      padding: 10px 14px;
+      border-radius: 10px;
+      z-index: 20;
+    }
+    .skip:focus { transform: none; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px, 4vw, 36px) 72px; }
+    .brand {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 22px;
+    }
+    .mark {
+      width: 44px;
+      height: 44px;
+      flex: none;
+      border-radius: 13px;
+      background: var(--pine);
+      color: var(--paper);
+      display: grid;
+      place-items: center;
+    }
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    h1 {
+      margin: 4px 0 0;
+      font-family: var(--serif);
+      font-size: clamp(32px, 5vw, 48px);
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      line-height: 1.12;
+    }
     .sub { color: var(--muted); font-size: 14px; margin-top: 6px; }
-    .composer, .panel, .metric {
-      background: var(--panel);
+    .composer, .panel, .metric, .toolbar {
+      background: var(--paper);
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: var(--radius);
       box-shadow: var(--shadow);
     }
-    .composer { padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 18px 0; }
+    .composer {
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .composer-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+    .field { display: grid; gap: 6px; }
+    .field span { font-size: 12px; color: var(--muted); }
     textarea, input, select {
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--paper);
-      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--bg) 55%, var(--paper));
+      padding: 11px 13px;
+      transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
     }
-    textarea { min-height: 48px; resize: vertical; }
+    textarea { min-height: 56px; resize: vertical; }
+    textarea:focus, input:focus, select:focus {
+      outline: none;
+      border-color: var(--pine);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--pine) 16%, transparent);
+    }
     .btn, .chip {
       height: 44px;
       border: 1px solid var(--line);
       background: var(--chip);
-      border-radius: 10px;
-      padding: 0 14px;
+      border-radius: 999px;
+      padding: 0 16px;
       min-width: 44px;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
     }
-    .btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
-    .btn.danger { color: var(--expense); }
+    .btn:hover, .chip:hover { border-color: color-mix(in srgb, var(--ink) 35%, var(--line)); }
+    .btn:active, .chip:active { transform: translateY(1px); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+    .btn.primary { background: var(--pine); color: var(--paper); border-color: var(--pine); }
+    .btn.primary:hover { filter: brightness(1.04); }
+    .btn.danger { color: var(--expense); background: color-mix(in srgb, var(--expense) 10%, var(--paper)); border-color: transparent; }
+    .toolbar { padding: 14px; margin: 16px 0; }
     .period { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-    .chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
-    .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
-    .field { display: grid; gap: 4px; }
-    .field span { font-size: 12px; color: var(--muted); }
-    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-    .metric { padding: 14px; }
+    .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .metric { padding: 16px 18px; position: relative; overflow: hidden; }
+    .metric::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--pine);
+    }
+    .metric.spend::before { background: var(--expense); }
     .metric-label { color: var(--muted); font-size: 13px; }
-    .metric-value { margin-top: 6px; font-family: var(--mono); font-size: 24px; font-weight: 700; }
+    .metric-value {
+      margin-top: 8px;
+      font-family: var(--serif);
+      font-size: clamp(22px, 3vw, 30px);
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
     .expense { color: var(--expense); }
     .income { color: var(--income); }
+    .refund { color: var(--refund); }
+    .transfer { color: var(--transfer); }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-    .panel-head { display: flex; justify-content: space-between; gap: 12px; padding: 13px 14px; border-bottom: 1px solid var(--line); }
-    .panel-head h2 { margin: 0; font-size: 16px; }
+    .panel { overflow: hidden; }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      padding: 15px 16px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--chip) 35%, var(--paper));
+    }
+    .panel-head h2 { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 600; }
     .panel-kicker { color: var(--muted); font-size: 13px; }
-    .rows { padding: 8px 0; }
+    .budget-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .rows { padding: 6px 0; }
     .row {
       display: grid;
       grid-template-columns: 1fr auto auto;
-      gap: 8px;
+      gap: 10px;
       align-items: center;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--line);
+      padding: 12px 16px;
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
     }
-    .row:hover { background: color-mix(in srgb, var(--chip) 55%, transparent); }
-    .meta { color: var(--muted); font-size: 12px; }
-    .amount { font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums; }
-    .empty { padding: 24px; text-align: center; color: var(--muted); }
-    .msg { min-height: 20px; color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+    .row:last-child { border-bottom: 0; }
+    .row:hover { background: color-mix(in srgb, var(--chip) 45%, transparent); }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .amount { font-family: var(--mono); font-weight: 650; font-variant-numeric: tabular-nums; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--chip);
+      font-size: 12px;
+      margin-right: 6px;
+    }
+    .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+    .msg { min-height: 22px; color: var(--muted); font-size: 13px; margin: 4px 2px 0; }
     .msg.err { color: var(--expense); }
-    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
-    dialog { border: 1px solid var(--line); border-radius: 16px; padding: 0; background: var(--panel); color: var(--ink); width: min(480px, 92vw); }
-    .dialog-body { padding: 16px; display: grid; gap: 10px; }
-    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 16px; }
+    .sr {
+      position: absolute;
+      width: 1px; height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+    dialog {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 0;
+      background: var(--paper);
+      color: var(--ink);
+      width: min(480px, 92vw);
+      box-shadow: var(--shadow);
+    }
+    dialog::backdrop { background: rgba(31, 26, 20, 0.42); }
+    .dialog-body { padding: 20px 18px 8px; display: grid; gap: 12px; }
+    .dialog-body strong { font-family: var(--serif); font-size: 22px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 18px 18px; }
     @media (max-width: 800px) {
-      .filters, .metrics, .grid-2, .composer { grid-template-columns: 1fr; }
+      .filters, .metrics, .grid-2, .composer-row, .budget-form { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before { transition: none !important; }
     }
   </style>
 </head>
 <body>
+  <a class="skip" href="#main">跳到账本</a>
   <div class="wrap">
-    <header>
-      <div class="sub">本机文档库 · 可改账</div>
-      <h1>懒人记账</h1>
-      <div class="sub" id="ledgerMeta">正在读取本地账本</div>
+    <header class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M5 5.5h10.5A2.5 2.5 0 0 1 18 8v11.5H7.2A2.2 2.2 0 0 1 5 17.3V5.5Z" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M5 5.5A2.2 2.2 0 0 1 7.2 3.3H18" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M9 9h6M9 13h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="eyebrow">本机账本</div>
+        <h1>懒人记账</h1>
+        <div class="sub" id="ledgerMeta">正在读取本地账本</div>
+      </div>
     </header>
 
-    <form class="composer" id="addForm">
-      <label class="sr" for="textInput">记一笔</label>
-      <textarea id="textInput" placeholder="昨天星巴克 38，或从微信转到支付宝 500" required></textarea>
-      <button class="btn primary" type="submit">记账</button>
-    </form>
-    <p class="msg" id="addMsg"></p>
+    <main id="main">
+      <form class="composer" id="addForm">
+        <label class="field">
+          <span>记一笔</span>
+          <textarea id="textInput" placeholder="昨天星巴克 38，或从微信转到支付宝 500" required></textarea>
+        </label>
+        <div class="composer-row">
+          <p class="msg" id="addMsg" role="status" aria-live="polite"></p>
+          <button class="btn primary" type="submit" id="addBtn">记账</button>
+        </div>
+      </form>
 
-    <div class="period" role="group" aria-label="时间范围">
-      <button class="chip" type="button" data-range="this-month">本月</button>
-      <button class="chip" type="button" data-range="last-month">上月</button>
-      <button class="chip" type="button" data-range="last7">近7天</button>
-      <button class="chip" type="button" data-range="last30">近30天</button>
-      <button class="chip" type="button" data-range="all">全部</button>
-    </div>
-    <div class="filters">
+      <div class="toolbar">
+        <div class="period" role="group" aria-label="时间范围">
+          <button class="chip" type="button" data-range="this-month">本月</button>
+          <button class="chip" type="button" data-range="last-month">上月</button>
+          <button class="chip" type="button" data-range="last7">近7天</button>
+          <button class="chip" type="button" data-range="last30">近30天</button>
+          <button class="chip" type="button" data-range="all">全部</button>
+        </div>
+        <div class="filters">
+          <label class="field"><span>类型</span>
+            <select id="typeFilter">
+              <option value="">全部类型</option>
+              <option value="expense">支出</option>
+              <option value="income">收入</option>
+              <option value="refund">退款</option>
+              <option value="transfer">转账</option>
+            </select>
+          </label>
+          <label class="field"><span>分类</span><select id="categoryFilter"></select></label>
+          <label class="field"><span>账户</span><select id="accountFilter"></select></label>
+          <label class="field"><span>搜索</span><input id="searchInput" type="search" placeholder="商户、备注、金额"></label>
+        </div>
+      </div>
+
+      <section class="metrics" aria-label="汇总">
+        <div class="metric spend"><div class="metric-label">支出</div><div class="metric-value expense" id="expenseTotal">¥0.00</div></div>
+        <div class="metric"><div class="metric-label">收入</div><div class="metric-value income" id="incomeTotal">¥0.00</div></div>
+        <div class="metric"><div class="metric-label">净额</div><div class="metric-value" id="netTotal">¥0.00</div></div>
+        <div class="metric"><div class="metric-label">笔数</div><div class="metric-value" id="countTotal">0</div></div>
+      </section>
+
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>账户余额</h2><span class="panel-kicker">含期初</span></div>
+          <div class="rows" id="accountRows"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>预算</h2><span class="panel-kicker" id="budgetLabel">本月</span></div>
+          <form class="budget-form" id="budgetForm">
+            <label class="field"><span>金额</span>
+              <input id="budgetAmount" type="number" min="0.01" step="0.01" placeholder="例如 8000" required>
+            </label>
+            <label class="field"><span>分类（可空）</span>
+              <input id="budgetCategory" placeholder="餐饮">
+            </label>
+            <button class="btn" type="submit">保存</button>
+          </form>
+          <div class="rows" id="budgetRows"></div>
+        </section>
+      </div>
+
+      <section class="panel" style="margin-top:12px">
+        <div class="panel-head"><h2>流水</h2><span class="panel-kicker" id="rowCount">0 笔</span></div>
+        <div class="rows" id="txRows"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="editDialog">
+    <form class="dialog-body" id="editForm">
+      <strong>改这一笔</strong>
+      <label class="field"><span>金额</span><input id="editAmount" type="number" step="0.01" min="0.01" required></label>
+      <label class="field"><span>商户</span><input id="editMerchant" placeholder="商户"></label>
+      <label class="field"><span>分类</span><input id="editCategory" placeholder="分类"></label>
       <label class="field"><span>类型</span>
-        <select id="typeFilter">
-          <option value="">全部类型</option>
+        <select id="editType">
           <option value="expense">支出</option>
           <option value="income">收入</option>
           <option value="refund">退款</option>
           <option value="transfer">转账</option>
         </select>
       </label>
-      <label class="field"><span>分类</span><select id="categoryFilter"></select></label>
-      <label class="field"><span>账户</span><select id="accountFilter"></select></label>
-      <label class="field"><span>搜索</span><input id="searchInput" type="search" placeholder="商户、备注、金额"></label>
-    </div>
-
-    <section class="metrics">
-      <div class="metric"><div class="metric-label">支出</div><div class="metric-value expense" id="expenseTotal">¥0.00</div></div>
-      <div class="metric"><div class="metric-label">收入</div><div class="metric-value income" id="incomeTotal">¥0.00</div></div>
-      <div class="metric"><div class="metric-label">净额</div><div class="metric-value" id="netTotal">¥0.00</div></div>
-      <div class="metric"><div class="metric-label">笔数</div><div class="metric-value" id="countTotal">0</div></div>
-    </section>
-
-    <div class="grid-2">
-      <section class="panel">
-        <div class="panel-head"><h2>账户余额</h2><span class="panel-kicker">含期初</span></div>
-        <div class="rows" id="accountRows"></div>
-      </section>
-      <section class="panel">
-        <div class="panel-head"><h2>预算</h2><span class="panel-kicker" id="budgetLabel">本月</span></div>
-        <form class="dialog-body" id="budgetForm">
-          <input id="budgetAmount" type="number" min="0.01" step="0.01" placeholder="本月总预算，例如 8000">
-          <input id="budgetCategory" placeholder="分类，可空">
-          <button class="btn" type="submit">保存预算</button>
-        </form>
-        <div class="rows" id="budgetRows"></div>
-      </section>
-    </div>
-
-    <section class="panel" style="margin-top:12px">
-      <div class="panel-head"><h2>流水</h2><span class="panel-kicker" id="rowCount">0 笔</span></div>
-      <div class="rows" id="txRows"></div>
-    </section>
-  </div>
-
-  <dialog id="editDialog">
-    <form class="dialog-body" id="editForm">
-      <strong>改这一笔</strong>
-      <input id="editAmount" type="number" step="0.01" min="0.01" required>
-      <input id="editMerchant" placeholder="商户">
-      <input id="editCategory" placeholder="分类">
-      <select id="editType">
-        <option value="expense">支出</option>
-        <option value="income">收入</option>
-        <option value="refund">退款</option>
-        <option value="transfer">转账</option>
-      </select>
-      <select id="editAccount"></select>
-      <input id="editNote" placeholder="备注">
+      <label class="field"><span>账户</span><select id="editAccount"></select></label>
+      <label class="field"><span>备注</span><input id="editNote" placeholder="备注"></label>
       <div class="dialog-actions">
         <button class="btn danger" type="button" id="deleteBtn">删除</button>
         <button class="btn" type="button" id="cancelBtn">取消</button>
@@ -212,10 +366,10 @@
     const accountFilter = document.getElementById("accountFilter");
     const searchInput = document.getElementById("searchInput");
     const dialog = document.getElementById("editDialog");
+    const addBtn = document.getElementById("addBtn");
 
     const money = (value) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: LEDGER.currency || "CNY" }).format(Number(value || 0));
     const dayOf = (tx) => (tx.occurred_at || "").slice(0, 10);
-    const monthOf = (tx) => (tx.occurred_at || "").slice(0, 7);
     const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 
@@ -323,7 +477,7 @@
         const type = tx.type || "expense";
         return `<div class="row">
           <div><strong>${escapeHtml(tx.merchant || tx.category || "未命名")}</strong>
-            <div class="meta">${escapeHtml(dayOf(tx))} · ${escapeHtml(typeLabel[type] || type)} · ${escapeHtml(tx.category || "")}${tx.account ? " · " + escapeHtml(tx.to_account ? `${tx.account}→${tx.to_account}` : tx.account) : ""}</div>
+            <div class="meta"><span class="badge ${escapeHtml(type)}">${escapeHtml(typeLabel[type] || type)}</span>${escapeHtml(dayOf(tx))} · ${escapeHtml(tx.category || "")}${tx.account ? " · " + escapeHtml(tx.to_account ? `${tx.account}→${tx.to_account}` : tx.account) : ""}</div>
           </div>
           <div class="amount ${escapeHtml(type)}">${money(tx.amount)}</div>
           <button class="btn" data-edit="${escapeHtml(tx.id)}" type="button">改</button>
@@ -341,14 +495,21 @@
       const msg = document.getElementById("addMsg");
       msg.textContent = "";
       msg.className = "msg";
+      addBtn.disabled = true;
+      addBtn.textContent = "记下…";
       try {
         await api("/api/transactions", { method: "POST", body: { text: document.getElementById("textInput").value } });
         document.getElementById("textInput").value = "";
         msg.textContent = "已记下。";
+        msg.removeAttribute("role");
         await refresh();
       } catch (error) {
         msg.textContent = error.message === "likely_duplicate" ? "可能重复了。确认是另一笔的话再记一次。" : error.message;
         msg.className = "msg err";
+        msg.setAttribute("role", "alert");
+      } finally {
+        addBtn.disabled = false;
+        addBtn.textContent = "记账";
       }
     });
 

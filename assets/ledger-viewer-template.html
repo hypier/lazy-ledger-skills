@@ -7,401 +7,244 @@
   <style>
     :root {
       color-scheme: light;
-      --paper: #e6ebf1;
-      --panel: #f7f9fb;
-      --ink: #1b2740;
-      --muted: #5d6b80;
-      --line: #c5d0dc;
-      --expense: #b4453a;
-      --income: #1e7a62;
-      --refund: #2c6bb0;
-      --transfer: #675889;
-      --heat: #1b2740;
-      --chip: #dfe6ee;
-      --focus: #2c6bb0;
-      --shadow: 0 10px 30px rgba(27, 39, 64, 0.06);
-      --mono: ui-monospace, "SF Mono", "Menlo", "PingFang SC", monospace;
-      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+      --bg: #efe8dc;
+      --paper: #fbf7f0;
+      --ink: #1f1a14;
+      --muted: #6a5f54;
+      --line: #d9cfc0;
+      --pine: #2c5c4f;
+      --expense: #9e3a32;
+      --income: #2c5c4f;
+      --refund: #3d5a80;
+      --transfer: #6a5470;
+      --heat: #2c5c4f;
+      --chip: #eadfcf;
+      --focus: #2c5c4f;
+      --shadow: 0 1px 0 rgba(31, 26, 20, 0.05), 0 14px 36px rgba(31, 26, 20, 0.08);
+      --radius: 20px;
+      --serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC", Georgia, serif;
+      --sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
     }
-
     @media (prefers-color-scheme: dark) {
       :root {
         color-scheme: dark;
-        --paper: #121820;
-        --panel: #1b232e;
-        --ink: #e7edf4;
-        --muted: #9aa7b8;
-        --line: #324155;
-        --expense: #e07a70;
-        --income: #4db69a;
-        --refund: #7aa7e0;
-        --transfer: #b3a3d6;
-        --heat: #8fb4e8;
-        --chip: #243040;
-        --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+        --bg: #161310;
+        --paper: #201c18;
+        --ink: #f4ece3;
+        --muted: #b6aa9c;
+        --line: #3c342c;
+        --pine: #86c4b0;
+        --expense: #e08a82;
+        --income: #86c4b0;
+        --refund: #8eb0d8;
+        --transfer: #c2b0cc;
+        --heat: #86c4b0;
+        --chip: #2b251f;
+        --shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 18px 40px rgba(0, 0, 0, 0.35);
       }
     }
-
     * { box-sizing: border-box; }
-
     html, body { margin: 0; }
-
     body {
+      min-height: 100vh;
       background:
-        linear-gradient(180deg, rgba(27, 39, 64, 0.03), transparent 180px),
-        var(--paper);
+        radial-gradient(1200px 420px at 12% -10%, color-mix(in srgb, var(--pine) 10%, transparent), transparent 55%),
+        repeating-linear-gradient(0deg, transparent, transparent 27px, color-mix(in srgb, var(--line) 35%, transparent) 28px),
+        var(--bg);
       color: var(--ink);
       font-family: var(--sans);
-      line-height: 1.5;
+      font-size: 16px;
+      line-height: 1.55;
     }
-
     button, select, input { font: inherit; color: inherit; }
-
     button, a, select, input { touch-action: manipulation; }
-
-    :focus-visible {
-      outline: 3px solid var(--focus);
-      outline-offset: 2px;
+    button { cursor: pointer; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .skip {
+      position: absolute; left: 12px; top: 12px;
+      transform: translateY(-120%);
+      background: var(--ink); color: var(--paper);
+      padding: 10px 14px; border-radius: 10px; z-index: 20;
     }
-
-    .wrap {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 28px clamp(16px, 4vw, 36px) 64px;
-    }
-
+    .skip:focus { transform: none; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px clamp(16px, 4vw, 36px) 72px; }
     header.hero {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: auto 1fr auto;
       gap: 16px;
       align-items: end;
-      margin-bottom: 22px;
+      margin-bottom: 20px;
     }
-
+    .mark {
+      width: 44px; height: 44px; border-radius: 13px;
+      background: var(--pine); color: var(--paper);
+      display: grid; place-items: center;
+    }
     .eyebrow {
-      font-size: 12px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 6px;
+      font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
     }
-
     h1 {
       margin: 0;
-      font-size: clamp(28px, 4vw, 42px);
-      line-height: 1.1;
+      font-family: var(--serif);
+      font-size: clamp(32px, 5vw, 48px);
+      line-height: 1.12;
       letter-spacing: -0.03em;
-      font-weight: 650;
+      font-weight: 600;
     }
-
-    .sub {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .hero-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .btn {
-      height: 44px;
-      padding: 0 14px;
+    .sub { margin-top: 6px; color: var(--muted); font-size: 14px; }
+    .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn, .chip {
+      height: 44px; padding: 0 16px;
       border: 1px solid var(--line);
-      background: var(--panel);
-      border-radius: 10px;
-      cursor: pointer;
-      min-width: 44px;
-    }
-
-    .btn:hover { border-color: var(--ink); }
-
-    .period-row, .filters {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .chip {
-      height: 40px;
-      padding: 0 12px;
-      border: 1px solid transparent;
-      background: var(--chip);
+      background: var(--paper);
       border-radius: 999px;
       cursor: pointer;
+      min-width: 44px;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
     }
-
-    .chip[aria-pressed="true"] {
-      background: var(--ink);
-      color: var(--panel);
-    }
-
-    .field {
-      display: grid;
-      gap: 4px;
-      min-width: min(100%, 160px);
-      flex: 1;
-    }
-
-    .field span {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    input, select {
-      width: 100%;
-      height: 44px;
+    .btn:hover, .chip:hover { border-color: color-mix(in srgb, var(--ink) 35%, var(--line)); }
+    .btn:active, .chip:active { transform: translateY(1px); }
+    .toolbar {
+      background: var(--paper);
       border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--panel);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .period-row, .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+    .period-row { margin-bottom: 12px; }
+    .chip { height: 40px; background: var(--chip); border-color: transparent; }
+    .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .field { display: grid; gap: 6px; min-width: min(100%, 160px); flex: 1; }
+    .field span { font-size: 12px; color: var(--muted); }
+    input, select {
+      width: 100%; height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--bg) 55%, var(--paper));
       padding: 0 12px;
     }
-
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--pine);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--pine) 16%, transparent);
+    }
     .metrics {
       display: grid;
       grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      margin: 16px 0;
+      gap: 12px;
+      margin: 0 0 16px;
     }
-
     .metric, .panel {
-      background: var(--panel);
+      background: var(--paper);
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: 20px;
       box-shadow: var(--shadow);
     }
-
-    .metric { padding: 16px; min-height: 108px; }
-
-    .metric-label, .panel-kicker {
-      color: var(--muted);
-      font-size: 13px;
+    .metric { padding: 16px 18px 16px 22px; min-height: 108px; position: relative; overflow: hidden; }
+    .metric::before {
+      content: "";
+      position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--pine);
     }
-
+    .metric.spend::before { background: var(--expense); }
+    .metric-label, .panel-kicker { color: var(--muted); font-size: 13px; }
     .metric-value {
       margin-top: 8px;
-      font-family: var(--mono);
+      font-family: var(--serif);
       font-size: clamp(22px, 3vw, 32px);
-      font-weight: 700;
+      font-weight: 650;
       font-variant-numeric: tabular-nums;
-      letter-spacing: -0.04em;
+      letter-spacing: -0.03em;
     }
-
-    .delta {
-      margin-top: 8px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-
+    .delta { margin-top: 8px; font-size: 13px; color: var(--muted); }
     .delta.up { color: var(--expense); }
     .delta.down { color: var(--income); }
-
     .expense { color: var(--expense); }
     .income { color: var(--income); }
     .refund { color: var(--refund); }
     .transfer { color: var(--transfer); }
-
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 12px;
-    }
-
+    .grid-2 { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 12px; }
     .panel { overflow: hidden; }
-
     .panel-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: baseline;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--line);
+      display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+      padding: 15px 16px; border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--chip) 35%, var(--paper));
     }
-
-    .panel-head h2 {
-      margin: 0;
-      font-size: 16px;
-    }
-
-    .calendar, .bars, .ranks, .review, .daily {
-      padding: 14px 16px 16px;
-    }
-
-    .weekdays, .days {
-      display: grid;
-      grid-template-columns: repeat(7, minmax(0, 1fr));
-      gap: 6px;
-    }
-
-    .weekdays span, .day {
-      text-align: center;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
+    .panel-head h2 { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 600; }
+    .calendar, .bars, .ranks, .review, .daily { padding: 14px 16px 16px; }
+    .weekdays, .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+    .weekdays span, .day { text-align: center; font-size: 12px; color: var(--muted); }
     .day {
-      min-height: 44px;
-      border-radius: 10px;
-      display: grid;
-      place-content: center;
-      border: 1px solid transparent;
-      font-variant-numeric: tabular-nums;
+      min-height: 44px; border-radius: 12px; display: grid; place-content: center;
+      border: 1px solid transparent; font-variant-numeric: tabular-nums;
     }
-
-    .day.has {
-      color: var(--ink);
-      border-color: color-mix(in srgb, var(--heat) 18%, var(--line));
-    }
-
+    .day.has { color: var(--ink); border-color: color-mix(in srgb, var(--heat) 18%, var(--line)); }
     .day.today { box-shadow: inset 0 0 0 2px var(--ink); }
-
-    .legend {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 10px;
-    }
-
-    .swatch {
-      width: 12px;
-      height: 12px;
-      border-radius: 3px;
-      background: var(--heat);
-    }
-
+    .legend { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; margin-top: 10px; }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; background: var(--heat); }
     .bar-row, .rank-row {
-      display: grid;
-      grid-template-columns: 84px 1fr auto;
-      gap: 10px;
-      align-items: center;
-      font-size: 14px;
-      margin: 0 0 10px;
+      display: grid; grid-template-columns: 84px 1fr auto; gap: 10px; align-items: center; font-size: 14px; margin: 0 0 10px;
     }
-
-    .bar-track {
-      height: 10px;
-      background: var(--chip);
-      border-radius: 999px;
-      overflow: hidden;
-    }
-
+    .bar-track { height: 10px; background: var(--chip); border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--pine); }
     .bar-fill.over { background: var(--expense); }
     .bar-fill.ok { background: var(--income); }
-
-    .amount {
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    .daily-row {
-      display: grid;
-      grid-template-columns: 64px 1fr 88px;
-      gap: 8px;
-      align-items: center;
-      font-size: 13px;
-      margin-bottom: 8px;
-    }
-
+    .amount { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+    .daily-row { display: grid; grid-template-columns: 64px 1fr 88px; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 8px; }
     .badge {
-      display: inline-flex;
-      align-items: center;
-      height: 22px;
-      padding: 0 8px;
-      border-radius: 999px;
-      background: var(--chip);
-      font-size: 12px;
+      display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
+      border-radius: 999px; background: var(--chip); font-size: 12px;
     }
-
     .badge.expense { color: var(--expense); }
     .badge.income { color: var(--income); }
     .badge.refund { color: var(--refund); }
     .badge.transfer { color: var(--transfer); }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-
-    th, td {
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line);
-      text-align: left;
-      vertical-align: top;
-    }
-
-    th {
-      color: var(--muted);
-      font-weight: 600;
-      background: color-mix(in srgb, var(--panel) 86%, var(--chip));
-    }
-
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; background: color-mix(in srgb, var(--paper) 70%, var(--chip)); }
     td.amount { text-align: right; }
-
-    .empty {
-      padding: 28px 16px;
-      color: var(--muted);
-      text-align: center;
-    }
-
+    .empty { padding: 28px 16px; color: var(--muted); text-align: center; }
     .cards { display: none; }
-
-    .tx-card {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line);
-    }
-
+    .tx-card { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
     .tx-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
-
     .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      border: 0;
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); border: 0;
     }
-
     @media (max-width: 980px) {
       header.hero, .metrics, .grid-2 { grid-template-columns: 1fr; }
     }
-
     @media (max-width: 720px) {
       .table-wrap { display: none; }
       .cards { display: block; }
       .bar-row, .rank-row, .daily-row { grid-template-columns: 72px 1fr; }
       .bar-row .amount, .rank-row .amount, .daily-row .amount { grid-column: 2; }
     }
-
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; }
     }
-
     @media print {
       body { background: white; }
-      .hero-actions, .filters, .period-row { display: none; }
+      .hero-actions, .filters, .period-row, .toolbar, .skip { display: none; }
       .metric, .panel { box-shadow: none; }
     }
   </style>
 </head>
 <body>
+  <a class="skip" href="#report">跳到报表</a>
   <div class="wrap">
     <header class="hero">
+      <div class="mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M5 5.5h10.5A2.5 2.5 0 0 1 18 8v11.5H7.2A2.2 2.2 0 0 1 5 17.3V5.5Z" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M5 5.5A2.2 2.2 0 0 1 7.2 3.3H18" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M9 9h6M9 13h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </div>
       <div>
-        <div class="eyebrow">Local ledger</div>
+        <div class="eyebrow">本机账本</div>
         <h1>懒人记账</h1>
         <div class="sub" id="ledgerMeta">本地账本</div>
       </div>
@@ -410,6 +253,8 @@
       </div>
     </header>
 
+    <main id="report">
+    <div class="toolbar">
     <div class="period-row" role="group" aria-label="时间范围">
       <button class="chip" type="button" data-range="this-month">本月</button>
       <button class="chip" type="button" data-range="last-month">上月</button>
@@ -460,9 +305,10 @@
         <input id="searchInput" type="search" placeholder="商户、备注、金额">
       </label>
     </div>
+    </div>
 
     <section class="metrics" aria-label="汇总">
-      <div class="metric">
+      <div class="metric spend">
         <div class="metric-label">支出</div>
         <div class="metric-value expense" id="expenseTotal">¥0.00</div>
         <div class="delta" id="expenseDelta">较上期 —</div>
@@ -574,6 +420,7 @@
       </div>
       <div class="cards" id="transactionCards"></div>
     </section>
+  </main>
   </div>
 
   <script>
