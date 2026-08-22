@@ -2,8 +2,98 @@
   "schema_version": 1,
   "currency": "CNY",
   "created_at": "2026-07-09T07:47:20+08:00",
-  "updated_at": "2026-08-22T16:40:09+08:00",
+  "updated_at": "2026-08-23T04:22:40+08:00",
   "transactions": [
+    {
+      "id": "tx_20260822_2ddae600",
+      "type": "expense",
+      "amount": 25.0,
+      "currency": "CNY",
+      "category": "餐饮",
+      "occurred_at": "2026-08-22T19:20:00+08:00",
+      "source": "image",
+      "confidence": 0.5,
+      "tags": [],
+      "created_at": "2026-08-22T21:22:09+08:00",
+      "updated_at": "2026-08-22T21:22:09+08:00",
+      "merchant": "一只嗨小鸭",
+      "note": "微信账单截图",
+      "method": "wechat",
+      "account": "微信零钱",
+      "account_id": "acc_wechat"
+    },
+    {
+      "id": "tx_20260822_8ab8b492",
+      "type": "expense",
+      "amount": 23.0,
+      "currency": "CNY",
+      "category": "其他",
+      "occurred_at": "2026-08-22T19:19:00+08:00",
+      "source": "image",
+      "confidence": 0.5,
+      "tags": [],
+      "created_at": "2026-08-22T21:22:09+08:00",
+      "updated_at": "2026-08-22T21:22:09+08:00",
+      "merchant": "扫二维码付款-给海南芒果",
+      "note": "微信账单截图",
+      "method": "wechat",
+      "account": "微信零钱",
+      "account_id": "acc_wechat"
+    },
+    {
+      "id": "tx_20260822_3934d517",
+      "type": "expense",
+      "amount": 6.9,
+      "currency": "CNY",
+      "category": "购物",
+      "occurred_at": "2026-08-22T19:11:00+08:00",
+      "source": "image",
+      "confidence": 0.95,
+      "tags": [],
+      "created_at": "2026-08-22T21:22:09+08:00",
+      "updated_at": "2026-08-22T21:22:09+08:00",
+      "merchant": "零食有鸣",
+      "note": "微信账单截图",
+      "method": "wechat",
+      "account": "微信零钱",
+      "account_id": "acc_wechat"
+    },
+    {
+      "id": "tx_20260822_8834cf44",
+      "type": "expense",
+      "amount": 42.0,
+      "currency": "CNY",
+      "category": "其他",
+      "occurred_at": "2026-08-22T19:10:00+08:00",
+      "source": "image",
+      "confidence": 0.7,
+      "tags": [],
+      "created_at": "2026-08-22T21:22:09+08:00",
+      "updated_at": "2026-08-22T21:22:09+08:00",
+      "merchant": "扫二维码付款-给H。。。",
+      "note": "微信账单截图；商户名被截断",
+      "method": "wechat",
+      "account": "微信零钱",
+      "account_id": "acc_wechat"
+    },
+    {
+      "id": "tx_20260822_17f3f096",
+      "type": "expense",
+      "amount": 15.0,
+      "currency": "CNY",
+      "category": "其他",
+      "occurred_at": "2026-08-22T19:07:00+08:00",
+      "source": "image",
+      "confidence": 0.5,
+      "tags": [],
+      "created_at": "2026-08-22T21:22:09+08:00",
+      "updated_at": "2026-08-22T21:22:09+08:00",
+      "merchant": "扫二维码付款-给月亮",
+      "note": "微信账单截图",
+      "method": "wechat",
+      "account": "微信零钱",
+      "account_id": "acc_wechat"
+    },
     {
       "id": "tx_20260822_bb8bfbd2",
       "type": "expense",
@@ -2275,8 +2365,8 @@
     "default_account_id": "acc_wechat",
     "habits_seeded": true,
     "usage_profile": {
-      "updated_at": "2026-08-22T16:40:09+08:00",
-      "tx_count": 102,
+      "updated_at": "2026-08-22T21:45:47+08:00",
+      "tx_count": 107,
       "summary": "记账默认走微信零钱（微信），缺账户时不必再问。支出主要记在餐饮、购物、其他。中午前后常记餐饮类，分类含糊时可偏向餐饮。夏计清补凉常记餐饮，金额大约 ¥18。洋卡优选常记购物，金额大约 ¥33。咖啡常记咖啡，金额大约 ¥38。陵水百佳汇超市、喜茶、陈超去得勤但金额不固定，缺金额时要问，不要猜。",
       "defaults": {
         "account": "微信零钱",
@@ -2438,5 +2528,14 @@
       "created_at": "2026-08-19T08:34:22+08:00"
     }
   ],
-  "bills": []
+  "bills": [
+    {
+      "id": "bill_202608",
+      "month": "2026-08",
+      "title": "八月有一笔集中的居住支出",
+      "body": "八月的账本像是在日常消费里夹着一笔集中结算。54 笔流水合计支出 ¥1,924.02，收入 ¥115.50，退款 ¥111.23，净支出 ¥1,697.29。居住是最大的支出来源，¥1,027.50，占 53%，主要来自 8 月 17 日的一笔物业付款；它也让本月支出比七月的 ¥815.05 高出 136%。\n\n把这笔居住支出单独看，日常消费的结构仍然很清楚：餐饮 ¥477.40，购物 ¥196.79，人情 ¥95.00，其他 ¥127.33。零食有鸣、一只嗨小鸭和多笔扫码消费构成了频繁但金额较小的支出。工作日支出 ¥1,341.41，周末为 ¥582.61，日常花费主要发生在工作日。\n\n这月没有设置预算，也还没形成稳定的周期账。退款合计 ¥111.23，其中有 1 笔尚未和近期消费对应，先保留关注即可。按已经形成的节奏，本月预计支出约 ¥1,924.17，和当前金额基本持平，说明主要的大额支出已经发生。九月可以先把居住和餐饮分开设预算，并在退款到账后补上关联，账面会更清楚。",
+      "created_at": "2026-08-22T18:34:37+08:00",
+      "updated_at": "2026-08-23T04:22:40+08:00"
+    }
+  ]
 }

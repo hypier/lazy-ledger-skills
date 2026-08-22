@@ -417,6 +417,9 @@ class LedgerToolTest(unittest.TestCase):
             self.assertEqual(pack["month"], "2026-08")
             self.assertIsNone(pack["bill"])
             self.assertIn("facts", pack)
+            self.assertEqual(pack["facts"]["category_counts"], {"餐饮": 1})
+            self.assertEqual(pack["facts"]["daily_expense"][2], {"day": 3, "amount": 16.0})
+            self.assertEqual(pack["facts"]["weekly_expense"][0], {"label": "01-07", "amount": 16.0, "count": 1})
             saved = json.loads(
                 run_tool(
                     "bill",

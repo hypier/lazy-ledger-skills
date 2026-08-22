@@ -2497,6 +2497,40 @@ def build_bill_pack(ledger, month=None):
         compare=True,
     )
     summary = build_summary(ledger, args)
+    category_counts = defaultdict(int)
+    daily_expense = defaultdict(float)
+    weekly_expense = defaultdict(float)
+    weekly_counts = defaultdict(int)
+    for transaction in ledger.get("transactions") or []:
+        if month_key(transaction.get("occurred_at")) != month or transaction.get("type") != "expense":
+            continue
+        category_counts[transaction.get("category") or "其他"] += 1
+        day = tx_day(transaction)
+        if not day:
+            continue
+        day_number = int(day[-2:])
+        amount = float(transaction.get("amount") or 0)
+        daily_expense[day_number] += amount
+        week_index = (day_number - 1) // 7
+        weekly_expense[week_index] += amount
+        weekly_counts[week_index] += 1
+    year, month_number = (int(part) for part in month.split("-"))
+    next_month = date(year + (month_number == 12), month_number % 12 + 1, 1)
+    days_in_month = (next_month - date(year, month_number, 1)).days
+    daily_series = [
+        {"day": day_number, "amount": round(daily_expense[day_number], 2)}
+        for day_number in range(1, days_in_month + 1)
+    ]
+    weekly_series = []
+    for week_index, start_day in enumerate(range(1, days_in_month + 1, 7)):
+        end_day = min(start_day + 6, days_in_month)
+        weekly_series.append(
+            {
+                "label": f"{start_day:02d}-{end_day:02d}",
+                "amount": round(weekly_expense[week_index], 2),
+                "count": weekly_counts[week_index],
+            }
+        )
     profile = ledger_preferences(ledger).get("usage_profile") or {}
     saved = find_bill(ledger, month)
     currency = ledger.get("currency", "CNY")
@@ -2515,7 +2549,10 @@ def build_bill_pack(ledger, month=None):
             "count": summary.get("count"),
             "daily_average": summary.get("daily_average"),
             "by_category": summary.get("by_category"),
+            "category_counts": dict(category_counts),
             "by_day": summary.get("by_day"),
+            "daily_expense": daily_series,
+            "weekly_expense": weekly_series,
             "by_weekday": summary.get("by_weekday"),
             "weekday": summary.get("weekday"),
             "top_merchants": summary.get("top_merchants"),

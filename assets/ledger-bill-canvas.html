@@ -5,546 +5,109 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>月度账单</title>
   <style>
-    :root {
-      color-scheme: light;
-      --bg: #efe8dc;
-      --paper: #fbf7f0;
-      --ink: #1f1a14;
-      --muted: #6a5f54;
-      --line: #d9cfc0;
-      --pine: #2c5c4f;
-      --expense: #9e3a32;
-      --chip: #eadfcf;
-      --focus: #2c5c4f;
-      --serif: "Songti SC", "STSong", "Noto Serif CJK SC", Georgia, serif;
-      --sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", sans-serif;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        color-scheme: dark;
-        --bg: #161310;
-        --paper: #201c18;
-        --ink: #f4ece3;
-        --muted: #b6aa9c;
-        --line: #3c342c;
-        --pine: #86c4b0;
-        --expense: #e08a82;
-        --chip: #2b251f;
-      }
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; }
-    body {
-      min-height: 100vh;
-      background:
-        radial-gradient(900px 360px at 12% -8%, color-mix(in srgb, var(--pine) 12%, transparent), transparent 55%),
-        var(--bg);
-      color: var(--ink);
-      font-family: var(--sans);
-    }
-    .bar {
-      position: sticky; top: 0; z-index: 4;
-      display: flex; justify-content: space-between; align-items: center;
-      gap: 12px; flex-wrap: wrap;
-      padding: 12px 18px;
-      background: color-mix(in srgb, var(--paper) 92%, transparent);
-      border-bottom: 1px solid var(--line);
-    }
-    .bar span { color: var(--muted); font-size: 13px; }
-    .actions { display: flex; gap: 8px; }
-    button {
-      height: 44px; padding: 0 16px; min-width: 44px;
-      border: 1px solid var(--line); border-radius: 999px;
-      background: var(--chip); color: inherit; font: inherit; cursor: pointer;
-    }
-    button.primary { background: var(--pine); color: var(--paper); border-color: var(--pine); }
-    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
-    .stage { padding: 28px 16px 72px; display: grid; justify-items: center; }
-    canvas {
-      width: min(840px, 100%);
-      height: auto;
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: 0 18px 40px rgba(31, 26, 20, 0.08);
-    }
-    .sr {
-      position: absolute; width: 1px; height: 1px;
-      overflow: hidden; clip: rect(0, 0, 0, 0);
-    }
-    @media print {
-      .bar { display: none; }
-      body { background: white; }
-      canvas { box-shadow: none; border: 0; }
-    }
+    :root { color-scheme: light; --bg: #e8eeea; --paper: #f8fbf8; --ink: #17312b; --muted: #61716b; --line: #d4dfd8; --accent: #256454; --accent-deep: #163f35; --focus: #256454; --sans: "Avenir Next", "HarmonyOS Sans SC", "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --bg: #101816; --paper: #17231f; --ink: #edf5ef; --muted: #a5b6ae; --line: #30443d; --accent: #90c6ad; --accent-deep: #315f50; --focus: #90c6ad; } }
+    * { box-sizing: border-box; } html, body { margin: 0; }
+    body { min-height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--sans); }
+    .bar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px clamp(16px, 4vw, 32px); background: color-mix(in srgb, var(--paper) 94%, transparent); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
+    .bar span { color: var(--muted); font-size: 13px; } .actions { display: flex; gap: 8px; }
+    button { min-width: 44px; height: 40px; padding: 0 15px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); cursor: pointer; font: inherit; font-size: 14px; }
+    button:active { transform: translateY(1px); } button.primary { background: var(--accent-deep); border-color: var(--accent-deep); color: #fff; } :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .stage { display: grid; justify-items: center; padding: clamp(16px, 4vw, 40px) 16px 72px; }
+    canvas { display: block; width: min(920px, 100%); height: auto; border: 1px solid var(--line); background: var(--paper); box-shadow: 0 24px 54px rgba(20, 49, 42, .12); }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+    @media (max-width: 480px) { .bar { align-items: flex-start; } .actions { gap: 6px; } button { padding: 0 11px; font-size: 13px; } }
+    @media print { .bar { display: none; } body { background: #fff; } .stage { padding: 0; } canvas { width: 100%; border: 0; box-shadow: none; } }
   </style>
 </head>
 <body>
-  <div class="bar">
-    <span id="fileLabel">本机月度账单</span>
-    <div class="actions">
-      <button type="button" id="pngBtn">导出 PNG</button>
-      <button class="primary" type="button" id="printBtn">打印</button>
-    </div>
-  </div>
-  <main class="stage">
-    <canvas id="bill" width="840" height="1200" aria-label="月度账单画布"></canvas>
-    <div class="sr" id="fallback"></div>
-  </main>
+  <div class="bar"><span id="fileLabel">本机月度账单</span><div class="actions"><button type="button" id="pngBtn">导出 PNG</button><button class="primary" type="button" id="printBtn">打印</button></div></div>
+  <main class="stage"><canvas id="bill" width="920" height="1200" aria-label="月度账单画布"></canvas><div class="sr" id="fallback"></div></main>
   <script>
-    const DATA = __BILL_DATA__;
-    const PAGE_W = 840;
-    const MARGIN = 56;
-
-    function theme() {
-      const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-      return dark ? {
-        paper: "#201c18", ink: "#f4ece3", muted: "#b6aa9c", line: "#3c342c",
-        pine: "#86c4b0", pineDeep: "#1a3d35", expense: "#e08a82", chip: "#2b251f",
-        wash: "#2a241e", stamp: "#c45c54", gold: "#d4b07a",
-        colors: ["#86c4b0", "#e08a82", "#8eb0d8", "#c4a35a", "#9bb59a", "#c2b0cc"]
-      } : {
-        paper: "#fbf7f0", ink: "#1f1a14", muted: "#6a5f54", line: "#d9cfc0",
-        pine: "#2c5c4f", pineDeep: "#1e4037", expense: "#9e3a32", chip: "#eadfcf",
-        wash: "#f3ece1", stamp: "#b23b32", gold: "#c4a35a",
-        colors: ["#2c5c4f", "#9e3a32", "#3d5a80", "#c4a35a", "#6b8f71", "#6a5470"]
-      };
-    }
-
-    function money(value) {
-      return new Intl.NumberFormat("zh-CN", { style: "currency", currency: DATA.currency || "CNY" }).format(Number(value || 0));
-    }
-
-    function monthTitle(stamp) {
-      const [year, month] = String(stamp || "").split("-");
-      if (!year || !month) return stamp || "月度账单";
-      return `${year}年${Number(month)}月`;
-    }
-
-    function topSlices(map, limit = 5) {
-      const rows = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
-      if (rows.length <= limit) return rows;
-      const head = rows.slice(0, limit - 1);
-      const rest = rows.slice(limit - 1).reduce((sum, item) => sum + item[1], 0);
-      return head.concat([["其他", rest]]);
-    }
-
-    function wrap(ctx, text, maxWidth) {
-      const lines = [];
-      for (const para of String(text || "").replace(/\r/g, "").split("\n")) {
-        if (!para) { lines.push(""); continue; }
-        let line = "";
-        for (const ch of para) {
-          const trial = line + ch;
-          if (line && ctx.measureText(trial).width > maxWidth) {
-            lines.push(line);
-            line = ch;
-          } else {
-            line = trial;
-          }
-        }
-        if (line) lines.push(line);
+    const DATA = __BILL_DATA__, PAGE_W = window.innerWidth <= 600 ? Math.max(360, window.innerWidth - 32) : 920, MARGIN = PAGE_W < 600 ? 20 : 64;
+    const FONT_BODY = '"Avenir Next", "HarmonyOS Sans SC", "PingFang SC", sans-serif';
+    const FONT_DISPLAY = '"Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", STSong, serif';
+    const ICON_SVGS = {
+      expense: '<path d="M5 4v14a2 2 0 0 0 2 2h12"/><path d="m18 9-6 6-3-3"/>',
+      income: '<path d="M5 20V6a2 2 0 0 1 2-2h12"/><path d="m18 15-6-6-3 3"/>',
+      net: '<path d="M4 4v16h16"/><path d="m7 15 4-4 3 2 4-6"/>',
+      home: '<path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+      food: '<path d="M7 3v8"/><path d="M4 3v5a3 3 0 0 0 6 0V3"/><path d="M10 20V8"/><path d="M17 3v17"/><path d="M17 3c3 1 3 7 0 8"/>',
+      shopping: '<path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/>',
+      gift: '<rect x="4" y="8" width="16" height="12" rx="1"/><path d="M12 8v12M3 8h18v4H3z"/><path d="M12 8H8.5a2.5 2.5 0 1 1 2.5-2.5V8Zm0 0h3.5A2.5 2.5 0 1 0 13 5.5V8Z"/>',
+      other: '<path d="M12 3v18M3 12h18"/><path d="m5.6 5.6 12.8 12.8M18.4 5.6 5.6 18.4"/>'
+    };
+    const iconCache = new Map();
+    function categoryIcon(category) { return ({ "居住": "home", "餐饮": "food", "购物": "shopping", "人情": "gift" })[category] || "other"; }
+    function drawSvgIcon(ctx, name, x, y, size, color) {
+      const key = `${name}:${color}`;
+      let image = iconCache.get(key);
+      if (!image) {
+        image = new Image();
+        image.onload = paint;
+        image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_SVGS[name] || ICON_SVGS.other}</svg>`)}`;
+        iconCache.set(key, image);
+        return;
       }
-      return lines;
+      if (image.complete && image.naturalWidth) ctx.drawImage(image, x, y, size, size);
     }
-
-    function plainLetter(body) {
-      return String(body || "")
-        .replace(/^#{1,3}\s+/gm, "")
-        .replace(/\*\*(.+?)\*\*/g, "$1")
-        .replace(/^[-*]\s+/gm, "• ")
-        .trim();
+    function theme() { const dark = matchMedia("(prefers-color-scheme: dark)").matches; return dark ? { paper: "#17231f", ink: "#edf5ef", muted: "#a5b6ae", line: "#30443d", accent: "#90c6ad", deep: "#315f50", chip: "#20322b", expense: "#ed9c8b", soft: "#263b33", clay: "#b47867", colors: ["#90c6ad", "#ed9c8b", "#8baeca", "#d2b36b", "#a4bd9e"] } : { paper: "#f8fbf8", ink: "#17312b", muted: "#61716b", line: "#d4dfd8", accent: "#256454", deep: "#163f35", chip: "#edf4ef", expense: "#bd5d50", soft: "#dbeae1", clay: "#cf9180", colors: ["#256454", "#bd5d50", "#537c92", "#c89b4d", "#77956f"] }; }
+    function money(value) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: DATA.currency || "CNY" }).format(Number(value || 0)); }
+    function monthTitle(stamp) { const [year, month] = String(stamp || "").split("-"); return year && month ? `${year} 年 ${Number(month)} 月` : (stamp || "月度账单"); }
+    function topSlices(map, limit = 5) { const rows = Object.entries(map || {}).sort((a, b) => b[1] - a[1]); return rows.length <= limit ? rows : rows.slice(0, limit - 1).concat([["其他", rows.slice(limit - 1).reduce((sum, item) => sum + item[1], 0)]]); }
+    function wrap(ctx, text, maxWidth) { const lines = []; for (const paragraph of String(text || "").replace(/\r/g, "").split("\n")) { if (!paragraph) { lines.push(""); continue; } let line = ""; for (const char of paragraph) { if (line && ctx.measureText(line + char).width > maxWidth) { lines.push(line); line = char; } else line += char; } if (line) lines.push(line); } return lines; }
+    function plainLetter(body) { return String(body || "").replace(/^#{1,3}\s+/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^[-*]\s+/gm, "").trim(); }
+    function letterBlocks(body) { return plainLetter(body).split(/\n{2,}/).filter(Boolean); }
+    function roundRect(ctx, x, y, w, h, radius) { const r = Math.min(radius, w / 2, h / 2); ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+    function donut(ctx, cx, cy, r, slices, colors, T) { const total = slices.reduce((sum, item) => sum + item[1], 0) || 1; let start = -Math.PI / 2; slices.forEach((item, index) => { const end = start + item[1] / total * Math.PI * 2; ctx.beginPath(); ctx.arc(cx, cy, r, start, end); ctx.arc(cx, cy, r * .61, end, start, true); ctx.closePath(); ctx.fillStyle = colors[index % colors.length]; ctx.fill(); start = end; }); ctx.beginPath(); ctx.arc(cx, cy, r * .61, 0, Math.PI * 2); ctx.fillStyle = T.paper; ctx.fill(); }
+    function heroIllustration(ctx, x, y, w, h, T) {
+      roundRect(ctx, x, y, w, h, 16); ctx.fillStyle = T.deep; ctx.fill(); ctx.save(); ctx.beginPath(); roundRect(ctx, x, y, w, h, 16); ctx.clip();
+      ctx.fillStyle = T.soft; ctx.globalAlpha = .28; ctx.fillRect(x, y + h * .62, w, h * .38); ctx.globalAlpha = 1;
+      const wx = x + w * .48, wy = y + 28, ww = w * .39, wh = h * .56; ctx.fillStyle = "rgba(248,251,248,.12)"; ctx.fillRect(wx, wy, ww, wh); ctx.strokeStyle = "rgba(248,251,248,.62)"; ctx.lineWidth = 2; ctx.strokeRect(wx, wy, ww, wh); ctx.beginPath(); ctx.moveTo(wx + ww / 2, wy); ctx.lineTo(wx + ww / 2, wy + wh); ctx.moveTo(wx, wy + wh / 2); ctx.lineTo(wx + ww, wy + wh / 2); ctx.stroke();
+      ctx.fillStyle = "rgba(197,225,216,.28)"; ctx.fillRect(wx + 2, wy + 2, ww / 2 - 3, wh / 2 - 3); ctx.fillStyle = "rgba(242,198,130,.31)"; ctx.fillRect(wx + ww / 2 + 1, wy + 2, ww / 2 - 3, wh / 2 - 3);
+      ctx.fillStyle = T.clay; roundRect(ctx, x + 44, y + h - 76, 64, 32, 5); ctx.fill(); ctx.strokeStyle = T.accent; ctx.lineWidth = 5; ctx.lineCap = "round"; const stemX = x + 76, stemY = y + h - 80; ctx.beginPath(); ctx.moveTo(stemX, stemY); ctx.quadraticCurveTo(stemX - 18, stemY - 48, stemX + 8, stemY - 94); ctx.stroke(); [[-24,-72], [18,-70], [-34,-46], [27,-43], [-18,-24], [18,-22]].forEach(([dx, dy]) => { ctx.fillStyle = T.accent; ctx.beginPath(); ctx.ellipse(stemX + dx, stemY + dy, 13, 7, dx < 0 ? -.6 : .6, 0, Math.PI * 2); ctx.fill(); });
+      ctx.translate(x + w * .31, y + h * .63); ctx.rotate(-.12); ctx.fillStyle = T.paper; roundRect(ctx, -42, -53, 90, 110, 5); ctx.fill(); ctx.strokeStyle = T.line; ctx.lineWidth = 1; for (let i = -27; i <= 27; i += 14) { ctx.beginPath(); ctx.moveTo(-26, i); ctx.lineTo(30, i); ctx.stroke(); } ctx.fillStyle = T.expense; ctx.fillRect(-26, -37, 23, 5); ctx.restore();
     }
-
-    function letterBlocks(body) {
-      return plainLetter(body).split(/\n{2,}/).filter(Boolean);
+    function sectionTitle(ctx, label, x, y, T) { ctx.fillStyle = T.accent; ctx.fillRect(x, y - 14, 26, 3); ctx.fillStyle = T.muted; ctx.font = `600 12px ${FONT_BODY}`; ctx.fillText(label, x + 38, y - 4); }
+    function drawDailyTrend(ctx, x, y, w, h, points, T, compact) {
+      const max = Math.max(...points.map((item) => Number(item.amount || 0)), 1);
+      ctx.strokeStyle = T.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x + w, y + h); ctx.stroke();
+      const coords = points.map((item, index) => [x + (points.length > 1 ? index / (points.length - 1) * w : w / 2), y + h - Number(item.amount || 0) / max * h]);
+      ctx.beginPath(); coords.forEach((point, index) => index ? ctx.lineTo(point[0], point[1]) : ctx.moveTo(point[0], point[1])); ctx.strokeStyle = T.accent; ctx.lineWidth = compact ? 1.8 : 2.4; ctx.stroke();
+      coords.forEach((point, index) => { if (points[index].amount > 0) { ctx.beginPath(); ctx.arc(point[0], point[1], compact ? 1.5 : 2.3, 0, Math.PI * 2); ctx.fillStyle = T.accent; ctx.fill(); } });
+      ctx.fillStyle = T.muted; ctx.font = `${compact ? 8 : 11}px ${FONT_BODY}`; [0, 7, 14, 21, points.length - 1].forEach((index) => { if (!points[index]) return; const text = String(points[index].day).padStart(2, "0"); const tx = coords[index][0]; ctx.textAlign = index === 0 ? "left" : index === points.length - 1 ? "right" : "center"; ctx.fillText(text, tx, y + h + (compact ? 15 : 18)); }); ctx.textAlign = "start";
     }
-
-    function drawRoundRect(ctx, x, y, w, h, r) {
-      const radius = Math.min(r, w / 2, h / 2);
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.arcTo(x + w, y, x + w, y + h, radius);
-      ctx.arcTo(x + w, y + h, x, y + h, radius);
-      ctx.arcTo(x, y + h, x, y, radius);
-      ctx.arcTo(x, y, x + w, y, radius);
-      ctx.closePath();
+    function drawTimeAnalysis(ctx, x, y, w, facts, T, compact) {
+      const daily = facts.daily_expense || [], weeks = facts.weekly_expense || [], h = compact ? 344 : 224;
+      ctx.fillStyle = T.chip; roundRect(ctx, x, y, w, h, compact ? 10 : 16); ctx.fill();
+      const lineW = compact ? w - 32 : Math.round(w * .47), lineX = x + 18, lineY = y + 38, lineH = compact ? 82 : 118;
+      ctx.fillStyle = T.ink; ctx.font = `600 ${compact ? 11 : 15}px ${FONT_BODY}`; ctx.fillText("每日支出", lineX, y + 23); drawDailyTrend(ctx, lineX, lineY, lineW, lineH, daily, T, compact);
+      const weekX = compact ? x + 18 : x + Math.round(w * .56), weekY = compact ? y + 178 : y + 52, rowH = compact ? 31 : 36, maxWeek = Math.max(...weeks.map((item) => Number(item.amount || 0)), 1);
+      ctx.fillStyle = T.ink; ctx.font = `600 ${compact ? 11 : 15}px ${FONT_BODY}`; ctx.fillText("每周汇总", weekX, compact ? y + 150 : y + 23);
+      weeks.forEach((week, index) => { const rowY = weekY + index * rowH, labelW = compact ? 45 : 52, amount = money(week.amount), trackX = weekX + labelW, trackW = (x + w - 18) - trackX - (compact ? 67 : 92); ctx.fillStyle = T.muted; ctx.font = `${compact ? 9 : 12}px ${FONT_BODY}`; ctx.fillText(week.label, weekX, rowY); ctx.textAlign = "right"; ctx.fillText(`${week.count} 笔`, weekX + labelW - 4, rowY); ctx.textAlign = "start"; ctx.fillStyle = T.paper; roundRect(ctx, trackX, rowY - (compact ? 7 : 9), trackW, compact ? 3 : 4, 2); ctx.fill(); ctx.fillStyle = T.accent; roundRect(ctx, trackX, rowY - (compact ? 7 : 9), Math.max(3, trackW * Number(week.amount || 0) / maxWeek), compact ? 3 : 4, 2); ctx.fill(); ctx.textAlign = "right"; ctx.fillStyle = T.ink; ctx.font = `${compact ? 9 : 12}px ${FONT_BODY}`; ctx.fillText(compact ? amount.replace("¥", "") : amount, x + w - 18, rowY); ctx.textAlign = "start"; });
+      return h;
     }
-
-    function drawDonut(ctx, cx, cy, r, slices, colors) {
-      const total = slices.reduce((sum, item) => sum + item[1], 0) || 1;
-      let start = -Math.PI / 2;
-      slices.forEach((item, index) => {
-        const angle = (item[1] / total) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, start, start + angle);
-        ctx.arc(cx, cy, r * 0.62, start + angle, start, true);
-        ctx.closePath();
-        ctx.fillStyle = colors[index % colors.length];
-        ctx.fill();
-        start += angle;
-      });
+    function drawBalanceComparison(ctx, x, y, w, facts, T, compact) {
+      const totals = facts.totals || {}, comparison = facts.comparison || {}, previous = comparison.previous_totals || {}, h = compact ? 228 : 176, cover = Number(totals.expense || 0) ? (Number(totals.income || 0) + Number(totals.refund || 0)) / Number(totals.expense || 0) : 0, change = comparison.expense_change_pct;
+      ctx.fillStyle = T.chip; roundRect(ctx, x, y, w, h, compact ? 10 : 16); ctx.fill();
+      const leftW = compact ? w - 36 : Math.round(w * .48), lx = x + 20, rx = compact ? x + 20 : x + Math.round(w * .55), balanceY = compact ? y + 146 : y + 45;
+      ctx.fillStyle = T.muted; ctx.font = `${compact ? 10 : 12}px ${FONT_BODY}`; ctx.fillText(`较 ${comparison.previous_label || "上月"}`, lx, y + 27); ctx.fillStyle = T.expense; ctx.font = `600 ${compact ? 26 : 32}px ${FONT_DISPLAY}`; ctx.fillText(`${change == null ? "--" : `${change > 0 ? "+" : ""}${Number(change).toFixed(1)}%`}`, lx, y + (compact ? 63 : 66)); ctx.fillStyle = T.muted; ctx.font = `${compact ? 10 : 12}px ${FONT_BODY}`; ctx.fillText(`支出 ${money(previous.expense)} → ${money(totals.expense)}`, lx, y + (compact ? 86 : 92));
+      ctx.fillStyle = T.ink; ctx.font = `600 ${compact ? 11 : 15}px ${FONT_BODY}`; ctx.fillText("收支平衡", rx, compact ? y + 116 : y + 27); ctx.fillStyle = T.muted; ctx.font = `${compact ? 10 : 12}px ${FONT_BODY}`; ctx.fillText(`入账覆盖支出的 ${Math.round(cover * 100)}%`, rx, balanceY); const barY = balanceY + (compact ? 13 : 16), barW = compact ? w - 40 : w - (rx - x) - 24; ctx.fillStyle = T.paper; roundRect(ctx, rx, barY, barW, compact ? 10 : 12, 6); ctx.fill(); ctx.fillStyle = T.accent; roundRect(ctx, rx, barY, Math.max(0, Math.min(barW, barW * cover)), compact ? 10 : 12, 6); ctx.fill(); ctx.fillStyle = T.muted; ctx.font = `${compact ? 9 : 11}px ${FONT_BODY}`; ctx.fillText(`入账 ${money(Number(totals.income || 0) + Number(totals.refund || 0))}`, rx, barY + (compact ? 28 : 31)); ctx.textAlign = "right"; ctx.fillText(`净支出 ${money(Math.abs(totals.net || 0))}`, rx + barW, barY + (compact ? 28 : 31)); ctx.textAlign = "start";
+      return h;
     }
-
-    function drawLine(ctx, x, y, w, h, points, color) {
-      if (!points.length) return;
-      const max = Math.max(...points.map((item) => item[1]), 1);
-      const coords = points.map((item, index) => {
-        const px = x + (points.length === 1 ? w / 2 : index / (points.length - 1) * w);
-        const py = y + h - (item[1] / max) * h;
-        return [px, py];
-      });
-      ctx.beginPath();
-      ctx.moveTo(coords[0][0], y + h);
-      coords.forEach((point) => ctx.lineTo(point[0], point[1]));
-      ctx.lineTo(coords[coords.length - 1][0], y + h);
-      ctx.closePath();
-      const grad = ctx.createLinearGradient(0, y, 0, y + h);
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, "transparent");
-      ctx.fillStyle = grad;
-      ctx.globalAlpha = 0.18;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.beginPath();
-      coords.forEach((point, index) => index ? ctx.lineTo(point[0], point[1]) : ctx.moveTo(point[0], point[1]));
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.2;
-      ctx.lineJoin = "round";
-      ctx.stroke();
-      coords.forEach((point) => {
-        ctx.beginPath();
-        ctx.arc(point[0], point[1], 3.2, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-      });
-    }
-
-    function drawCornerFlourish(ctx, x, y, T, flipX, flipY) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-      ctx.strokeStyle = T.gold;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(0, 28);
-      ctx.quadraticCurveTo(0, 0, 28, 0);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(8, 28);
-      ctx.quadraticCurveTo(8, 8, 28, 8);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    function drawPineSprig(ctx, x, y, T) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.strokeStyle = T.pine;
-      ctx.fillStyle = T.pine;
-      ctx.lineWidth = 1.6;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(0, 36);
-      ctx.quadraticCurveTo(6, 18, 4, 0);
-      ctx.stroke();
-      [[-10, 8], [12, 10], [-8, 18], [14, 20], [-6, 26], [10, 28]].forEach((pair, index) => {
-        ctx.beginPath();
-        ctx.moveTo(3, 6 + index * 4);
-        ctx.quadraticCurveTo(pair[0] * 0.4, pair[1] - 4, pair[0], pair[1]);
-        ctx.stroke();
-      });
-      ctx.restore();
-    }
-
-    function drawStamp(ctx, cx, cy, T, month) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(-0.12);
-      ctx.strokeStyle = T.stamp;
-      ctx.fillStyle = T.stamp;
-      ctx.globalAlpha = 0.88;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, 34, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(0, 0, 28, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.font = "600 20px Songti SC, STSong, serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("记", 0, -7);
-      ctx.font = "12px Songti SC, STSong, serif";
-      ctx.fillText(month.replace("-", "."), 0, 12);
-      ctx.restore();
-      ctx.textAlign = "start";
-      ctx.textBaseline = "alphabetic";
-    }
-
-    function drawBookMark(ctx, x, y, T) {
-      ctx.fillStyle = T.stamp;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 18, y);
-      ctx.lineTo(x + 18, y + 36);
-      ctx.lineTo(x + 9, y + 28);
-      ctx.lineTo(x, y + 36);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    function drawSectionMark(ctx, x, y, T) {
-      ctx.fillStyle = T.pine;
-      drawRoundRect(ctx, x, y - 14, 6, 18, 2);
-      ctx.fill();
-      ctx.fillStyle = T.gold;
-      ctx.fillRect(x + 1, y - 12, 4, 4);
-    }
-
     function paint() {
-      const T = theme();
-      const facts = DATA.facts || {};
-      const totals = facts.totals || {};
-      const saved = DATA.bill || {};
-      const slices = topSlices(facts.by_category);
-      const merchants = (facts.top_merchants || []).slice(0, 5);
-      const trend = Object.entries(facts.by_day || {}).slice(-12);
-      const letter = saved.body || (facts.insights || []).map((item) => "• " + item).join("\n");
-      const title = saved.title || `${monthTitle(DATA.month)}账单`;
-
-      const canvas = document.getElementById("bill");
-      const probe = canvas.getContext("2d");
-      const contentW = PAGE_W - MARGIN * 2;
-      const letterWidth = contentW - 28;
-      probe.font = "16px PingFang SC, sans-serif";
-      let letterH = 0;
-      for (const block of letterBlocks(letter || " ")) {
-        letterH += wrap(probe, block, letterWidth).length * 26 + 12;
-      }
-      const pageH = Math.max(1240, 760 + merchants.length * 52 + letterH);
-
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = PAGE_W * dpr;
-      canvas.height = pageH * dpr;
-      canvas.style.width = PAGE_W + "px";
-      canvas.style.height = pageH + "px";
-      const ctx = canvas.getContext("2d");
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      const paper = ctx.createLinearGradient(0, 0, PAGE_W, pageH);
-      paper.addColorStop(0, T.paper);
-      paper.addColorStop(1, T.wash);
-      ctx.fillStyle = paper;
-      ctx.fillRect(0, 0, PAGE_W, pageH);
-      ctx.strokeStyle = T.line;
-      ctx.globalAlpha = 0.38;
-      for (let lineY = 40; lineY < pageH; lineY += 28) {
-        ctx.beginPath();
-        ctx.moveTo(MARGIN - 8, lineY);
-        ctx.lineTo(PAGE_W - 36, lineY);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = T.pineDeep;
-      ctx.fillRect(0, 0, 10, pageH);
-      ctx.fillStyle = T.gold;
-      ctx.fillRect(10, 0, 3, pageH);
-      for (let holeY = 64; holeY < pageH - 40; holeY += 92) {
-        ctx.beginPath();
-        ctx.arc(28, holeY, 5, 0, Math.PI * 2);
-        ctx.fillStyle = T.chip;
-        ctx.fill();
-        ctx.strokeStyle = T.line;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      drawCornerFlourish(ctx, 42, 22, T, false, false);
-      drawCornerFlourish(ctx, PAGE_W - 28, 22, T, true, false);
-      drawCornerFlourish(ctx, 42, pageH - 22, T, false, true);
-      drawCornerFlourish(ctx, PAGE_W - 28, pageH - 22, T, true, true);
-      drawPineSprig(ctx, PAGE_W - 92, 36, T);
-      drawBookMark(ctx, PAGE_W - 48, 0, T);
-      drawStamp(ctx, PAGE_W - 118, 118, T, String(DATA.month || ""));
-
-      let y = 52;
-      ctx.fillStyle = T.muted;
-      ctx.font = "12px PingFang SC, sans-serif";
-      ctx.fillText("本机账本 · 月度账单", MARGIN + 8, y);
-      y += 40;
-      ctx.fillStyle = T.ink;
-      ctx.font = "600 40px Songti SC, STSong, serif";
-      ctx.fillText(title, MARGIN + 8, y);
-      y += 28;
-      ctx.fillStyle = T.muted;
-      ctx.font = "14px PingFang SC, sans-serif";
-      ctx.fillText(`${monthTitle(DATA.month)}  ·  ${facts.count || 0} 笔  ·  日均 ${money(facts.daily_average)}`, MARGIN + 8, y);
-      y += 32;
-
-      const cards = [
-        ["支出", money(totals.expense), T.expense],
-        ["收入", money(totals.income), T.pine],
-        ["净额", money(totals.net), T.ink]
-      ];
-      const gap = 12;
-      const cardW = (contentW - gap * 2) / 3;
-      cards.forEach((card, index) => {
-        const x = MARGIN + index * (cardW + gap);
-        ctx.fillStyle = T.chip;
-        drawRoundRect(ctx, x, y, cardW, 84, 16);
-        ctx.fill();
-        ctx.fillStyle = card[2];
-        drawRoundRect(ctx, x, y, 5, 84, 2);
-        ctx.fill();
-        ctx.fillStyle = T.muted;
-        ctx.font = "13px PingFang SC, sans-serif";
-        ctx.fillText(card[0], x + 18, y + 30);
-        ctx.fillStyle = card[2];
-        ctx.font = "600 22px Songti SC, STSong, serif";
-        ctx.fillText(card[1], x + 18, y + 60);
-      });
-      const change = facts.comparison && facts.comparison.expense_change_pct;
-      if (change != null) {
-        ctx.fillStyle = Number(change) > 0 ? T.expense : T.pine;
-        ctx.font = "12px PingFang SC, sans-serif";
-        const sign = change > 0 ? "+" : "";
-        ctx.fillText(`较上月支出 ${sign}${Number(change).toFixed(1)}%`, MARGIN, y + 108);
-      }
-      y += 132;
-
-      drawSectionMark(ctx, MARGIN, y, T);
-      ctx.fillStyle = T.ink;
-      ctx.font = "600 18px Songti SC, STSong, serif";
-      ctx.fillText("分类与走势", MARGIN + 14, y);
-      y += 22;
-      ctx.fillStyle = T.chip;
-      drawRoundRect(ctx, MARGIN, y, contentW, 188, 18);
-      ctx.fill();
-      const donutX = MARGIN + 78;
-      const donutY = y + 92;
-      if (slices.length) drawDonut(ctx, donutX, donutY, 62, slices, T.colors);
-      ctx.fillStyle = T.paper;
-      ctx.beginPath();
-      ctx.arc(donutX, donutY, 34, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = T.muted;
-      ctx.font = "11px PingFang SC, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("支出", donutX, donutY - 2);
-      ctx.fillStyle = T.ink;
-      ctx.font = "600 13px Songti SC, STSong, serif";
-      ctx.fillText(money(totals.expense), donutX, donutY + 16);
-      ctx.textAlign = "start";
-      const pieTotal = slices.reduce((sum, item) => sum + item[1], 0) || 1;
-      slices.forEach((item, index) => {
-        const ly = y + 28 + index * 26;
-        ctx.fillStyle = T.colors[index % T.colors.length];
-        ctx.beginPath();
-        ctx.arc(MARGIN + 168, ly - 4, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = T.ink;
-        ctx.font = "13px PingFang SC, sans-serif";
-        ctx.fillText(item[0], MARGIN + 180, ly);
-        ctx.fillStyle = T.muted;
-        ctx.font = "12px ui-monospace, SF Mono, monospace";
-        ctx.fillText(`${Math.round(item[1] / pieTotal * 100)}%  ${money(item[1])}`, MARGIN + 232, ly);
-      });
-      drawLine(ctx, MARGIN + 430, y + 24, contentW - 454, 128, trend, T.pine);
-      ctx.fillStyle = T.muted;
-      ctx.font = "12px PingFang SC, sans-serif";
-      ctx.fillText(trend.length ? "每日支出" : "暂无每日走势", MARGIN + 430, y + 168);
-      y += 212;
-
-      drawSectionMark(ctx, MARGIN, y, T);
-      ctx.fillStyle = T.ink;
-      ctx.font = "600 18px Songti SC, STSong, serif";
-      ctx.fillText("商户", MARGIN + 14, y);
-      y += 18;
-      const maxMerchant = Math.max(...merchants.map((item) => Number(item.amount || 0)), 1);
-      if (!merchants.length) {
-        ctx.fillStyle = T.muted;
-        ctx.font = "14px PingFang SC, sans-serif";
-        ctx.fillText("这个月还没有商户统计。", MARGIN, y + 12);
-        y += 36;
-      }
-      merchants.forEach((item, index) => {
-        const amount = Number(item.amount || 0);
-        const name = String(item.merchant || "");
-        const color = T.colors[index % T.colors.length];
-        ctx.fillStyle = T.chip;
-        drawRoundRect(ctx, MARGIN, y, contentW, 46, 12);
-        ctx.fill();
-        ctx.fillStyle = T.ink;
-        ctx.font = "13px PingFang SC, sans-serif";
-        const label = name.length > 16 ? name.slice(0, 16) + "…" : name;
-        ctx.fillText(label, MARGIN + 14, y + 18);
-        ctx.fillStyle = T.muted;
-        ctx.font = "12px ui-monospace, SF Mono, monospace";
-        const amountText = money(amount);
-        ctx.fillText(amountText, PAGE_W - MARGIN - 14 - ctx.measureText(amountText).width, y + 18);
-        const trackX = MARGIN + 14;
-        const trackW = contentW - 28;
-        const trackY = y + 28;
-        ctx.fillStyle = T.paper;
-        drawRoundRect(ctx, trackX, trackY, trackW, 8, 4);
-        ctx.fill();
-        const barW = Math.max(10, amount / maxMerchant * trackW);
-        ctx.fillStyle = color;
-        drawRoundRect(ctx, trackX, trackY, barW, 8, 4);
-        ctx.fill();
-        y += 54;
-      });
-      y += 10;
-
-      drawSectionMark(ctx, MARGIN, y, T);
-      ctx.fillStyle = T.ink;
-      ctx.font = "600 18px Songti SC, STSong, serif";
-      ctx.fillText("这月怎么过的", MARGIN + 14, y);
-      y += 18;
-      const letterTop = y;
-      const source = letter || "数字已经齐了，文字结论还没有。";
-      ctx.font = "16px PingFang SC, sans-serif";
-      let blockH = 24;
-      for (const block of letterBlocks(source)) {
-        blockH += wrap(ctx, block, letterWidth).length * 26 + 10;
-      }
-      ctx.fillStyle = T.chip;
-      drawRoundRect(ctx, MARGIN, letterTop, contentW, blockH, 16);
-      ctx.fill();
-      ctx.fillStyle = T.pine;
-      ctx.fillRect(MARGIN, letterTop + 14, 4, blockH - 28);
-      y = letterTop + 28;
-      ctx.fillStyle = T.ink;
-      ctx.font = "16px PingFang SC, sans-serif";
-      for (const block of letterBlocks(source)) {
-        for (const line of wrap(ctx, block, letterWidth)) {
-          ctx.fillText(line || " ", MARGIN + 20, y);
-          y += 26;
-        }
-        y += 10;
-      }
-
-      ctx.fillStyle = T.muted;
-      ctx.font = "12px PingFang SC, sans-serif";
-      ctx.fillText("仅保存在本机 · 可导出 PNG 或打印", MARGIN, pageH - 28);
-
-      document.title = title;
-      document.getElementById("fileLabel").textContent = `${monthTitle(DATA.month)} · 画布账单`;
-      document.getElementById("fallback").textContent = `${title}。支出 ${money(totals.expense)}，收入 ${money(totals.income)}。${plainLetter(letter)}`;
+      const T = theme(), facts = DATA.facts || {}, totals = facts.totals || {}, saved = DATA.bill || {}, slices = topSlices(facts.by_category), categoryCounts = facts.category_counts || {}, merchants = (facts.top_merchants || []).slice(0, 4), letter = saved.body || (facts.insights || []).map((item) => "• " + item).join("\n"), title = saved.title || `${monthTitle(DATA.month)}账单`, top = slices[0] || ["本月支出", 0], compact = PAGE_W < 600;
+      const canvas = document.getElementById("bill"), probe = canvas.getContext("2d"), contentW = PAGE_W - MARGIN * 2, bodySize = compact ? 13 : 17, bodyLine = compact ? 23 : 30; probe.font = `${bodySize}px ${FONT_BODY}`; const letterHeight = letterBlocks(letter || " ").reduce((sum, block) => sum + wrap(probe, block, contentW - (compact ? 28 : 56)).length * bodyLine + (compact ? 14 : 20), 36), insightText = (facts.insights || []).join("  ·  "), insightLines = wrap(probe, insightText, contentW - 44), insightH = insightText ? Math.max(compact ? 68 : 78, 43 + insightLines.length * (compact ? 18 : 22)) : 0, pageH = Math.max(compact ? 2040 : 1980, (compact ? 1700 : 1780) + letterHeight + merchants.length * (compact ? 32 : 38) + insightH), dpr = Math.min(window.devicePixelRatio || 1, 2); canvas.width = PAGE_W * dpr; canvas.height = pageH * dpr; const ctx = canvas.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = T.paper; ctx.fillRect(0, 0, PAGE_W, pageH); ctx.fillStyle = T.deep; ctx.fillRect(0, 0, PAGE_W, compact ? 7 : 12);
+      let y = compact ? 38 : 68; ctx.fillStyle = T.accent; ctx.font = `600 ${compact ? 8 : 12}px ${FONT_BODY}`; ctx.fillText("PERSONAL MONTHLY NOTE", MARGIN, y); ctx.fillStyle = T.muted; ctx.textAlign = "right"; ctx.fillText(monthTitle(DATA.month), PAGE_W - MARGIN, y); ctx.textAlign = "start"; y += compact ? 34 : 58; ctx.fillStyle = T.ink; ctx.font = `600 ${compact ? 23 : 44}px ${FONT_DISPLAY}`; ctx.fillText(title, MARGIN, y); y += compact ? 20 : 34; ctx.fillStyle = T.muted; ctx.font = `${compact ? 9 : 15}px ${FONT_BODY}`; ctx.fillText(compact ? `${facts.count || 0} 笔记录 · 日均 ${money(facts.daily_average)}` : `${facts.count || 0} 笔记录 · 日均 ${money(facts.daily_average)} · 只保存在本机`, MARGIN, y); y += compact ? 26 : 44;
+      const heroH = compact ? 128 : 250, heroTextW = compact ? contentW : 380, illustrationY = compact ? y + heroH + 12 : y, illustrationX = compact ? MARGIN : MARGIN + heroTextW + 42, illustrationW = compact ? contentW : contentW - heroTextW - 42; heroIllustration(ctx, illustrationX, illustrationY, illustrationW, heroH, T); ctx.fillStyle = T.chip; roundRect(ctx, MARGIN, y, heroTextW, heroH, compact ? 10 : 16); ctx.fill(); ctx.fillStyle = T.accent; ctx.font = `600 ${compact ? 10 : 13}px ${FONT_BODY}`; ctx.fillText("账本上的一个重点", MARGIN + (compact ? 16 : 28), y + (compact ? 26 : 42)); ctx.fillStyle = T.ink; ctx.font = `600 ${compact ? 20 : 28}px ${FONT_DISPLAY}`; ctx.fillText(`${top[0]}占了本月`, MARGIN + (compact ? 16 : 28), y + (compact ? 56 : 88)); const pct = totals.expense ? Math.round(Number(top[1]) / Number(totals.expense) * 100) : 0; ctx.fillStyle = T.expense; ctx.font = `600 ${compact ? 34 : 52}px ${FONT_DISPLAY}`; ctx.fillText(`${pct}%`, MARGIN + (compact ? 16 : 28), y + (compact ? 94 : 148)); ctx.fillStyle = T.muted; ctx.font = `${compact ? 10 : 15}px ${FONT_BODY}`; wrap(ctx, `合计 ${money(top[1])}，它决定了这个月的支出轮廓。`, heroTextW - (compact ? 32 : 56)).forEach((line, index) => ctx.fillText(line, MARGIN + (compact ? 16 : 28), y + (compact ? 114 : 190) + index * (compact ? 15 : 24)));
+      y += compact ? heroH * 2 + 42 : heroH + 48; const metrics = [["本月支出", money(totals.expense), T.expense, "expense"], ["本月入账", money(Number(totals.income || 0) + Number(totals.refund || 0)), T.accent, "income"], ["净支出", money(Math.abs(totals.net || 0)), T.ink, "net"]], metricW = contentW / 3; metrics.forEach((metric, index) => { const x = MARGIN + index * metricW, inset = compact ? 4 : 20, iconSize = compact ? 10 : 16, labelX = x + inset + iconSize + 6; if (index) { ctx.fillStyle = T.line; ctx.fillRect(x, y, 1, compact ? 52 : 88); } drawSvgIcon(ctx, metric[3], x + inset, y + (compact ? 7 : 11), iconSize, metric[2]); ctx.fillStyle = T.muted; ctx.font = `${compact ? 9 : 13}px ${FONT_BODY}`; ctx.fillText(metric[0], labelX, y + (compact ? 17 : 24)); ctx.fillStyle = metric[2]; ctx.font = `600 ${compact ? 14 : 27}px ${FONT_DISPLAY}`; ctx.fillText(metric[1], x + inset, y + (compact ? 40 : 65)); });
+      y += compact ? 86 : 132; sectionTitle(ctx, "消费结构", MARGIN, y, T); y += compact ? 16 : 24; const chartH = compact ? 218 : 310; ctx.fillStyle = T.chip; roundRect(ctx, MARGIN, y, contentW, chartH, compact ? 10 : 16); ctx.fill(); const donutX = MARGIN + (compact ? 65 : 150), donutY = y + chartH / 2; if (slices.length) donut(ctx, donutX, donutY, compact ? 51 : 96, slices, T.colors, T); ctx.fillStyle = T.muted; ctx.textAlign = "center"; ctx.font = `${compact ? 9 : 13}px ${FONT_BODY}`; ctx.fillText("支出", donutX, donutY - (compact ? 4 : 7)); ctx.fillStyle = T.ink; ctx.font = `600 ${compact ? 10 : 16}px ${FONT_DISPLAY}`; ctx.fillText(money(totals.expense), donutX, donutY + (compact ? 12 : 18)); ctx.textAlign = "start"; const sliceTotal = slices.reduce((sum, item) => sum + item[1], 0) || 1; slices.forEach((item, index) => { const rowStep = compact ? 35 : 54, rowY = y + (compact ? 27 : 37) + index * rowStep, lx = MARGIN + (compact ? 135 : 310), iconSize = compact ? 10 : 17, labelX = lx + iconSize + (compact ? 5 : 9), share = item[1] / sliceTotal, trackX = lx, trackY = rowY + (compact ? 10 : 19), trackW = PAGE_W - MARGIN - trackX - (compact ? 10 : 30), trackH = compact ? 3 : 5; drawSvgIcon(ctx, categoryIcon(item[0]), lx, rowY - iconSize + (compact ? 1 : 3), iconSize, T.colors[index % T.colors.length]); ctx.fillStyle = T.ink; ctx.font = `${compact ? 10 : 15}px ${FONT_BODY}`; ctx.fillText(item[0], labelX, rowY); ctx.fillStyle = T.muted; ctx.font = `${compact ? 8 : 12}px ${FONT_BODY}`; ctx.fillText(`${categoryCounts[item[0]] || 0} 笔`, compact ? labelX + 32 : labelX + 66, rowY); const amount = money(item[1]); ctx.textAlign = "right"; ctx.fillText(compact ? amount.replace("¥", "") : amount, PAGE_W - MARGIN - (compact ? 10 : 30), rowY); ctx.textAlign = "start"; ctx.fillStyle = T.paper; roundRect(ctx, trackX, trackY, trackW, trackH, trackH / 2); ctx.fill(); ctx.fillStyle = T.colors[index % T.colors.length]; roundRect(ctx, trackX, trackY, Math.max(trackH, trackW * share), trackH, trackH / 2); ctx.fill(); if (!compact) { ctx.textAlign = "right"; ctx.fillStyle = T.muted; ctx.font = `12px ${FONT_BODY}`; ctx.fillText(`${Math.round(share * 100)}%`, PAGE_W - MARGIN - 30, trackY + 20); ctx.textAlign = "start"; } });
+      y += chartH + (compact ? 34 : 54); sectionTitle(ctx, "时间节奏", MARGIN, y, T); y += compact ? 16 : 24; y += drawTimeAnalysis(ctx, MARGIN, y, contentW, facts, T, compact) + (compact ? 32 : 50); sectionTitle(ctx, "上月对比与收支平衡", MARGIN, y, T); y += compact ? 16 : 24; y += drawBalanceComparison(ctx, MARGIN, y, contentW, facts, T, compact) + (compact ? 34 : 52); sectionTitle(ctx, "AI 月度分析", MARGIN, y, T); y += compact ? 18 : 26; const proseTop = y, proseH = letterHeight + 36; ctx.fillStyle = T.paper; roundRect(ctx, MARGIN, proseTop, contentW, proseH, 0); ctx.fill(); ctx.fillStyle = T.line; ctx.fillRect(MARGIN, proseTop, 2, proseH); y += compact ? 23 : 33; ctx.fillStyle = T.ink; ctx.font = `${bodySize}px ${FONT_BODY}`; letterBlocks(letter || "数字已经齐了，文字结论还没有。").forEach((block) => { wrap(ctx, block, contentW - (compact ? 28 : 56)).forEach((line) => { ctx.fillText(line, MARGIN + (compact ? 14 : 28), y); y += bodyLine; }); y += compact ? 14 : 20; });
+      y += compact ? 20 : 30; sectionTitle(ctx, "常见支出对象", MARGIN, y, T); y += compact ? 16 : 24; merchants.forEach((item, index) => { const rowStep = compact ? 32 : 38, rowY = y + index * rowStep; ctx.fillStyle = T.line; ctx.fillRect(MARGIN, rowY + (compact ? 23 : 28), contentW, 1); ctx.fillStyle = T.colors[index % T.colors.length]; ctx.fillRect(MARGIN, rowY + (compact ? 4 : 5), compact ? 5 : 6, compact ? 5 : 6); ctx.fillStyle = T.ink; ctx.font = `${compact ? 10 : 15}px PingFang SC, sans-serif`; const name = String(item.merchant || ""); ctx.fillText(name.length > (compact ? 15 : 26) ? name.slice(0, compact ? 15 : 26) + "…" : name, MARGIN + (compact ? 12 : 18), rowY + (compact ? 10 : 12)); const amount = money(item.amount); ctx.textAlign = "right"; ctx.fillStyle = T.muted; ctx.font = `${compact ? 9 : 13}px PingFang SC, sans-serif`; ctx.fillText(amount, PAGE_W - MARGIN, rowY + (compact ? 10 : 12)); ctx.textAlign = "start"; });
+      y += merchants.length * (compact ? 32 : 38) + (compact ? 26 : 38); if (insightText) { ctx.fillStyle = T.soft; roundRect(ctx, MARGIN, y, contentW, insightH, compact ? 8 : 12); ctx.fill(); ctx.fillStyle = T.accent; ctx.font = `600 ${compact ? 10 : 13}px PingFang SC, sans-serif`; ctx.fillText("留意", MARGIN + (compact ? 14 : 22), y + (compact ? 21 : 28)); ctx.fillStyle = T.ink; ctx.font = `${compact ? 10 : 14}px PingFang SC, sans-serif`; insightLines.forEach((line, index) => ctx.fillText(line, MARGIN + (compact ? 14 : 22), y + (compact ? 42 : 54) + index * (compact ? 18 : 22))); }
+      ctx.fillStyle = T.line; ctx.fillRect(MARGIN, pageH - (compact ? 34 : 54), contentW, 1); ctx.fillStyle = T.muted; ctx.font = `${compact ? 8 : 12}px PingFang SC, sans-serif`; ctx.fillText("Lazy Ledger · 月度回顾", MARGIN, pageH - (compact ? 16 : 28)); ctx.textAlign = "right"; ctx.fillText("可导出 PNG 或打印", PAGE_W - MARGIN, pageH - (compact ? 16 : 28)); ctx.textAlign = "start"; document.title = title; document.getElementById("fileLabel").textContent = `${monthTitle(DATA.month)} · 阅读账单`; document.getElementById("fallback").textContent = `${title}。支出 ${money(totals.expense)}，收入 ${money(totals.income)}。${plainLetter(letter)}`;
     }
-
-    paint();
-    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
-    document.getElementById("printBtn").addEventListener("click", () => window.print());
-    document.getElementById("pngBtn").addEventListener("click", () => {
-      const canvas = document.getElementById("bill");
-      const link = document.createElement("a");
-      link.download = `lazy-ledger-bill-${DATA.month || "month"}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    });
+    paint(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint); document.getElementById("printBtn").addEventListener("click", () => window.print()); document.getElementById("pngBtn").addEventListener("click", () => { const canvas = document.getElementById("bill"), link = document.createElement("a"); link.download = `lazy-ledger-bill-${DATA.month || "month"}.png`; link.href = canvas.toDataURL("image/png"); link.click(); });
   </script>
 </body>
 </html>

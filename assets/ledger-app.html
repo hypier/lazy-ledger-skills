@@ -161,7 +161,7 @@
     .toolbar { padding: 14px; margin: 16px 0; }
     .period { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
     .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .metric { padding: 16px 18px; position: relative; overflow: hidden; min-width: 0; }
     .metric::before {
@@ -202,6 +202,11 @@
     .panel-kicker { color: var(--muted); font-size: 13px; }
     .budget-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
     .account-form { display: grid; grid-template-columns: 1.2fr 0.9fr 0.8fr auto; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .bill-editor { display: grid; gap: 12px; padding: 16px; border-top: 1px solid var(--line); }
+    .bill-editor textarea { min-height: 150px; }
+    .drill-row { border: 0; padding: 0; color: inherit; background: transparent; text-align: left; font: inherit; cursor: pointer; }
+    .hbar-row.drill-row, .legend-row.drill-row { width: 100%; }
+    .drill-row:hover .hbar-name, .drill-row:hover .legend-name { color: var(--pine); }
     .insight-list, .mini-rows { margin: 0; padding: 12px 16px 16px; display: grid; gap: 8px; list-style: none; }
     .insight-list li, .note-card {
       padding: 10px 12px;
@@ -259,6 +264,8 @@
     .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
     .meta-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
     .meta-item { gap: 4px; }
+    .meta-item[role="link"] { cursor: pointer; }
+    .meta-item[role="link"]:hover { color: var(--pine); }
     .meta-item .icon { width: 12px; height: 12px; }
     .meta-inline .badge {
       order: 10;
@@ -367,7 +374,8 @@
     .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
     .chart-wide { grid-column: 1 / -1; }
     .chart-body { padding: 16px; }
-    .chart-split { display: flex; flex-direction: column; gap: 14px; }
+    .chart-split { display: grid; grid-template-columns: minmax(190px, 0.9fr) minmax(0, 1.1fr); align-items: center; gap: 20px; }
+    #pieChart { display: grid; place-items: center; min-height: 236px; }
     .legend { display: grid; gap: 6px; min-width: 0; }
     .legend-row {
       display: grid;
@@ -388,7 +396,7 @@
       white-space: nowrap;
     }
     .legend-amt { color: var(--ink); }
-    .donut-wrap { position: relative; width: 132px; margin: 0 auto; }
+    .donut-wrap { position: relative; width: min(218px, 100%); margin: 0 auto; }
     .donut-center {
       position: absolute;
       inset: 26%;
@@ -400,7 +408,7 @@
     .donut-center small { color: var(--muted); font-size: 11px; }
     .donut-center strong {
       font-family: var(--serif);
-      font-size: 15px;
+      font-size: 19px;
       font-weight: 650;
       letter-spacing: -0.03em;
     }
@@ -510,6 +518,9 @@
       .filters, .metrics, .grid-2, .composer-row, .budget-form, .account-form, .chart-grid, .bill-facts { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
+      .chart-split { grid-template-columns: 1fr; gap: 12px; }
+      #pieChart { min-height: 0; }
+      .donut-wrap { width: min(190px, 62vw); }
       .metrics { grid-template-columns: 1fr 1fr; }
       .tabs button { gap: 5px; font-size: 14px; }
       .tabs .icon { width: 15px; height: 15px; }
@@ -623,6 +634,7 @@
           </label>
           <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类</span><select id="categoryFilter"></select></label>
           <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>账户</span><select id="accountFilter"></select></label>
+          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-card"></use></svg>渠道</span><select id="methodFilter"></select></label>
           <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>搜索</span><input id="searchInput" type="search" placeholder="商户、备注、金额"></label>
         </div>
       </div>
@@ -709,6 +721,11 @@
         <section class="panel">
           <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-receipt"></use></svg><span id="billTitle">月度账单</span></h2><span class="panel-kicker" id="billStatus">结论</span></div>
           <article class="bill-article" id="billBody"></article>
+          <form class="bill-editor" id="billForm">
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-receipt"></use></svg>账单标题</span><input id="billEditorTitle" placeholder="例如：八月花钱回顾"></label>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>账单正文</span><textarea id="billEditorBody" placeholder="写下本月的结论、变化和下月要留意的事"></textarea></label>
+            <div class="composer-row"><p class="msg" id="billMsg" role="status"></p><button class="btn primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>保存账单</button></div>
+          </form>
         </section>
       </section>
 
@@ -739,9 +756,7 @@
             <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-target"></use></svg>金额</span>
               <input id="budgetAmount" type="number" min="0.01" step="0.01" placeholder="例如 8000" required>
             </label>
-            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类（可空）</span>
-              <input id="budgetCategory" placeholder="餐饮">
-            </label>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类（可空）</span><select id="budgetCategory"></select></label>
             <button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>保存</button>
           </form>
           <div class="rows" id="budgetRows"></div>
@@ -782,7 +797,7 @@
       <strong class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>编辑这一笔</strong>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg>金额</span><input id="editAmount" type="number" step="0.01" min="0.01" required></label>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-store"></use></svg>商户</span><input id="editMerchant" placeholder="商户"></label>
-      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类</span><input id="editCategory" placeholder="分类"></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类</span><select id="editCategory"></select></label>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>类型</span>
         <select id="editType">
           <option value="expense">支出</option>
@@ -792,6 +807,10 @@
         </select>
       </label>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>账户</span><select id="editAccount"></select></label>
+      <label class="field" id="editToAccountField" hidden><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-transfer"></use></svg>转入账户</span><select id="editToAccount"></select></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-card"></use></svg>支付渠道</span><select id="editMethod"></select></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>日期时间</span><input id="editOccurredAt" type="datetime-local" required></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>标签</span><input id="editTags" placeholder="例如：报销, 出差"></label>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>备注</span><input id="editNote" placeholder="备注"></label>
       <div class="dialog-actions">
         <button class="btn danger" type="button" id="deleteBtn"><svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>删除</button>
@@ -812,6 +831,7 @@
     };
     const cadenceLabel = { monthly: "每月", weekly: "每周", biweekly: "每两周" };
     const methodLabel = { wechat: "微信", alipay: "支付宝", cash: "现金", card: "信用卡", bank: "银行卡", other: "其他" };
+    const accountTypeIcon = { wechat: "wechat", alipay: "alipay", cash: "cash", bank: "card", credit: "card", other: "wallet" };
     const TAB_IDS = ["ledger", "charts", "bill", "book"];
     const CHART_COLORS = ["#2c5c4f", "#9e3a32", "#3d5a80", "#c4a35a", "#6b8f71", "#6a5470"];
     let LEDGER = { transactions: [], accounts: [], budgets: [], bills: [], currency: "CNY" };
@@ -880,7 +900,7 @@
         .replace(/^转账-/, "");
     }
 
-    function hbarSvg(entries, emptyText) {
+    function hbarSvg(entries, emptyText, drillKey = "") {
       if (!entries.length) return `<div class="empty">${emptyText}</div>`;
       const colors = palette();
       const max = Math.max(...entries.map((item) => item[1]), 1);
@@ -889,14 +909,15 @@
         const label = shortLabel(full) || full;
         const width = Math.max(6, (item[1] / max) * 100);
         const color = colors[index % colors.length];
-        return `<div class="hbar-row">
+        const drill = drillKey ? `data-drill-${drillKey}="${escapeHtml(full)}"` : "";
+        return `<button class="hbar-row drill-row" type="button" ${drill}>
           <div class="hbar-meta">
             <span class="hbar-rank">${String(index + 1).padStart(2, "0")}</span>
             <span class="hbar-name icon-label" title="${escapeHtml(full)}">${icon("store")}${escapeHtml(label)}</span>
             <span class="hbar-amt">${money(item[1])}</span>
           </div>
           <div class="hbar-track"><div class="hbar-fill" style="width:${width}%;background:${color}"></div></div>
-        </div>`;
+        </button>`;
       }).join("");
       return `<div class="hbar-list">${rows}</div>`;
     }
@@ -951,14 +972,15 @@
         const amountText = compactMoney(amount, dense);
         const rest = Math.max(max - amount, 0);
         const grow = Math.max(amount, 0);
-        return `<div class="vbar-col" title="${escapeHtml(item[0])} ${amount ? money(amount) : "无支出"}">
+        const drill = variant === "daily" && /^\d{4}-\d{2}-\d{2}$/.test(item[0]) ? `data-drill-date="${escapeHtml(item[0])}"` : "";
+        return `<button class="vbar-col drill-row" type="button" ${drill} title="${escapeHtml(item[0])} ${amount ? money(amount) : "无支出"}">
           <div class="vbar-track">
             <div style="flex:${rest} 1 0;min-height:0"></div>
             ${amountText ? `<span class="vbar-amt">${amountText}</span>` : ""}
             ${amount > 0 ? `<div class="vbar-fill" style="flex:${grow} 1 0;background:${color}"></div>` : ""}
           </div>
           <div class="vbar-name">${escapeHtml(tickLabel(item[0]))}</div>
-        </div>`;
+        </button>`;
       }).join("");
       const note = peak[1] ? `<p class="chart-note">最高 ${escapeHtml(prettyWhen(peak[0]))} · ${money(peak[1])}</p>` : "";
       return `<div class="vbar-list${dense ? " vbar-daily" : ""}">${cols}</div>${note}`;
@@ -986,6 +1008,7 @@
     const typeFilter = document.getElementById("typeFilter");
     const categoryFilter = document.getElementById("categoryFilter");
     const accountFilter = document.getElementById("accountFilter");
+    const methodFilter = document.getElementById("methodFilter");
     const searchInput = document.getElementById("searchInput");
     const dialog = document.getElementById("editDialog");
     const accountDialog = document.getElementById("accountDialog");
@@ -1029,7 +1052,8 @@
       const totals = dailyTotals(rows);
       const parts = [`<span>${rows.length} 笔</span>`];
       if (totals.expense) parts.push(`<span class="expense">支出 ${money(totals.expense)}</span>`);
-      if (totals.income + totals.refund) parts.push(`<span class="income">入账 ${money(totals.income + totals.refund)}</span>`);
+      if (totals.income) parts.push(`<span class="income">收入 ${money(totals.income)}</span>`);
+      if (totals.refund) parts.push(`<span class="refund">退款 ${money(totals.refund)}</span>`);
       if (totals.transfer) parts.push(`<span class="transfer">转账 ${money(totals.transfer)}</span>`);
       return parts.join(`<span class="day-summary-dot">·</span>`);
     }
@@ -1099,6 +1123,7 @@
       const type = typeFilter.value;
       const category = categoryFilter.value;
       const account = accountFilter.value;
+      const method = methodFilter.value;
       const query = searchInput.value.trim().toLowerCase();
       return (LEDGER.transactions || []).filter((tx) => {
         const day = dayOf(tx);
@@ -1107,9 +1132,45 @@
         if (type && tx.type !== type) return false;
         if (category && (tx.category || "其他") !== category) return false;
         if (account && ![tx.account_id, tx.account, tx.to_account_id, tx.to_account].includes(account)) return false;
+        if (method && tx.method !== method) return false;
         if (query && ![tx.merchant, tx.note, tx.category, tx.amount, tx.account].join(" ").toLowerCase().includes(query)) return false;
         return true;
       }).sort((a, b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")));
+    }
+
+    function categories() {
+      const fromLedger = (LEDGER.categories || []).map((item) => typeof item === "string" ? item : item && item.name).filter(Boolean);
+      return [...new Set(fromLedger.concat((LEDGER.transactions || []).map((tx) => tx.category || "其他")))].sort();
+    }
+
+    function selectOptions(rows, selected, emptyLabel = "") {
+      const empty = emptyLabel ? `<option value="">${escapeHtml(emptyLabel)}</option>` : "";
+      return empty + rows.map(([value, label]) => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
+    }
+
+    function toLocalDateTime(value) {
+      return String(value || "").replace(/([+-]\d\d:\d\d|Z)$/, "").slice(0, 16);
+    }
+
+    function toggleTransferFields() {
+      document.getElementById("editToAccountField").hidden = document.getElementById("editType").value !== "transfer";
+    }
+
+    async function drillDown(filters) {
+      if (filters.category !== undefined) categoryFilter.value = filters.category || "";
+      if (filters.account !== undefined) accountFilter.value = filters.account || "";
+      if (filters.method !== undefined) {
+        const method = Object.entries(methodLabel).find(([, label]) => label === filters.method)?.[0] || filters.method;
+        methodFilter.value = method || "";
+      }
+      if (filters.query !== undefined) searchInput.value = filters.query || "";
+      if (filters.date) rangeMode = "all";
+      setTab("ledger");
+      await applyView();
+      if (filters.date) {
+        const group = [...document.querySelectorAll(".day-group")].find((item) => item.getAttribute("aria-label") === `${Number(filters.date.slice(5, 7))}月${Number(filters.date.slice(8))}日流水`);
+        group?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     }
 
     function accountBalances() {
@@ -1162,7 +1223,7 @@
       const recurring = (INSIGHTS && INSIGHTS.recurring) || [];
       document.getElementById("recurringRows").innerHTML = recurring.length ? recurring.map((item) => {
         const status = item.missing_this_month ? "这月还没记" : (item.recorded_this_month ? "这月已记" : "");
-        return `<div class="row"><div class="row-main"><span class="row-icon expense">${icon("repeat")}</span><div class="row-copy">${escapeHtml(item.label)}<div class="meta">${escapeHtml(cadenceLabel[item.cadence] || item.cadence)}${status ? " · " + status : ""}</div></div></div><div class="amount">${money(item.typical_amount)}</div><span></span></div>`;
+        return `<div class="row editable-row" data-drill-query="${escapeHtml(item.label)}" role="button" tabindex="0"><div class="row-main"><span class="row-icon expense">${icon("repeat")}</span><div class="row-copy">${escapeHtml(item.label)}<div class="meta">${escapeHtml(cadenceLabel[item.cadence] || item.cadence)}${status ? " · " + status : ""}</div></div></div><div class="amount">${money(item.typical_amount)}</div></div>`;
       }).join("") : `<div class="empty">还没有稳定的周期支出</div>`;
 
       const pending = (INSIGHTS && INSIGHTS.pending_reimbursement) || [];
@@ -1170,18 +1231,27 @@
       const todos = pending.map((item) => ({ ...item, kind: "待报销" })).concat(unmatched.map((item) => ({ ...item, kind: "未对上的退款" })));
       document.getElementById("todoRows").innerHTML = todos.length ? todos.map((item) => {
         const itemIcon = item.kind === "待报销" ? "check" : "refund";
-        return `<div class="row"><div class="row-main"><span class="row-icon refund">${icon(itemIcon)}</span><div class="row-copy">${escapeHtml(item.merchant || item.note || item.id)}<div class="meta">${escapeHtml(item.kind)} · ${escapeHtml((item.occurred_at || "").slice(0, 10))}</div></div></div><div class="amount">${money(item.amount)}</div><span></span></div>`;
+        return `<div class="row editable-row" data-edit="${escapeHtml(item.id)}" role="button" tabindex="0"><div class="row-main"><span class="row-icon refund">${icon(itemIcon)}</span><div class="row-copy">${escapeHtml(item.merchant || item.note || item.id)}<div class="meta">${escapeHtml(item.kind)} · ${escapeHtml((item.occurred_at || "").slice(0, 10))}</div></div></div><div class="amount refund">${money(item.amount)}</div></div>`;
       }).join("") : `<div class="empty">没有待报销或未对上的退款</div>`;
 
-      const categories = [...new Set((LEDGER.transactions || []).map((tx) => tx.category || "其他"))].sort();
       const currentCategory = categoryFilter.value;
-      categoryFilter.innerHTML = `<option value="">全部分类</option>` + categories.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("");
+      const categoryRows = categories().map((item) => [item, item]);
+      categoryFilter.innerHTML = selectOptions(categoryRows, currentCategory, "全部分类");
       categoryFilter.value = currentCategory;
       const accounts = (LEDGER.accounts || []).filter((item) => !item.archived);
       const currentAccount = accountFilter.value;
       accountFilter.innerHTML = `<option value="">全部账户</option>` + accounts.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
       accountFilter.value = currentAccount;
-      document.getElementById("editAccount").innerHTML = accounts.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+      const accountRows = accounts.map((item) => [item.id, item.name]);
+      document.getElementById("editAccount").innerHTML = selectOptions(accountRows, document.getElementById("editAccount").value);
+      document.getElementById("editToAccount").innerHTML = selectOptions(accountRows, document.getElementById("editToAccount").value, "请选择转入账户");
+      document.getElementById("editCategory").innerHTML = selectOptions(categoryRows, document.getElementById("editCategory").value);
+      document.getElementById("budgetCategory").innerHTML = selectOptions(categoryRows, document.getElementById("budgetCategory").value, "本月总额");
+      const methodRows = Object.entries(methodLabel);
+      const currentMethod = methodFilter.value;
+      methodFilter.innerHTML = selectOptions(methodRows, currentMethod, "全部渠道");
+      methodFilter.value = currentMethod;
+      document.getElementById("editMethod").innerHTML = selectOptions(methodRows, document.getElementById("editMethod").value, "未填写渠道");
 
       const defaultId = (LEDGER.preferences || {}).default_account_id;
       const openingById = Object.fromEntries(accounts.map((item) => [item.id, Number(item.opening_balance || 0)]));
@@ -1189,7 +1259,7 @@
       document.getElementById("accountRows").innerHTML = accountBalances().map((item) => {
         const mark = item.id === defaultId ? `<span class="default-mark">默认</span>` : "";
         return `<div class="row editable-row" data-edit-account="${escapeHtml(item.id)}" role="button" tabindex="0" aria-label="编辑账户 ${escapeHtml(item.name)}">
-          <div class="row-main"><span class="row-icon">${icon("wallet")}</span><div class="row-copy"><strong>${escapeHtml(item.name)}</strong>${mark}<div class="meta">期初 ${money(openingById[item.id] || 0)}</div></div></div>
+          <div class="row-main"><span class="row-icon">${icon(accountTypeIcon[(LEDGER.accounts || []).find((account) => account.id === item.id)?.type] || "wallet")}</span><div class="row-copy"><strong>${escapeHtml(item.name)}</strong>${mark}<div class="meta">期初 ${money(openingById[item.id] || 0)}</div></div></div>
           <div class="amount">${money(item.balance)}</div>
         </div>`;
       }).join("") || `<div class="empty">还没有账户</div>`;
@@ -1222,8 +1292,8 @@
                 <span class="row-icon ${escapeHtml(type)}">${icon(categoryIcon(tx.category, type))}</span>
                 <div class="row-copy"><strong>${escapeHtml(label)}</strong>
                   <div class="meta meta-inline">
-                    <span class="meta-item">${icon(categoryIcon(tx.category, type))}${escapeHtml(tx.category || "其他")}</span>
-                    ${account ? `<span class="meta-item">${icon(accountIcon(tx.method, account))}${escapeHtml(account)}</span>` : ""}
+                    <span class="meta-item" data-drill-category="${escapeHtml(tx.category || "其他")}" role="link" tabindex="0">${icon(categoryIcon(tx.category, type))}${escapeHtml(tx.category || "其他")}</span>
+                    ${account ? `<span class="meta-item" data-drill-account="${escapeHtml(tx.account_id || tx.account)}" role="link" tabindex="0">${icon(accountIcon(tx.method, account))}${escapeHtml(account)}</span>` : ""}
                     ${showTypeBadge(type) ? `<span class="badge ${escapeHtml(type)}">${icon(typeIcon[type] || "receipt")}${escapeHtml(typeLabel[type] || type)}</span>` : ""}
                   </div>
                 </div>
@@ -1259,11 +1329,11 @@
       document.getElementById("pieChart").innerHTML = slices.length ? donutSvg(slices) : `<div class="empty">暂无分类</div>`;
       document.getElementById("pieLegend").innerHTML = slices.map((item, index) => {
         const share = pieTotal ? Math.round(item[1] / pieTotal * 100) : 0;
-        return `<div class="legend-row" style="--swatch:${colors[index % colors.length]}"><span class="legend-name icon-label">${icon("tag")}${escapeHtml(item[0])}</span><span class="legend-share">${share}%</span><span class="legend-amt">${money(item[1])}</span></div>`;
+        return `<button class="legend-row drill-row" type="button" data-drill-category="${escapeHtml(item[0])}" style="--swatch:${colors[index % colors.length]}"><span class="legend-name icon-label">${icon(categoryIcon(item[0], "expense"))}${escapeHtml(item[0])}</span><span class="legend-share">${share}%</span><span class="legend-amt">${money(item[1])}</span></button>`;
       }).join("") || `<div class="empty">暂无分类</div>`;
       document.getElementById("pieSummary").textContent = slices.map((item) => `${item[0]} ${money(item[1])}`).join("，");
       const merchants = ((INSIGHTS && INSIGHTS.top_merchants) || []).map((item) => [item.merchant, item.amount]);
-      document.getElementById("merchantChart").innerHTML = hbarSvg(merchants, "暂无商户统计");
+      document.getElementById("merchantChart").innerHTML = hbarSvg(merchants, "暂无商户统计", "query");
       const byMonth = Object.entries((INSIGHTS && INSIGHTS.by_month) || {});
       const byDay = Object.fromEntries(Object.entries((INSIGHTS && INSIGHTS.by_day) || {}));
       const useMonth = byMonth.length >= 3 || rangeMode === "this-year" || rangeMode === "this-quarter" || rangeMode === "all";
@@ -1276,7 +1346,7 @@
       const weekday = Object.entries((INSIGHTS && INSIGHTS.by_weekday) || {});
       document.getElementById("weekdayChart").innerHTML = columnSvg(weekday, "暂无星期分布", "week");
       const methods = Object.entries((INSIGHTS && INSIGHTS.by_method) || {}).map(([key, amount]) => [methodLabel[key] || key, amount]);
-      document.getElementById("methodChart").innerHTML = hbarSvg(methods, "暂无渠道统计");
+      document.getElementById("methodChart").innerHTML = hbarSvg(methods, "暂无渠道统计", "method");
     }
 
     function renderBill() {
@@ -1308,6 +1378,8 @@
           ? `<p>数字已经齐了，文字结论还没有。在对话里说「出一份 ${current} 的账单」即可。</p><ul>${insights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
           : `<p class="empty">这个月还没什么可写的。</p>`;
       }
+      document.getElementById("billEditorTitle").value = saved.title || "";
+      document.getElementById("billEditorBody").value = saved.body || "";
     }
 
     async function loadBill() {
@@ -1328,6 +1400,8 @@
       if (typeFilter.value) params.set("type", typeFilter.value);
       if (categoryFilter.value) params.set("category", categoryFilter.value);
       if (accountFilter.value) params.set("account", accountFilter.value);
+      if (methodFilter.value) params.set("method", methodFilter.value);
+      if (searchInput.value.trim()) params.set("query", searchInput.value.trim());
       params.set("compare", "1");
       return api("/api/summary?" + params.toString());
     }
@@ -1380,6 +1454,23 @@
       await refresh();
     });
 
+    document.getElementById("billForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const msg = document.getElementById("billMsg");
+      try {
+        await api("/api/bills", { method: "POST", body: {
+          month: document.getElementById("billMonth").value,
+          title: document.getElementById("billEditorTitle").value.trim(),
+          body: document.getElementById("billEditorBody").value.trim()
+        }});
+        msg.textContent = "已保存到本地账本。";
+        await loadBill();
+      } catch (error) {
+        msg.textContent = error.message;
+        msg.className = "msg err";
+      }
+    });
+
     document.getElementById("accountForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       await api("/api/accounts", {
@@ -1420,6 +1511,7 @@
     document.getElementById("cancelAccountBtn").addEventListener("click", () => accountDialog.close());
     document.getElementById("archiveAccountBtn").addEventListener("click", async () => {
       if (!editingAccountId) return;
+      if (!window.confirm("归档后该账户将从记账选项中隐藏，已有流水不会删除。继续吗？")) return;
       await api(`/api/accounts/${editingAccountId}`, { method: "PATCH", body: { archive: true } });
       accountDialog.close();
       await refresh();
@@ -1448,11 +1540,17 @@
       document.getElementById("editCategory").value = tx.category || "";
       document.getElementById("editType").value = tx.type || "expense";
       document.getElementById("editAccount").value = tx.account_id || "";
+      document.getElementById("editToAccount").value = tx.to_account_id || "";
+      document.getElementById("editMethod").value = tx.method || "";
+      document.getElementById("editOccurredAt").value = toLocalDateTime(tx.occurred_at);
+      document.getElementById("editTags").value = (tx.tags || []).join(", ");
       document.getElementById("editNote").value = tx.note || "";
+      toggleTransferFields();
       dialog.showModal();
     }
 
     document.getElementById("txRows").addEventListener("click", (event) => {
+      if (event.target.closest("[data-drill-category], [data-drill-account]")) return;
       const row = event.target.closest("[data-edit]");
       if (row) openTransactionEditor(row.dataset.edit);
     });
@@ -1463,10 +1561,31 @@
       openTransactionEditor(row.dataset.edit);
     });
 
+    document.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-drill-category], [data-drill-account], [data-drill-query], [data-drill-method], [data-drill-date]");
+      if (!target) return;
+      drillDown({
+        category: target.dataset.drillCategory,
+        account: target.dataset.drillAccount,
+        query: target.dataset.drillQuery,
+        method: target.dataset.drillMethod,
+        date: target.dataset.drillDate
+      });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (!['Enter', ' '].includes(event.key)) return;
+      const target = event.target.closest("[data-drill-category], [data-drill-account]");
+      if (!target) return;
+      event.preventDefault();
+      drillDown({ category: target.dataset.drillCategory, account: target.dataset.drillAccount });
+    });
+
     document.getElementById("budgetRows").addEventListener("click", async (event) => {
       const button = event.target.closest("[data-del-budget]");
       const id = button && button.dataset.delBudget;
       if (!id) return;
+      if (!window.confirm("删除这条预算吗？此操作不会删除流水。")) return;
       await api(`/api/budgets/${id}`, { method: "DELETE" });
       await refresh();
     });
@@ -1474,6 +1593,7 @@
     document.getElementById("cancelBtn").addEventListener("click", () => dialog.close());
     document.getElementById("deleteBtn").addEventListener("click", async () => {
       if (!editingId) return;
+      if (!window.confirm("删除这笔流水吗？删除后不能在页面恢复。")) return;
       await api(`/api/transactions/${editingId}`, { method: "DELETE" });
       dialog.close();
       await refresh();
@@ -1488,6 +1608,10 @@
           category: document.getElementById("editCategory").value,
           type: document.getElementById("editType").value,
           account: document.getElementById("editAccount").value,
+          to_account: document.getElementById("editType").value === "transfer" ? document.getElementById("editToAccount").value : "",
+          method: document.getElementById("editMethod").value,
+          occurred_at: document.getElementById("editOccurredAt").value,
+          tags: document.getElementById("editTags").value,
           note: document.getElementById("editNote").value
         }
       });
@@ -1496,8 +1620,13 @@
     });
 
     chips.forEach((chip) => chip.addEventListener("click", () => { rangeMode = chip.dataset.range; applyView(); }));
-    [typeFilter, categoryFilter, accountFilter].forEach((el) => el.addEventListener("input", applyView));
-    searchInput.addEventListener("input", render);
+    [typeFilter, categoryFilter, accountFilter, methodFilter].forEach((el) => el.addEventListener("change", applyView));
+    let searchTimer;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(applyView, 220);
+    });
+    document.getElementById("editType").addEventListener("change", toggleTransferFields);
     document.querySelectorAll("[role=tab]").forEach((tab) => {
       tab.addEventListener("click", () => setTab(tab.dataset.tab));
     });
