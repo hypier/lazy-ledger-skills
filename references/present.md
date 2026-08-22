@@ -17,7 +17,7 @@ How to show ledger data to the user. Chat is the default. The localhost page is 
 | 我的记账习惯 / 我平时怎么记 | Read `lazy-ledger-memory.md`. Reply with the 画像. `habit memory` if the file is missing or stale. |
 | 导出静态页面 | `render`, then give the file path. |
 | More than 15 matching rows | Short totals in chat, then `serve` or `render`. |
-| Export / 导出表格 | `export --format csv --output ./lazy-ledger.csv` |
+| 导入微信/银行账单截图 | [image-batch-import.md](image-batch-import.md): `bill_screenshot.py prepare`, paste the table, wait for confirmation, then `import-tsv`. |
 
 Never paste the raw ledger JSON into chat unless the user asks for the file contents.
 

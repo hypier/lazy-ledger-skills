@@ -1,5 +1,7 @@
 lazy-ledger.json
 lazy-ledger-report.html
 *-bill-[0-9][0-9][0-9][0-9]-[0-9][0-9].html
+wechat-bill-rows.tsv
+*-bill-rows.tsv
 *-memory.md
 dist/*

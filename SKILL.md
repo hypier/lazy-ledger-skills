@@ -10,6 +10,7 @@ Maintain a local personal ledger with minimal friction. Infer fields, write stru
 ## Paths
 
 - Tool: `scripts/ledger_tool.py` next to this SKILL.md. Typical invocation: `python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py`
+- Screenshot prepare: `python3 /Users/barry/.agents/skills/lazy-ledger/scripts/bill_screenshot.py prepare --image …` (table only; no ledger write)
 - Ledger: `./lazy-ledger.json` in the user's working directory unless they name another file
 - Habit memory: `./lazy-ledger-memory.md` next to the ledger (periodic portrait for the agent to Read)
 - Dashboard: `./lazy-ledger-report.html` unless they name another output
@@ -26,7 +27,7 @@ Never write the ledger into the skill directory. The ledger file is a JSON docum
 | "午饭一般 16 / 记账习惯 / 我平时怎么记" | [references/record.md](references/record.md) | Read `lazy-ledger-memory.md`; `habit memory` if missing/stale |
 | Unclear amount / several totals | [references/record.md](references/record.md) | `parse --text` first |
 | Correct or delete | [references/record.md](references/record.md) | `find` then `update` / `delete --yes` |
-| Screenshot, receipt, payment-history paste | [references/record.md](references/record.md), [references/image-batch-import.md](references/image-batch-import.md) | `add --text` or `import-tsv` |
+| Screenshot, receipt, payment-history paste | [references/record.md](references/record.md), [references/image-batch-import.md](references/image-batch-import.md) | Long bill: `bill_screenshot.py prepare` → table → wait → `import-tsv`. One receipt: `add --source image` |
 | "花了多少 / 汇总 / 对账 / 预算" | [references/present.md](references/present.md) | `show --compare` |
 | "今年花了多少 / 这季度 / 订阅还没记" | [references/present.md](references/present.md) | `show --range this-year` or `--range this-quarter --compare` |
 | 账户 / 转账 / 余额 | [references/record.md](references/record.md) | `account list` / `add --text` with 转到 |
@@ -37,7 +38,7 @@ Never write the ledger into the skill directory. The ledger file is a JSON docum
 | Schema or manual JSON edits | [references/ledger-schema.md](references/ledger-schema.md) | `doctor --json` |
 | Field inference details | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) | — |
 
-Do the obvious write when amount and meaning are clear. Do not ask the user to fill a form.
+Do the obvious write when amount and meaning are clear. Do not ask the user to fill a form. Exception: a payment-history screenshot is always table-then-confirm, never a silent `import-tsv`.
 
 ## Record
 
@@ -55,7 +56,7 @@ Ask only when amount is missing (and no stable usual amount exists for that shor
 
 Before recording, Read `./lazy-ledger-memory.md` (same folder as the ledger). If it is missing, or its `tx_count` lags the ledger by 10+ rows, or it is older than 7 days, run `habit memory --ledger ./lazy-ledger.json` then Read the file again. Apply 默认 / 稳定金额 silently. Do not show shortcut chips, do not ask to 存为常用, and do not guess amounts under 不要猜金额. After a large import or when the user asks to 更新习惯, run `habit memory` (optionally `--summary` with a 2–4 sentence portrait).
 
-Read [references/record.md](references/record.md) before handling screenshots, stacked WeChat/Alipay pastes, merchant habits, or corrections.
+Read [references/record.md](references/record.md) before handling screenshots, stacked WeChat/Alipay pastes, merchant habits, or corrections. For a long 账单截图, follow [references/image-batch-import.md](references/image-batch-import.md): run `bill_screenshot.py prepare`, show the table, and **do not import until the user confirms**.
 
 ## Present
 
@@ -84,7 +85,7 @@ Then give the file path or URL. Read [references/present.md](references/present.
 
 ## Safety
 
-- Never invent exact transactions. If the amount is unknown, ask.
+- Never invent exact transactions. If the amount is unknown, ask. Do not guess rows from an unreadable thumbnail.
 - Keep amounts positive; use `type` for direction.
 - Do not overwrite an existing ledger's transactions.
 - Do not store secrets, bank logins, card numbers, or payment credentials.

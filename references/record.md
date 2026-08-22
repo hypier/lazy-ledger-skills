@@ -13,7 +13,7 @@ How to turn user input into ledger writes. Read [bookkeeping-rules.md](bookkeepi
 | Slightly ambiguous, but still parseable | `parse --text`, then add if the proposal looks right |
 | Missing amount, two possible totals, or unclear income vs expense | Ask; do not write |
 | Receipt/screenshot of one purchase | Extract fields, `add` with `--source image` and `--attachment` |
-| Long payment-history screenshot | [image-batch-import.md](image-batch-import.md) → TSV → `import-tsv` |
+| Long payment-history screenshot | [image-batch-import.md](image-batch-import.md): `bill_screenshot.py prepare` → show table → wait for 可以导入 → `import-tsv` |
 | "以后星巴克都记咖啡" | `prefer --merchant 星巴克 --category 咖啡` |
 | "午饭一般 16" / "地铁都是 4 块" | `habit set --phrase 午饭 --amount 16` then `habit memory` |
 | "我平时怎么记 / 记账习惯" | Read `lazy-ledger-memory.md`; refresh with `habit memory` if stale |
@@ -57,7 +57,7 @@ Prefer paid amount when the text has `实付` / `券后`. Ignore `原价` extras
 - Extract amount, merchant, date/time, payment channel, and note when visible.
 - If original price and paid amount both appear, record paid amount.
 - One image, one purchase: `add` with `--source image`. Put doubtful bits in `note` and lower `--confidence`.
-- One image, many rows: do not invent cropped lines. Clean into TSV and `import-tsv`.
+- One image, many rows (微信/银行「账单」长图): run `scripts/bill_screenshot.py prepare --image … --json`. Show the `markdown` table. **Wait for confirmation.** Only then `import-tsv`. Chat previews are often too small; the script will try Downloads for the original.
 - Keep truncated merchant text (`…`) instead of guessing the suffix.
 
 ## Correction

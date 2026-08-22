@@ -1,52 +1,59 @@
 # Image Batch Import
 
-Use this workflow when the user provides a payment-history screenshot and wants every visible transaction recorded.
+Two paths: a **long WeChat/bank bill screenshot** (standard SOP below), and a **manual TSV** when the agent already has a clean row list.
 
-## Goal
+Do not invent cropped or half-visible rows. Do not write the ledger until the user confirms the table.
 
-Turn many visible rows into deterministic ledger writes with one TSV import, instead of dozens of ad hoc `add` commands.
+## Long screenshot SOP (required)
 
-## Workflow
+Chat previews are often ~99px wide and unreadable. The script looks up a wider original in Downloads/Desktop when needed, slices the image, OCRs with macOS Vision, and prints a markdown table. **Stop after the table.** Import only when the user says 可以导入 / 确认 / 没问题.
 
-1. Inspect the image and decide whether it shows one transaction or many.
-2. If it shows many, record only the fully visible rows. Do not invent cropped or half-visible items.
-3. For each row, capture:
-   - `occurred_at`
-   - `type`
-   - `amount`
-   - `category`
-   - `merchant`
-   - `method` when the channel is visible
-   - `note`
-   - `source`
-   - `confidence`
-4. Save the cleaned rows as TSV with this header:
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/bill_screenshot.py prepare \
+  --image /path/to/screenshot.jpg \
+  --output ./wechat-bill-rows.tsv \
+  --json
+```
+
+`--json` includes `markdown`, `rows`, `tsv`, `header` (month totals from the page chrome), and `thumbnail_replaced`.
+
+Then:
+
+1. Paste `markdown` in chat. Ask the user to check merchants, amounts, and refund pairs.
+2. Do **not** run `import-tsv` in the same turn unless they already confirmed this table.
+3. After confirmation:
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py import-tsv \
+  --ledger ./lazy-ledger.json \
+  --input ./wechat-bill-rows.tsv \
+  --allow-duplicate
+```
+
+`--allow-duplicate` is for same-day same-merchant **支出 + 退款** pairs (detector ignores type). Skip it only if the table has no such pair.
+
+4. `doctor --json`, then `show --month YYYY-MM --compare`, then `habit memory` after a large import.
+
+If `prepare` exits 2 (`ocr_too_sparse`), the file is still a thumbnail. Ask for the album original, or a file dragged from Finder/Downloads (`微信图片_YYYYMMDDHHMMSS_*.jpg`), not the chat preview.
+
+## After confirmation: TSV shape
 
 ```tsv
 occurred_at	type	amount	category	merchant	note	source	confidence	method	account
 ```
 
-5. Import the file:
+The prepare script already writes this. Do not rebuild it by hand unless the user edited a row.
 
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py import-tsv \
-  --ledger ./lazy-ledger.json \
-  --input ./rows.tsv
-```
+## One receipt / few visible rows
 
-6. Run a health check after import:
-
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py doctor \
-  --ledger ./lazy-ledger.json \
-  --json
-```
+If the image is a single purchase, extract fields and `add --source image`. If it is a short list and `prepare` is overkill, you may transcribe into TSV yourself, **still show the table and wait for confirmation** before `import-tsv`.
 
 ## Heuristics
 
-- Use `income` for红包 or money received.
-- Use `transfer` for提现到银行卡 or transfers between the user's own accounts.
-- Keep positive amounts; let `type` express direction.
-- Preserve visible truncated merchant names such as `深圳市顺易通信息科技有限...` rather than guessing the hidden suffix.
-- Lower `confidence` for truncated merchant names, masked recipients, or rows whose purpose is inferred from context.
-- Store the source screenshot path in `attachment` when it helps future auditing.
+- `+` and 退款 in the title or 已全额退款 → `refund` (strip a trailing `-退款` from the merchant so it matches the original expense)
+- `转账-来自…` / 红包 → `income`
+- `转账-转给…` → `expense` + 人情 (not an own-account `transfer`)
+- 提现到银行卡 → `transfer`
+- Keep truncated names (`给H。。。`, `梦相随百货…`); lower `confidence`
+- WeChat page totals are for the **whole month**; this screen can be a subset
+- Do not store chat-cache thumbnail paths as `attachment`

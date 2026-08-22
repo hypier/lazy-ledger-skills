@@ -71,7 +71,7 @@ Infer when the text names them; leave unset otherwise.
 
 - Do not force receipt vs payment-history classification
 - Visible paid amount wins over original price
-- Multiple visible rows: ask all vs which one, unless they already said import all
+- Multiple visible rows: run the screenshot prepare script, show a table, wait for confirmation. Do not import in the same turn.
 - Truncated merchants stay truncated; lower `confidence`
 
 ## Duplicates
