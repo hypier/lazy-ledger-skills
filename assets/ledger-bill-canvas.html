@@ -94,17 +94,19 @@
   <script>
     const DATA = __BILL_DATA__;
     const PAGE_W = 840;
-    const MARGIN = 52;
+    const MARGIN = 56;
 
     function theme() {
       const dark = matchMedia("(prefers-color-scheme: dark)").matches;
       return dark ? {
         paper: "#201c18", ink: "#f4ece3", muted: "#b6aa9c", line: "#3c342c",
-        pine: "#86c4b0", expense: "#e08a82", chip: "#2b251f",
+        pine: "#86c4b0", pineDeep: "#1a3d35", expense: "#e08a82", chip: "#2b251f",
+        wash: "#2a241e", stamp: "#c45c54", gold: "#d4b07a",
         colors: ["#86c4b0", "#e08a82", "#8eb0d8", "#c4a35a", "#9bb59a", "#c2b0cc"]
       } : {
         paper: "#fbf7f0", ink: "#1f1a14", muted: "#6a5f54", line: "#d9cfc0",
-        pine: "#2c5c4f", expense: "#9e3a32", chip: "#eadfcf",
+        pine: "#2c5c4f", pineDeep: "#1e4037", expense: "#9e3a32", chip: "#eadfcf",
+        wash: "#f3ece1", stamp: "#b23b32", gold: "#c4a35a",
         colors: ["#2c5c4f", "#9e3a32", "#3d5a80", "#c4a35a", "#6b8f71", "#6a5470"]
       };
     }
@@ -159,12 +161,13 @@
     }
 
     function drawRoundRect(ctx, x, y, w, h, r) {
+      const radius = Math.min(r, w / 2, h / 2);
       ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
       ctx.closePath();
     }
 
@@ -175,7 +178,7 @@
         const angle = (item[1] / total) * Math.PI * 2;
         ctx.beginPath();
         ctx.arc(cx, cy, r, start, start + angle);
-        ctx.arc(cx, cy, r * 0.58, start + angle, start, true);
+        ctx.arc(cx, cy, r * 0.62, start + angle, start, true);
         ctx.closePath();
         ctx.fillStyle = colors[index % colors.length];
         ctx.fill();
@@ -196,8 +199,11 @@
       coords.forEach((point) => ctx.lineTo(point[0], point[1]));
       ctx.lineTo(coords[coords.length - 1][0], y + h);
       ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.12;
+      const grad = ctx.createLinearGradient(0, y, 0, y + h);
+      grad.addColorStop(0, color);
+      grad.addColorStop(1, "transparent");
+      ctx.fillStyle = grad;
+      ctx.globalAlpha = 0.18;
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.beginPath();
@@ -206,6 +212,95 @@
       ctx.lineWidth = 2.2;
       ctx.lineJoin = "round";
       ctx.stroke();
+      coords.forEach((point) => {
+        ctx.beginPath();
+        ctx.arc(point[0], point[1], 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      });
+    }
+
+    function drawCornerFlourish(ctx, x, y, T, flipX, flipY) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+      ctx.strokeStyle = T.gold;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(0, 28);
+      ctx.quadraticCurveTo(0, 0, 28, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(8, 28);
+      ctx.quadraticCurveTo(8, 8, 28, 8);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawPineSprig(ctx, x, y, T) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.strokeStyle = T.pine;
+      ctx.fillStyle = T.pine;
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(0, 36);
+      ctx.quadraticCurveTo(6, 18, 4, 0);
+      ctx.stroke();
+      [[-10, 8], [12, 10], [-8, 18], [14, 20], [-6, 26], [10, 28]].forEach((pair, index) => {
+        ctx.beginPath();
+        ctx.moveTo(3, 6 + index * 4);
+        ctx.quadraticCurveTo(pair[0] * 0.4, pair[1] - 4, pair[0], pair[1]);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    function drawStamp(ctx, cx, cy, T, month) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-0.12);
+      ctx.strokeStyle = T.stamp;
+      ctx.fillStyle = T.stamp;
+      ctx.globalAlpha = 0.88;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 34, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, 28, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = "600 20px Songti SC, STSong, serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("记", 0, -7);
+      ctx.font = "12px Songti SC, STSong, serif";
+      ctx.fillText(month.replace("-", "."), 0, 12);
+      ctx.restore();
+      ctx.textAlign = "start";
+      ctx.textBaseline = "alphabetic";
+    }
+
+    function drawBookMark(ctx, x, y, T) {
+      ctx.fillStyle = T.stamp;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 18, y);
+      ctx.lineTo(x + 18, y + 36);
+      ctx.lineTo(x + 9, y + 28);
+      ctx.lineTo(x, y + 36);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawSectionMark(ctx, x, y, T) {
+      ctx.fillStyle = T.pine;
+      drawRoundRect(ctx, x, y - 14, 6, 18, 2);
+      ctx.fill();
+      ctx.fillStyle = T.gold;
+      ctx.fillRect(x + 1, y - 12, 4, 4);
     }
 
     function paint() {
@@ -221,15 +316,14 @@
 
       const canvas = document.getElementById("bill");
       const probe = canvas.getContext("2d");
-      probe.font = "16px " + getComputedStyle(document.body).fontFamily;
       const contentW = PAGE_W - MARGIN * 2;
-      const blocks = letterBlocks(letter);
-      let letterH = 0;
+      const letterWidth = contentW - 28;
       probe.font = "16px PingFang SC, sans-serif";
-      for (const block of blocks) {
-        letterH += wrap(probe, block, contentW).length * 26 + 12;
+      let letterH = 0;
+      for (const block of letterBlocks(letter || " ")) {
+        letterH += wrap(probe, block, letterWidth).length * 26 + 12;
       }
-      const pageH = Math.max(1180, 720 + merchants.length * 32 + letterH);
+      const pageH = Math.max(1240, 760 + merchants.length * 52 + letterH);
 
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = PAGE_W * dpr;
@@ -239,33 +333,55 @@
       const ctx = canvas.getContext("2d");
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      ctx.fillStyle = T.paper;
+      const paper = ctx.createLinearGradient(0, 0, PAGE_W, pageH);
+      paper.addColorStop(0, T.paper);
+      paper.addColorStop(1, T.wash);
+      ctx.fillStyle = paper;
       ctx.fillRect(0, 0, PAGE_W, pageH);
       ctx.strokeStyle = T.line;
-      ctx.globalAlpha = 0.45;
-      for (let y = 36; y < pageH; y += 28) {
+      ctx.globalAlpha = 0.38;
+      for (let lineY = 40; lineY < pageH; lineY += 28) {
         ctx.beginPath();
-        ctx.moveTo(MARGIN, y);
-        ctx.lineTo(PAGE_W - MARGIN, y);
+        ctx.moveTo(MARGIN - 8, lineY);
+        ctx.lineTo(PAGE_W - 36, lineY);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      ctx.fillStyle = T.pine;
-      ctx.fillRect(0, 0, 8, pageH);
+      ctx.fillStyle = T.pineDeep;
+      ctx.fillRect(0, 0, 10, pageH);
+      ctx.fillStyle = T.gold;
+      ctx.fillRect(10, 0, 3, pageH);
+      for (let holeY = 64; holeY < pageH - 40; holeY += 92) {
+        ctx.beginPath();
+        ctx.arc(28, holeY, 5, 0, Math.PI * 2);
+        ctx.fillStyle = T.chip;
+        ctx.fill();
+        ctx.strokeStyle = T.line;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
 
-      let y = 48;
+      drawCornerFlourish(ctx, 42, 22, T, false, false);
+      drawCornerFlourish(ctx, PAGE_W - 28, 22, T, true, false);
+      drawCornerFlourish(ctx, 42, pageH - 22, T, false, true);
+      drawCornerFlourish(ctx, PAGE_W - 28, pageH - 22, T, true, true);
+      drawPineSprig(ctx, PAGE_W - 92, 36, T);
+      drawBookMark(ctx, PAGE_W - 48, 0, T);
+      drawStamp(ctx, PAGE_W - 118, 118, T, String(DATA.month || ""));
+
+      let y = 52;
       ctx.fillStyle = T.muted;
       ctx.font = "12px PingFang SC, sans-serif";
-      ctx.fillText("本机账本 · 月度账单", MARGIN, y);
-      y += 36;
+      ctx.fillText("本机账本 · 月度账单", MARGIN + 8, y);
+      y += 40;
       ctx.fillStyle = T.ink;
       ctx.font = "600 40px Songti SC, STSong, serif";
-      ctx.fillText(title, MARGIN, y);
+      ctx.fillText(title, MARGIN + 8, y);
       y += 28;
       ctx.fillStyle = T.muted;
       ctx.font = "14px PingFang SC, sans-serif";
-      ctx.fillText(`${monthTitle(DATA.month)}  ·  ${facts.count || 0} 笔  ·  日均 ${money(facts.daily_average)}`, MARGIN, y);
-      y += 28;
+      ctx.fillText(`${monthTitle(DATA.month)}  ·  ${facts.count || 0} 笔  ·  日均 ${money(facts.daily_average)}`, MARGIN + 8, y);
+      y += 32;
 
       const cards = [
         ["支出", money(totals.expense), T.expense],
@@ -277,55 +393,74 @@
       cards.forEach((card, index) => {
         const x = MARGIN + index * (cardW + gap);
         ctx.fillStyle = T.chip;
-        drawRoundRect(ctx, x, y, cardW, 78, 14);
+        drawRoundRect(ctx, x, y, cardW, 84, 16);
         ctx.fill();
-        ctx.fillStyle = T.pine;
-        ctx.fillRect(x, y + 10, 4, 58);
+        ctx.fillStyle = card[2];
+        drawRoundRect(ctx, x, y, 5, 84, 2);
+        ctx.fill();
         ctx.fillStyle = T.muted;
         ctx.font = "13px PingFang SC, sans-serif";
-        ctx.fillText(card[0], x + 16, y + 28);
+        ctx.fillText(card[0], x + 18, y + 30);
         ctx.fillStyle = card[2];
         ctx.font = "600 22px Songti SC, STSong, serif";
-        ctx.fillText(card[1], x + 16, y + 58);
+        ctx.fillText(card[1], x + 18, y + 60);
       });
       const change = facts.comparison && facts.comparison.expense_change_pct;
       if (change != null) {
-        ctx.fillStyle = T.muted;
+        ctx.fillStyle = Number(change) > 0 ? T.expense : T.pine;
         ctx.font = "12px PingFang SC, sans-serif";
         const sign = change > 0 ? "+" : "";
-        ctx.fillText(`较上月支出 ${sign}${Number(change).toFixed(1)}%`, MARGIN, y + 100);
+        ctx.fillText(`较上月支出 ${sign}${Number(change).toFixed(1)}%`, MARGIN, y + 108);
       }
-      y += 124;
+      y += 132;
 
+      drawSectionMark(ctx, MARGIN, y, T);
       ctx.fillStyle = T.ink;
       ctx.font = "600 18px Songti SC, STSong, serif";
-      ctx.fillText("分类与走势", MARGIN, y);
-      y += 16;
+      ctx.fillText("分类与走势", MARGIN + 14, y);
+      y += 22;
+      ctx.fillStyle = T.chip;
+      drawRoundRect(ctx, MARGIN, y, contentW, 188, 18);
+      ctx.fill();
       const donutX = MARGIN + 78;
-      const donutY = y + 78;
-      if (slices.length) drawDonut(ctx, donutX, donutY, 68, slices, T.colors);
+      const donutY = y + 92;
+      if (slices.length) drawDonut(ctx, donutX, donutY, 62, slices, T.colors);
+      ctx.fillStyle = T.paper;
+      ctx.beginPath();
+      ctx.arc(donutX, donutY, 34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = T.muted;
+      ctx.font = "11px PingFang SC, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("支出", donutX, donutY - 2);
+      ctx.fillStyle = T.ink;
+      ctx.font = "600 13px Songti SC, STSong, serif";
+      ctx.fillText(money(totals.expense), donutX, donutY + 16);
+      ctx.textAlign = "start";
       const pieTotal = slices.reduce((sum, item) => sum + item[1], 0) || 1;
       slices.forEach((item, index) => {
-        const ly = y + 18 + index * 24;
+        const ly = y + 28 + index * 26;
         ctx.fillStyle = T.colors[index % T.colors.length];
-        drawRoundRect(ctx, MARGIN + 176, ly - 10, 10, 10, 3);
+        ctx.beginPath();
+        ctx.arc(MARGIN + 168, ly - 4, 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = T.ink;
         ctx.font = "13px PingFang SC, sans-serif";
-        ctx.fillText(item[0], MARGIN + 194, ly);
+        ctx.fillText(item[0], MARGIN + 180, ly);
         ctx.fillStyle = T.muted;
         ctx.font = "12px ui-monospace, SF Mono, monospace";
-        ctx.fillText(`${Math.round(item[1] / pieTotal * 100)}%  ${money(item[1])}`, MARGIN + 300, ly);
+        ctx.fillText(`${Math.round(item[1] / pieTotal * 100)}%  ${money(item[1])}`, MARGIN + 232, ly);
       });
-      drawLine(ctx, MARGIN + 470, y + 8, contentW - 470, 140, trend, T.pine);
+      drawLine(ctx, MARGIN + 430, y + 24, contentW - 454, 128, trend, T.pine);
       ctx.fillStyle = T.muted;
       ctx.font = "12px PingFang SC, sans-serif";
-      ctx.fillText(trend.length ? "每日支出" : "暂无每日走势", MARGIN + 470, y + 168);
-      y += 196;
+      ctx.fillText(trend.length ? "每日支出" : "暂无每日走势", MARGIN + 430, y + 168);
+      y += 212;
 
+      drawSectionMark(ctx, MARGIN, y, T);
       ctx.fillStyle = T.ink;
       ctx.font = "600 18px Songti SC, STSong, serif";
-      ctx.fillText("商户", MARGIN, y);
+      ctx.fillText("商户", MARGIN + 14, y);
       y += 18;
       const maxMerchant = Math.max(...merchants.map((item) => Number(item.amount || 0)), 1);
       if (!merchants.length) {
@@ -336,38 +471,61 @@
       }
       merchants.forEach((item, index) => {
         const amount = Number(item.amount || 0);
-        const bar = Math.max(8, amount / maxMerchant * 420);
+        const name = String(item.merchant || "");
+        const color = T.colors[index % T.colors.length];
         ctx.fillStyle = T.chip;
-        drawRoundRect(ctx, MARGIN, y, contentW, 28, 8);
-        ctx.fill();
-        ctx.fillStyle = T.colors[index % T.colors.length];
-        drawRoundRect(ctx, MARGIN, y, bar, 28, 8);
+        drawRoundRect(ctx, MARGIN, y, contentW, 46, 12);
         ctx.fill();
         ctx.fillStyle = T.ink;
         ctx.font = "13px PingFang SC, sans-serif";
-        ctx.fillText(String(item.merchant || "").slice(0, 12), MARGIN + 10, y + 19);
+        const label = name.length > 16 ? name.slice(0, 16) + "…" : name;
+        ctx.fillText(label, MARGIN + 14, y + 18);
+        ctx.fillStyle = T.muted;
         ctx.font = "12px ui-monospace, SF Mono, monospace";
-        ctx.fillText(money(amount), PAGE_W - MARGIN - 8 - ctx.measureText(money(amount)).width, y + 19);
-        y += 34;
+        const amountText = money(amount);
+        ctx.fillText(amountText, PAGE_W - MARGIN - 14 - ctx.measureText(amountText).width, y + 18);
+        const trackX = MARGIN + 14;
+        const trackW = contentW - 28;
+        const trackY = y + 28;
+        ctx.fillStyle = T.paper;
+        drawRoundRect(ctx, trackX, trackY, trackW, 8, 4);
+        ctx.fill();
+        const barW = Math.max(10, amount / maxMerchant * trackW);
+        ctx.fillStyle = color;
+        drawRoundRect(ctx, trackX, trackY, barW, 8, 4);
+        ctx.fill();
+        y += 54;
       });
-      y += 18;
+      y += 10;
 
+      drawSectionMark(ctx, MARGIN, y, T);
       ctx.fillStyle = T.ink;
       ctx.font = "600 18px Songti SC, STSong, serif";
-      ctx.fillText("这月怎么过的", MARGIN, y);
-      y += 28;
+      ctx.fillText("这月怎么过的", MARGIN + 14, y);
+      y += 18;
+      const letterTop = y;
+      const source = letter || "数字已经齐了，文字结论还没有。";
+      ctx.font = "16px PingFang SC, sans-serif";
+      let blockH = 24;
+      for (const block of letterBlocks(source)) {
+        blockH += wrap(ctx, block, letterWidth).length * 26 + 10;
+      }
+      ctx.fillStyle = T.chip;
+      drawRoundRect(ctx, MARGIN, letterTop, contentW, blockH, 16);
+      ctx.fill();
+      ctx.fillStyle = T.pine;
+      ctx.fillRect(MARGIN, letterTop + 14, 4, blockH - 28);
+      y = letterTop + 28;
       ctx.fillStyle = T.ink;
       ctx.font = "16px PingFang SC, sans-serif";
-      const source = letter || "数字已经齐了，文字结论还没有。";
       for (const block of letterBlocks(source)) {
-        for (const line of wrap(ctx, block, contentW)) {
-          ctx.fillText(line || " ", MARGIN, y);
+        for (const line of wrap(ctx, block, letterWidth)) {
+          ctx.fillText(line || " ", MARGIN + 20, y);
           y += 26;
         }
         y += 10;
       }
 
-      y = Math.max(y + 24, pageH - 36);
       ctx.fillStyle = T.muted;
       ctx.font = "12px PingFang SC, sans-serif";
       ctx.fillText("仅保存在本机 · 可导出 PNG 或打印", MARGIN, pageH - 28);

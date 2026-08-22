@@ -16,7 +16,7 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
 - Uses `assets/ledger-app.html`
 - Reads and writes the same ledger file as the CLI
 - Four tabs: 记账 / 报表 / 月度账单 / 账本 (`#ledger` `#charts` `#bill` `#book`)
-- 报表: category donut, merchant bars, daily/monthly line, weekday and method charts (SVG, no libraries)
+- 报表: category donut, merchant ranking, daily/monthly bars with amounts, weekday and method charts (no libraries)
 - 月度账单: month facts plus the saved AI letter; **打开画布账单** opens `/bill/YYYY-MM` (Canvas, one local HTML file per month)
 - 账本: add/edit accounts (opening, default) and budgets
 - No shortcut chips; habits stay in the background

@@ -161,7 +161,7 @@
     .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
     .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-    .metric { padding: 16px 18px; position: relative; overflow: hidden; }
+    .metric { padding: 16px 18px; position: relative; overflow: hidden; min-width: 0; }
     .metric::before {
       content: "";
       position: absolute;
@@ -174,10 +174,11 @@
     .metric-value {
       margin-top: 8px;
       font-family: var(--serif);
-      font-size: clamp(22px, 3vw, 30px);
+      font-size: clamp(20px, 2.6vw, 30px);
       font-weight: 650;
       font-variant-numeric: tabular-nums;
       letter-spacing: -0.03em;
+      overflow-wrap: anywhere;
     }
     .expense { color: var(--expense); }
     .income { color: var(--income); }
@@ -283,11 +284,136 @@
     .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
     .chart-wide { grid-column: 1 / -1; }
     .chart-body { padding: 16px; }
-    .chart-split { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: center; }
-    .legend { display: grid; gap: 8px; font-size: 13px; }
-    .legend-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; }
-    .swatch { width: 12px; height: 12px; border-radius: 4px; }
+    .chart-split { display: flex; flex-direction: column; gap: 14px; }
+    .legend { display: grid; gap: 6px; min-width: 0; }
+    .legend-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: baseline;
+      padding: 8px 10px 8px 12px;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--chip) 42%, var(--paper));
+      box-shadow: inset 4px 0 0 var(--swatch, var(--pine));
+    }
+    .legend-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .legend-share, .legend-amt {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .legend-amt { color: var(--ink); }
+    .donut-wrap { position: relative; width: 132px; margin: 0 auto; }
+    .donut-center {
+      position: absolute;
+      inset: 26%;
+      display: grid;
+      place-content: center;
+      text-align: center;
+      pointer-events: none;
+    }
+    .donut-center small { color: var(--muted); font-size: 11px; }
+    .donut-center strong {
+      font-family: var(--serif);
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+    }
     .chart-svg { width: 100%; height: auto; display: block; }
+    .hbar-list { display: grid; gap: 12px; }
+    .hbar-row { min-width: 0; }
+    .hbar-meta {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .hbar-rank {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+    .hbar-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    .hbar-amt {
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .hbar-track {
+      height: 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--chip) 55%, var(--paper));
+      overflow: hidden;
+    }
+    .hbar-fill { height: 100%; border-radius: 999px; }
+    .vbar-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+      gap: 8px;
+      align-items: stretch;
+      height: 220px;
+    }
+    .vbar-list.vbar-daily {
+      height: 248px;
+      gap: 5px;
+      grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
+    }
+    .vbar-col {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 6px;
+      min-width: 0;
+      height: 100%;
+    }
+    .vbar-track {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 0;
+      height: 100%;
+    }
+    .vbar-amt {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      color: var(--ink);
+      line-height: 1.2;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .vbar-daily .vbar-amt { font-size: 10px; }
+    .vbar-fill {
+      width: 100%;
+      border-radius: 8px 8px 3px 3px;
+      min-height: 3px;
+    }
+    .vbar-name {
+      font-size: 12px;
+      text-align: center;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chart-note {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
     .bill-article { padding: 22px 20px 28px; }
     .bill-article h2, .bill-article h3 { font-family: var(--serif); margin: 0 0 10px; }
     .bill-article h2 { font-size: 28px; }
@@ -297,8 +423,11 @@
     .bill-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
     .bill-facts .metric { min-height: 0; }
     .hint { color: var(--muted); font-size: 14px; padding: 4px 2px 12px; }
-    @media (max-width: 800px) {
-      .filters, .metrics, .grid-2, .composer-row, .budget-form, .account-form, .chart-grid, .chart-split, .bill-facts { grid-template-columns: 1fr; }
+    @media (max-width: 960px) {
+      .filters, .metrics, .grid-2, .composer-row, .budget-form, .account-form, .chart-grid, .bill-facts { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .metrics { grid-template-columns: 1fr 1fr; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before { transition: none !important; }
@@ -409,19 +538,19 @@
             <p class="sr" id="pieSummary"></p>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>商户排行</h2><span class="panel-kicker">柱状</span></div>
+            <div class="panel-head"><h2>商户排行</h2><span class="panel-kicker">按金额</span></div>
             <div class="chart-body" id="merchantChart"></div>
           </section>
           <section class="panel chart-wide">
-            <div class="panel-head"><h2 id="trendTitle">每日支出</h2><span class="panel-kicker">折线</span></div>
+            <div class="panel-head"><h2 id="trendTitle">每日支出</h2><span class="panel-kicker" id="trendKicker">按日</span></div>
             <div class="chart-body" id="trendChart"></div>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>星期分布</h2><span class="panel-kicker">柱状</span></div>
+            <div class="panel-head"><h2>星期分布</h2><span class="panel-kicker">按星期</span></div>
             <div class="chart-body" id="weekdayChart"></div>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>支付渠道</h2><span class="panel-kicker">柱状</span></div>
+            <div class="panel-head"><h2>支付渠道</h2><span class="panel-kicker">按金额</span></div>
             <div class="chart-body" id="methodChart"></div>
           </section>
         </div>
@@ -593,72 +722,110 @@
     function donutSvg(entries) {
       const colors = palette();
       const total = entries.reduce((sum, item) => sum + item[1], 0) || 1;
-      const r = 54;
+      const r = 52;
       const c = 2 * Math.PI * r;
       let offset = 0;
       const rings = entries.map((item, index) => {
         const len = (item[1] / total) * c;
-        const circle = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${colors[index % colors.length]}" stroke-width="22" stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)"></circle>`;
+        const circle = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${colors[index % colors.length]}" stroke-width="18" stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)"></circle>`;
         offset += len;
         return circle;
       }).join("");
-      return `<svg class="chart-svg" viewBox="0 0 140 140" role="img" aria-hidden="true">${rings}</svg>`;
+      return `<div class="donut-wrap">
+        <svg class="chart-svg" viewBox="0 0 140 140" role="img" aria-hidden="true">${rings}</svg>
+        <div class="donut-center"><small>支出</small><strong>${money(total)}</strong></div>
+      </div>`;
+    }
+
+    function shortLabel(value) {
+      return String(value || "")
+        .replace(/^扫二维码付款-给/, "")
+        .replace(/^扫二维码付款-/, "")
+        .replace(/^转账-/, "");
     }
 
     function hbarSvg(entries, emptyText) {
       if (!entries.length) return `<div class="empty">${emptyText}</div>`;
       const colors = palette();
       const max = Math.max(...entries.map((item) => item[1]), 1);
-      const height = Math.max(120, entries.length * 36 + 8);
-      const bars = entries.map((item, index) => {
-        const y = 8 + index * 36;
-        const width = Math.max(4, (item[1] / max) * 220);
-        return `<text x="0" y="${y + 14}" font-size="12" fill="currentColor">${escapeHtml(item[0])}</text>
-          <rect x="72" y="${y}" width="${width}" height="18" rx="6" fill="${colors[index % colors.length]}"></rect>
-          <text x="${80 + width}" y="${y + 14}" font-size="12" fill="currentColor">${money(item[1])}</text>`;
+      const rows = entries.map((item, index) => {
+        const full = String(item[0] || "");
+        const label = shortLabel(full) || full;
+        const width = Math.max(6, (item[1] / max) * 100);
+        const color = colors[index % colors.length];
+        return `<div class="hbar-row">
+          <div class="hbar-meta">
+            <span class="hbar-rank">${String(index + 1).padStart(2, "0")}</span>
+            <span class="hbar-name" title="${escapeHtml(full)}">${escapeHtml(label)}</span>
+            <span class="hbar-amt">${money(item[1])}</span>
+          </div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${width}%;background:${color}"></div></div>
+        </div>`;
       }).join("");
-      return `<svg class="chart-svg" viewBox="0 0 360 ${height}" role="img">${bars}</svg>`;
+      return `<div class="hbar-list">${rows}</div>`;
     }
 
-    function columnSvg(entries, emptyText) {
-      if (!entries.length) return `<div class="empty">${emptyText}</div>`;
-      const colors = palette();
-      const max = Math.max(...entries.map((item) => item[1]), 1);
-      const gap = 360 / entries.length;
-      const bars = entries.map((item, index) => {
-        const h = Math.max(2, (item[1] / max) * 140);
-        const x = index * gap + 8;
-        const w = Math.max(12, gap - 16);
-        return `<rect x="${x}" y="${160 - h}" width="${w}" height="${h}" rx="6" fill="${colors[index % colors.length]}"></rect>
-          <text x="${x + w / 2}" y="178" text-anchor="middle" font-size="11" fill="currentColor">${escapeHtml(item[0])}</text>`;
-      }).join("");
-      return `<svg class="chart-svg" viewBox="0 0 360 190" role="img">${bars}</svg>`;
+    function compactMoney(value, dense) {
+      const n = Number(value || 0);
+      if (n <= 0) return "";
+      if (dense || n >= 100) return `¥${Math.round(n).toLocaleString("zh-CN")}`;
+      return `¥${n.toFixed(2).replace(/\.00$/, "")}`;
     }
 
-    function lineSvg(entries, emptyText) {
+    function prettyWhen(key) {
+      const s = String(key || "");
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${Number(s.slice(5, 7))}月${Number(s.slice(8))}日`;
+      if (/^\d{4}-\d{2}$/.test(s)) return `${s.slice(0, 4)}年${Number(s.slice(5))}月`;
+      if (/^[一二三四五六日]$/.test(s)) return `周${s}`;
+      return s;
+    }
+
+    function tickLabel(key) {
+      const s = String(key || "");
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(8);
+      if (/^\d{4}-\d{2}$/.test(s)) return `${Number(s.slice(5))}月`;
+      return s.replace(/^星期/, "").replace(/^周/, "");
+    }
+
+    function fillDateRange(map, start, end) {
+      if (!start || !end) return Object.entries(map).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+      const cur = new Date(`${start}T00:00:00`);
+      const last = new Date(`${end}T00:00:00`);
+      if (Number.isNaN(cur.getTime()) || Number.isNaN(last.getTime()) || cur > last) {
+        return Object.entries(map);
+      }
+      const rows = [];
+      while (cur <= last) {
+        const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+        rows.push([key, Number(map[key] || 0)]);
+        cur.setDate(cur.getDate() + 1);
+      }
+      return rows.length > 31 ? rows.slice(-31) : rows;
+    }
+
+    function columnSvg(entries, emptyText, variant) {
       if (!entries.length) return `<div class="empty">${emptyText}</div>`;
+      const pine = palette()[0];
       const max = Math.max(...entries.map((item) => item[1]), 1);
-      const pad = 28;
-      const w = 640;
-      const h = 200;
-      const span = Math.max(entries.length - 1, 1);
-      const points = entries.map((item, index) => {
-        const x = pad + (index / span) * (w - pad * 2);
-        const y = h - pad - (item[1] / max) * (h - pad * 2);
-        return [x, y];
-      });
-      const color = palette()[0];
-      const poly = points.map((point) => point.join(",")).join(" ");
-      const area = `${pad},${h - pad} ${poly} ${points.at(-1)[0]},${h - pad}`;
-      const labels = entries.filter((_, index) => index === 0 || index === entries.length - 1 || index % Math.ceil(entries.length / 6) === 0).map((item, _, list) => {
-        const index = entries.indexOf(item);
-        return `<text x="${points[index][0]}" y="${h - 8}" text-anchor="middle" font-size="11" fill="currentColor">${escapeHtml(String(item[0]).slice(-5))}</text>`;
+      const peak = entries.reduce((best, item) => item[1] > best[1] ? item : best, ["", 0]);
+      const dense = variant === "daily" || entries.length > 10;
+      const cols = entries.map((item) => {
+        const amount = Number(item[1] || 0);
+        const color = amount === max && amount > 0 ? pine : `color-mix(in srgb, ${pine} 62%, var(--chip))`;
+        const amountText = compactMoney(amount, dense);
+        const rest = Math.max(max - amount, 0);
+        const grow = Math.max(amount, 0);
+        return `<div class="vbar-col" title="${escapeHtml(item[0])} ${amount ? money(amount) : "无支出"}">
+          <div class="vbar-track">
+            <div style="flex:${rest} 1 0;min-height:0"></div>
+            ${amountText ? `<span class="vbar-amt">${amountText}</span>` : ""}
+            ${amount > 0 ? `<div class="vbar-fill" style="flex:${grow} 1 0;background:${color}"></div>` : ""}
+          </div>
+          <div class="vbar-name">${escapeHtml(tickLabel(item[0]))}</div>
+        </div>`;
       }).join("");
-      return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" role="img">
-        <polygon points="${area}" fill="${color}" opacity="0.12"></polygon>
-        <polyline points="${poly}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"></polyline>
-        ${labels}
-      </svg>`;
+      const note = peak[1] ? `<p class="chart-note">最高 ${escapeHtml(prettyWhen(peak[0]))} · ${money(peak[1])}</p>` : "";
+      return `<div class="vbar-list${dense ? " vbar-daily" : ""}">${cols}</div>${note}`;
     }
 
     function inlineMarkdown(text) {
@@ -846,28 +1013,37 @@
       const comparison = (INSIGHTS && INSIGHTS.comparison) || {};
       document.getElementById("chartExpense").textContent = money(totals.expense);
       document.getElementById("chartIncome").textContent = money(totals.income);
-      document.getElementById("chartNet").textContent = money(totals.net);
+      const netEl = document.getElementById("chartNet");
+      netEl.textContent = money(totals.net);
+      netEl.classList.toggle("expense", Number(totals.net) < 0);
+      netEl.classList.toggle("income", Number(totals.net) > 0);
       const change = comparison.expense_change_pct;
-      document.getElementById("chartDelta").textContent = change == null ? "—" : `${change > 0 ? "+" : ""}${Number(change).toFixed(1)}%`;
+      const deltaEl = document.getElementById("chartDelta");
+      deltaEl.textContent = change == null ? "—" : `${change > 0 ? "+" : ""}${Number(change).toFixed(1)}%`;
+      deltaEl.classList.toggle("expense", Number(change) > 0);
+      deltaEl.classList.toggle("income", Number(change) < 0);
       const slices = topSlices(INSIGHTS && INSIGHTS.by_category);
       const colors = palette();
       const pieTotal = slices.reduce((sum, item) => sum + item[1], 0);
       document.getElementById("pieChart").innerHTML = slices.length ? donutSvg(slices) : `<div class="empty">暂无分类</div>`;
       document.getElementById("pieLegend").innerHTML = slices.map((item, index) => {
         const share = pieTotal ? Math.round(item[1] / pieTotal * 100) : 0;
-        return `<div class="legend-row"><span class="swatch" style="background:${colors[index % colors.length]}"></span><span>${escapeHtml(item[0])}</span><span class="amount">${share}% · ${money(item[1])}</span></div>`;
+        return `<div class="legend-row" style="--swatch:${colors[index % colors.length]}"><span class="legend-name">${escapeHtml(item[0])}</span><span class="legend-share">${share}%</span><span class="legend-amt">${money(item[1])}</span></div>`;
       }).join("") || `<div class="empty">暂无分类</div>`;
       document.getElementById("pieSummary").textContent = slices.map((item) => `${item[0]} ${money(item[1])}`).join("，");
       const merchants = ((INSIGHTS && INSIGHTS.top_merchants) || []).map((item) => [item.merchant, item.amount]);
       document.getElementById("merchantChart").innerHTML = hbarSvg(merchants, "暂无商户统计");
       const byMonth = Object.entries((INSIGHTS && INSIGHTS.by_month) || {});
-      const byDay = Object.entries((INSIGHTS && INSIGHTS.by_day) || {});
+      const byDay = Object.fromEntries(Object.entries((INSIGHTS && INSIGHTS.by_day) || {}));
       const useMonth = byMonth.length >= 3 || rangeMode === "this-year" || rangeMode === "this-quarter" || rangeMode === "all";
       document.getElementById("trendTitle").textContent = useMonth && byMonth.length ? "月度支出" : "每日支出";
-      const trend = (useMonth && byMonth.length ? byMonth : byDay).slice(-14);
-      document.getElementById("trendChart").innerHTML = lineSvg(trend, "暂无走势");
+      document.getElementById("trendKicker").textContent = useMonth && byMonth.length ? "按月" : "按日";
+      const trend = useMonth && byMonth.length
+        ? byMonth.slice(-12)
+        : fillDateRange(byDay, periodBounds().start, periodBounds().end);
+      document.getElementById("trendChart").innerHTML = columnSvg(trend, "暂无走势", useMonth ? "month" : "daily");
       const weekday = Object.entries((INSIGHTS && INSIGHTS.by_weekday) || {});
-      document.getElementById("weekdayChart").innerHTML = columnSvg(weekday, "暂无星期分布");
+      document.getElementById("weekdayChart").innerHTML = columnSvg(weekday, "暂无星期分布", "week");
       const methods = Object.entries((INSIGHTS && INSIGHTS.by_method) || {}).map(([key, amount]) => [methodLabel[key] || key, amount]);
       document.getElementById("methodChart").innerHTML = hbarSvg(methods, "暂无渠道统计");
     }
