@@ -417,21 +417,43 @@ class LedgerToolTest(unittest.TestCase):
             self.assertEqual(pack["month"], "2026-08")
             self.assertIsNone(pack["bill"])
             self.assertIn("facts", pack)
-            run_tool(
-                "bill",
-                "save",
-                "--ledger",
-                str(ledger),
-                "--month",
-                "2026-08",
-                "--title",
-                "八月午饭还是那些",
-                "--body",
-                "这月午饭比较固定，没有乱花。",
+            saved = json.loads(
+                run_tool(
+                    "bill",
+                    "save",
+                    "--ledger",
+                    str(ledger),
+                    "--month",
+                    "2026-08",
+                    "--title",
+                    "八月午饭还是那些",
+                    "--body",
+                    "这月午饭比较固定，没有乱花。",
+                ).stdout
             )
+            html_path = Path(saved["file"])
+            self.assertTrue(html_path.exists())
+            self.assertEqual(html_path.name, "ledger-bill-2026-08.html")
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("<canvas", html)
+            self.assertIn("这月午饭比较固定", html)
+            self.assertNotIn("file", json.loads(ledger.read_text(encoding="utf-8"))["bills"][0])
             shown = run_tool("bill", "show", "--ledger", str(ledger), "--month", "2026-08")
             self.assertIn("这月午饭比较固定", shown.stdout)
             self.assertIn("八月午饭还是那些", shown.stdout)
+
+    def test_bill_render_writes_canvas_html(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "lazy-ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--text", "2026-08-03 午饭 16")
+            payload = json.loads(
+                run_tool("bill", "render", "--ledger", str(ledger), "--month", "2026-08").stdout
+            )
+            html_path = Path(payload["file"])
+            self.assertEqual(html_path.name, "lazy-ledger-bill-2026-08.html")
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("<canvas", html)
+            self.assertIn("2026-08", html)
 
     def test_render_includes_accounts_and_budgets(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -683,6 +705,11 @@ class LiveServerTest(unittest.TestCase):
                 with urllib.request.urlopen(save_bill, timeout=5) as resp:
                     saved = json.loads(resp.read().decode("utf-8"))
                 self.assertIn("花得不多", saved["body"])
+                with urllib.request.urlopen(base + "/bill/2026-08", timeout=5) as resp:
+                    canvas = resp.read().decode("utf-8")
+                self.assertIn("<canvas", canvas)
+                self.assertIn("花得不多", canvas)
+                self.assertTrue((Path(tmp) / "ledger-bill-2026-08.html").exists())
             finally:
                 server.shutdown()
                 server.server_close()

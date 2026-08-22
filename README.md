@@ -17,7 +17,7 @@
 - 智能报表：本季 / 今年、按日均推算月底或全年、周期账识别、待报销、未对上的退款、月度走势、账本观察
 - 账户：默认五账户、转账从哪到哪、余额 = 期初 ± 流水、`account list/add/update`；本地页面可改期初和默认账户
 - 预算：按月总额或分类限额、模板可每月复用、`show` 和页面显示剩余 / 超支 / 预计超支
-- 本地页面：四个 Tab（记账 / 报表 / 月度账单 / 账本）。报表用 SVG 饼图、折线、柱状图；月度账单由助手根据事实写成文章后存进账本
+- 本地页面：四个 Tab（记账 / 报表 / 月度账单 / 账本）。报表用 SVG 饼图、折线、柱状图；月度账单由助手写成文章，并另存为每月一份 Canvas HTML（`lazy-ledger-bill-YYYY-MM.html`）
 - 备份：`backup` 复制一份带日期的 JSON
 - 文档库：`lazy-ledger.json` 作为本地 JSON document store（collections：transactions / accounts / budgets / categories / bills），带文件锁
 

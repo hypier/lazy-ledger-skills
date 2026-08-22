@@ -34,7 +34,7 @@ Use this schema for `lazy-ledger.json`. Unknown fields must be preserved.
 }
 ```
 
-`preferences` is optional on old files. The tool creates it when missing. `bills` holds monthly letters (`month`, `title`, `body`). Missing `bills` is filled as `[]`.
+`preferences` is optional on old files. The tool creates it when missing. `bills` holds monthly letters (`month`, `title`, `body`). Missing `bills` is filled as `[]`. Canvas HTML snapshots live beside the ledger as `{stem}-bill-YYYY-MM.html`; do not store those paths in this JSON.
 
 The file is a JSON document database, not SQL. Collections are `transactions`, `accounts`, `budgets`, `categories`, `habits`, and `bills`. Each item is a document with an `id`. `store` is `lazy-ledger-docs`. Unknown fields must be preserved.
 

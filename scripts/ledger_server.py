@@ -139,6 +139,15 @@ def make_handler(ledger_path):
             if path == "/":
                 _send(self, 200, body=APP_HTML.read_bytes(), content_type="text/html; charset=utf-8")
                 return
+            if path == "/bill" or path.startswith("/bill/"):
+                month = None if path == "/bill" else path.rsplit("/", 1)[-1]
+                if month and not tool.BILL_MONTH_RE.match(month):
+                    _send(self, 404, {"error": "not_found"})
+                    return
+                ledger = tool.load_ledger(ledger_path, create=True)
+                _pack, html_path = tool.render_bill_html(ledger, ledger_path, month)
+                _send(self, 200, body=html_path.read_bytes(), content_type="text/html; charset=utf-8")
+                return
             if path == "/api/health":
                 _send(self, 200, {"ok": True, "ledger": str(ledger_path.resolve())})
                 return

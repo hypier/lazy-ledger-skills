@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>月度账单</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #efe8dc;
+      --paper: #fbf7f0;
+      --ink: #1f1a14;
+      --muted: #6a5f54;
+      --line: #d9cfc0;
+      --pine: #2c5c4f;
+      --expense: #9e3a32;
+      --chip: #eadfcf;
+      --focus: #2c5c4f;
+      --serif: "Songti SC", "STSong", "Noto Serif CJK SC", Georgia, serif;
+      --sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #161310;
+        --paper: #201c18;
+        --ink: #f4ece3;
+        --muted: #b6aa9c;
+        --line: #3c342c;
+        --pine: #86c4b0;
+        --expense: #e08a82;
+        --chip: #2b251f;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 360px at 12% -8%, color-mix(in srgb, var(--pine) 12%, transparent), transparent 55%),
+        var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+    .bar {
+      position: sticky; top: 0; z-index: 4;
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; flex-wrap: wrap;
+      padding: 12px 18px;
+      background: color-mix(in srgb, var(--paper) 92%, transparent);
+      border-bottom: 1px solid var(--line);
+    }
+    .bar span { color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 8px; }
+    button {
+      height: 44px; padding: 0 16px; min-width: 44px;
+      border: 1px solid var(--line); border-radius: 999px;
+      background: var(--chip); color: inherit; font: inherit; cursor: pointer;
+    }
+    button.primary { background: var(--pine); color: var(--paper); border-color: var(--pine); }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .stage { padding: 28px 16px 72px; display: grid; justify-items: center; }
+    canvas {
+      width: min(840px, 100%);
+      height: auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 18px 40px rgba(31, 26, 20, 0.08);
+    }
+    .sr {
+      position: absolute; width: 1px; height: 1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0);
+    }
+    @media print {
+      .bar { display: none; }
+      body { background: white; }
+      canvas { box-shadow: none; border: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <span id="fileLabel">本机月度账单</span>
+    <div class="actions">
+      <button type="button" id="pngBtn">导出 PNG</button>
+      <button class="primary" type="button" id="printBtn">打印</button>
+    </div>
+  </div>
+  <main class="stage">
+    <canvas id="bill" width="840" height="1200" aria-label="月度账单画布"></canvas>
+    <div class="sr" id="fallback"></div>
+  </main>
+  <script>
+    const DATA = __BILL_DATA__;
+    const PAGE_W = 840;
+    const MARGIN = 52;
+
+    function theme() {
+      const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+      return dark ? {
+        paper: "#201c18", ink: "#f4ece3", muted: "#b6aa9c", line: "#3c342c",
+        pine: "#86c4b0", expense: "#e08a82", chip: "#2b251f",
+        colors: ["#86c4b0", "#e08a82", "#8eb0d8", "#c4a35a", "#9bb59a", "#c2b0cc"]
+      } : {
+        paper: "#fbf7f0", ink: "#1f1a14", muted: "#6a5f54", line: "#d9cfc0",
+        pine: "#2c5c4f", expense: "#9e3a32", chip: "#eadfcf",
+        colors: ["#2c5c4f", "#9e3a32", "#3d5a80", "#c4a35a", "#6b8f71", "#6a5470"]
+      };
+    }
+
+    function money(value) {
+      return new Intl.NumberFormat("zh-CN", { style: "currency", currency: DATA.currency || "CNY" }).format(Number(value || 0));
+    }
+
+    function monthTitle(stamp) {
+      const [year, month] = String(stamp || "").split("-");
+      if (!year || !month) return stamp || "月度账单";
+      return `${year}年${Number(month)}月`;
+    }
+
+    function topSlices(map, limit = 5) {
+      const rows = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
+      if (rows.length <= limit) return rows;
+      const head = rows.slice(0, limit - 1);
+      const rest = rows.slice(limit - 1).reduce((sum, item) => sum + item[1], 0);
+      return head.concat([["其他", rest]]);
+    }
+
+    function wrap(ctx, text, maxWidth) {
+      const lines = [];
+      for (const para of String(text || "").replace(/\r/g, "").split("\n")) {
+        if (!para) { lines.push(""); continue; }
+        let line = "";
+        for (const ch of para) {
+          const trial = line + ch;
+          if (line && ctx.measureText(trial).width > maxWidth) {
+            lines.push(line);
+            line = ch;
+          } else {
+            line = trial;
+          }
+        }
+        if (line) lines.push(line);
+      }
+      return lines;
+    }
+
+    function plainLetter(body) {
+      return String(body || "")
+        .replace(/^#{1,3}\s+/gm, "")
+        .replace(/\*\*(.+?)\*\*/g, "$1")
+        .replace(/^[-*]\s+/gm, "• ")
+        .trim();
+    }
+
+    function letterBlocks(body) {
+      return plainLetter(body).split(/\n{2,}/).filter(Boolean);
+    }
+
+    function drawRoundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function drawDonut(ctx, cx, cy, r, slices, colors) {
+      const total = slices.reduce((sum, item) => sum + item[1], 0) || 1;
+      let start = -Math.PI / 2;
+      slices.forEach((item, index) => {
+        const angle = (item[1] / total) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, start, start + angle);
+        ctx.arc(cx, cy, r * 0.58, start + angle, start, true);
+        ctx.closePath();
+        ctx.fillStyle = colors[index % colors.length];
+        ctx.fill();
+        start += angle;
+      });
+    }
+
+    function drawLine(ctx, x, y, w, h, points, color) {
+      if (!points.length) return;
+      const max = Math.max(...points.map((item) => item[1]), 1);
+      const coords = points.map((item, index) => {
+        const px = x + (points.length === 1 ? w / 2 : index / (points.length - 1) * w);
+        const py = y + h - (item[1] / max) * h;
+        return [px, py];
+      });
+      ctx.beginPath();
+      ctx.moveTo(coords[0][0], y + h);
+      coords.forEach((point) => ctx.lineTo(point[0], point[1]));
+      ctx.lineTo(coords[coords.length - 1][0], y + h);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.12;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      coords.forEach((point, index) => index ? ctx.lineTo(point[0], point[1]) : ctx.moveTo(point[0], point[1]));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.2;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+    }
+
+    function paint() {
+      const T = theme();
+      const facts = DATA.facts || {};
+      const totals = facts.totals || {};
+      const saved = DATA.bill || {};
+      const slices = topSlices(facts.by_category);
+      const merchants = (facts.top_merchants || []).slice(0, 5);
+      const trend = Object.entries(facts.by_day || {}).slice(-12);
+      const letter = saved.body || (facts.insights || []).map((item) => "• " + item).join("\n");
+      const title = saved.title || `${monthTitle(DATA.month)}账单`;
+
+      const canvas = document.getElementById("bill");
+      const probe = canvas.getContext("2d");
+      probe.font = "16px " + getComputedStyle(document.body).fontFamily;
+      const contentW = PAGE_W - MARGIN * 2;
+      const blocks = letterBlocks(letter);
+      let letterH = 0;
+      probe.font = "16px PingFang SC, sans-serif";
+      for (const block of blocks) {
+        letterH += wrap(probe, block, contentW).length * 26 + 12;
+      }
+      const pageH = Math.max(1180, 720 + merchants.length * 32 + letterH);
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = PAGE_W * dpr;
+      canvas.height = pageH * dpr;
+      canvas.style.width = PAGE_W + "px";
+      canvas.style.height = pageH + "px";
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      ctx.fillStyle = T.paper;
+      ctx.fillRect(0, 0, PAGE_W, pageH);
+      ctx.strokeStyle = T.line;
+      ctx.globalAlpha = 0.45;
+      for (let y = 36; y < pageH; y += 28) {
+        ctx.beginPath();
+        ctx.moveTo(MARGIN, y);
+        ctx.lineTo(PAGE_W - MARGIN, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = T.pine;
+      ctx.fillRect(0, 0, 8, pageH);
+
+      let y = 48;
+      ctx.fillStyle = T.muted;
+      ctx.font = "12px PingFang SC, sans-serif";
+      ctx.fillText("本机账本 · 月度账单", MARGIN, y);
+      y += 36;
+      ctx.fillStyle = T.ink;
+      ctx.font = "600 40px Songti SC, STSong, serif";
+      ctx.fillText(title, MARGIN, y);
+      y += 28;
+      ctx.fillStyle = T.muted;
+      ctx.font = "14px PingFang SC, sans-serif";
+      ctx.fillText(`${monthTitle(DATA.month)}  ·  ${facts.count || 0} 笔  ·  日均 ${money(facts.daily_average)}`, MARGIN, y);
+      y += 28;
+
+      const cards = [
+        ["支出", money(totals.expense), T.expense],
+        ["收入", money(totals.income), T.pine],
+        ["净额", money(totals.net), T.ink]
+      ];
+      const gap = 12;
+      const cardW = (contentW - gap * 2) / 3;
+      cards.forEach((card, index) => {
+        const x = MARGIN + index * (cardW + gap);
+        ctx.fillStyle = T.chip;
+        drawRoundRect(ctx, x, y, cardW, 78, 14);
+        ctx.fill();
+        ctx.fillStyle = T.pine;
+        ctx.fillRect(x, y + 10, 4, 58);
+        ctx.fillStyle = T.muted;
+        ctx.font = "13px PingFang SC, sans-serif";
+        ctx.fillText(card[0], x + 16, y + 28);
+        ctx.fillStyle = card[2];
+        ctx.font = "600 22px Songti SC, STSong, serif";
+        ctx.fillText(card[1], x + 16, y + 58);
+      });
+      const change = facts.comparison && facts.comparison.expense_change_pct;
+      if (change != null) {
+        ctx.fillStyle = T.muted;
+        ctx.font = "12px PingFang SC, sans-serif";
+        const sign = change > 0 ? "+" : "";
+        ctx.fillText(`较上月支出 ${sign}${Number(change).toFixed(1)}%`, MARGIN, y + 100);
+      }
+      y += 124;
+
+      ctx.fillStyle = T.ink;
+      ctx.font = "600 18px Songti SC, STSong, serif";
+      ctx.fillText("分类与走势", MARGIN, y);
+      y += 16;
+      const donutX = MARGIN + 78;
+      const donutY = y + 78;
+      if (slices.length) drawDonut(ctx, donutX, donutY, 68, slices, T.colors);
+      const pieTotal = slices.reduce((sum, item) => sum + item[1], 0) || 1;
+      slices.forEach((item, index) => {
+        const ly = y + 18 + index * 24;
+        ctx.fillStyle = T.colors[index % T.colors.length];
+        drawRoundRect(ctx, MARGIN + 176, ly - 10, 10, 10, 3);
+        ctx.fill();
+        ctx.fillStyle = T.ink;
+        ctx.font = "13px PingFang SC, sans-serif";
+        ctx.fillText(item[0], MARGIN + 194, ly);
+        ctx.fillStyle = T.muted;
+        ctx.font = "12px ui-monospace, SF Mono, monospace";
+        ctx.fillText(`${Math.round(item[1] / pieTotal * 100)}%  ${money(item[1])}`, MARGIN + 300, ly);
+      });
+      drawLine(ctx, MARGIN + 470, y + 8, contentW - 470, 140, trend, T.pine);
+      ctx.fillStyle = T.muted;
+      ctx.font = "12px PingFang SC, sans-serif";
+      ctx.fillText(trend.length ? "每日支出" : "暂无每日走势", MARGIN + 470, y + 168);
+      y += 196;
+
+      ctx.fillStyle = T.ink;
+      ctx.font = "600 18px Songti SC, STSong, serif";
+      ctx.fillText("商户", MARGIN, y);
+      y += 18;
+      const maxMerchant = Math.max(...merchants.map((item) => Number(item.amount || 0)), 1);
+      if (!merchants.length) {
+        ctx.fillStyle = T.muted;
+        ctx.font = "14px PingFang SC, sans-serif";
+        ctx.fillText("这个月还没有商户统计。", MARGIN, y + 12);
+        y += 36;
+      }
+      merchants.forEach((item, index) => {
+        const amount = Number(item.amount || 0);
+        const bar = Math.max(8, amount / maxMerchant * 420);
+        ctx.fillStyle = T.chip;
+        drawRoundRect(ctx, MARGIN, y, contentW, 28, 8);
+        ctx.fill();
+        ctx.fillStyle = T.colors[index % T.colors.length];
+        drawRoundRect(ctx, MARGIN, y, bar, 28, 8);
+        ctx.fill();
+        ctx.fillStyle = T.ink;
+        ctx.font = "13px PingFang SC, sans-serif";
+        ctx.fillText(String(item.merchant || "").slice(0, 12), MARGIN + 10, y + 19);
+        ctx.font = "12px ui-monospace, SF Mono, monospace";
+        ctx.fillText(money(amount), PAGE_W - MARGIN - 8 - ctx.measureText(money(amount)).width, y + 19);
+        y += 34;
+      });
+      y += 18;
+
+      ctx.fillStyle = T.ink;
+      ctx.font = "600 18px Songti SC, STSong, serif";
+      ctx.fillText("这月怎么过的", MARGIN, y);
+      y += 28;
+      ctx.fillStyle = T.ink;
+      ctx.font = "16px PingFang SC, sans-serif";
+      const source = letter || "数字已经齐了，文字结论还没有。";
+      for (const block of letterBlocks(source)) {
+        for (const line of wrap(ctx, block, contentW)) {
+          ctx.fillText(line || " ", MARGIN, y);
+          y += 26;
+        }
+        y += 10;
+      }
+
+      y = Math.max(y + 24, pageH - 36);
+      ctx.fillStyle = T.muted;
+      ctx.font = "12px PingFang SC, sans-serif";
+      ctx.fillText("仅保存在本机 · 可导出 PNG 或打印", MARGIN, pageH - 28);
+
+      document.title = title;
+      document.getElementById("fileLabel").textContent = `${monthTitle(DATA.month)} · 画布账单`;
+      document.getElementById("fallback").textContent = `${title}。支出 ${money(totals.expense)}，收入 ${money(totals.income)}。${plainLetter(letter)}`;
+    }
+
+    paint();
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
+    document.getElementById("printBtn").addEventListener("click", () => window.print());
+    document.getElementById("pngBtn").addEventListener("click", () => {
+      const canvas = document.getElementById("bill");
+      const link = document.createElement("a");
+      link.download = `lazy-ledger-bill-${DATA.month || "month"}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
+  </script>
+</body>
+</html>

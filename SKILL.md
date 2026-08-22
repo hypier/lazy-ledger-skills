@@ -1,6 +1,6 @@
 ---
 name: lazy-ledger
-description: Personal lazy bookkeeping assistant. Records expenses, income, refunds, and transfers into a local JSON document ledger from casual Chinese text, receipts, screenshots, or pasted payment history; learns a usage portrait from the ledger so later records can default account, category, and stable amounts without asking; tracks accounts and monthly budgets; summarizes spending in chat with year/quarter views, recurring bills, and budget pace; serves a localhost page with tabs for recording, charts, a monthly AI bill, and accounts; and can also generate a self-contained HTML snapshot. Use when the user asks to 记账, 懒人记账, 记一笔, 这个月花了多少, 今年花了多少, 看账, 对账, 预算, 转账, 账户余额, 打开页面, 改账, 月度账单, 删掉刚才那笔, 记账习惯, 备份, record a purchase, import WeChat/Alipay history, summarize spending, or inspect ledger data.
+description: Personal lazy bookkeeping assistant. Records expenses, income, refunds, and transfers into a local JSON document ledger from casual Chinese text, receipts, screenshots, or pasted payment history; learns a usage portrait from the ledger so later records can default account, category, and stable amounts without asking; tracks accounts and monthly budgets; summarizes spending in chat with year/quarter views, recurring bills, and budget pace; serves a localhost page with tabs for recording, charts, a monthly AI canvas bill, and accounts; and can also generate a self-contained HTML snapshot. Use when the user asks to 记账, 懒人记账, 记一笔, 这个月花了多少, 今年花了多少, 看账, 对账, 预算, 转账, 账户余额, 打开页面, 改账, 月度账单, 删掉刚才那笔, 记账习惯, 备份, record a purchase, import WeChat/Alipay history, summarize spending, or inspect ledger data.
 ---
 
 # Lazy Ledger
@@ -13,6 +13,7 @@ Maintain a local personal ledger with minimal friction. Infer fields, write stru
 - Ledger: `./lazy-ledger.json` in the user's working directory unless they name another file
 - Habit memory: `./lazy-ledger-memory.md` next to the ledger (periodic portrait for the agent to Read)
 - Dashboard: `./lazy-ledger-report.html` unless they name another output
+- Monthly canvas bill: `./lazy-ledger-bill-YYYY-MM.html` next to the ledger (one HTML file per month)
 - Live page: `python3 ... serve --ledger ./lazy-ledger.json` on 127.0.0.1 only
 
 Never write the ledger into the skill directory. The ledger file is a JSON document database (`store: lazy-ledger-docs`) with collections: `transactions`, `accounts`, `budgets`, `categories`, `habits`, `bills`.
@@ -32,7 +33,7 @@ Never write the ledger into the skill directory. The ledger file is a JSON docum
 | 备份账本 | [references/present.md](references/present.md) | `backup` |
 | 设预算 / 这个月还能花多少 | [references/present.md](references/present.md) | `budget set` then `show` |
 | "看数据 / 打开报表 / 改账 / 本地页面" | [references/present.md](references/present.md), [references/html-report.md](references/html-report.md) | `serve` then URL `#charts` or `#ledger` |
-| "月度账单 / 出一份账单" | [references/present.md](references/present.md) | `bill show --json`, write the letter, `bill save` |
+| "月度账单 / 出一份账单" | [references/present.md](references/present.md) | `bill show --json`, write the letter, `bill save` (writes a Canvas HTML file) |
 | Schema or manual JSON edits | [references/ledger-schema.md](references/ledger-schema.md) | `doctor --json` |
 | Field inference details | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) | — |
 
@@ -77,7 +78,7 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
   --ledger ./lazy-ledger.json
 ```
 
-The command prints `{"url":"http://127.0.0.1:8765/","ledger":"..."}`. Give the user that URL. Append `#charts` for the chart report, `#bill` for the monthly letter, `#book` for accounts. Bind only to localhost. Use `render` when they want a standalone HTML file to keep or share locally.
+The command prints `{"url":"http://127.0.0.1:8765/","ledger":"..."}`. Give the user that URL. Append `#charts` for the chart report, `#bill` for the monthly letter, `#book` for accounts. A canvas bill is also at `/bill/YYYY-MM`. Bind only to localhost. Use `render` for a full snapshot; `bill save` / `bill render` for one month's canvas page.
 
 Then give the file path or URL. Read [references/present.md](references/present.md) for chat templates and when to add the dashboard.
 

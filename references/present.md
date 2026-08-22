@@ -13,7 +13,7 @@ How to show ledger data to the user. Chat is the default. The localhost page is 
 | 账户余额 / 各账户还剩多少 | `account list --json`, or `show` which already includes 账户. |
 | 最近花在哪 / 哪个商户最多 | `show --compare` plus `list --limit 10` if they want rows. |
 | 看一下数据 / 打开报表 / 本地页面 / 改账 | `serve` in the background, give the localhost URL. Add `#charts` for 报表, `#bill` for 月度账单. |
-| 出一份月度账单 / 8月账单 | `bill show --month YYYY-MM --json`. Write the letter from `facts` + `brief`. Then `bill save --body`. Offer the page at `#bill`. |
+| 出一份月度账单 / 8月账单 | `bill show --month YYYY-MM --json`. Write the letter from `facts` + `brief`. Then `bill save --body`. Give the saved HTML path (`file`). Offer `#bill` or `/bill/YYYY-MM`. |
 | 我的记账习惯 / 我平时怎么记 | Read `lazy-ledger-memory.md`. Reply with the 画像. `habit memory` if the file is missing or stale. |
 | 导出静态页面 | `render`, then give the file path. |
 | More than 15 matching rows | Short totals in chat, then `serve` or `render`. |
@@ -71,7 +71,7 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
   --ledger ./lazy-ledger.json
 ```
 
-Run it in the background. It prints `{"url":"http://127.0.0.1:8765/",...}`. Only localhost is allowed. The page talks to the JSON document store: add from a text box, edit/delete rows, set budgets, see balances.
+Run it in the background. It prints `{"url":"http://127.0.0.1:8765/",...}`. Only localhost is allowed. The page talks to the JSON document store: add from a text box, edit/delete rows, set budgets, see balances. Monthly canvas bills are at `/bill/YYYY-MM` and also written next to the ledger.
 
 `--open` launches the system browser. `--port` picks another local port if 8765 is taken.
 
@@ -150,4 +150,6 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py bill save
   --body "……写好的正文……"
 ```
 
-Reply in chat with the letter. If they have the live page open, point them to `#bill`.
+`bill save` writes the letter into the ledger and a standalone Canvas HTML file beside it, e.g. `./lazy-ledger-bill-2026-08.html`. Do not store that path inside the JSON. `bill render --month YYYY-MM` regenerates the file without rewriting the letter.
+
+Reply in chat with the letter **and the HTML path** from `file`. If they have the live page open, point them to `#bill` or `http://127.0.0.1:8765/bill/2026-08`.

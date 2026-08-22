@@ -149,6 +149,13 @@
     .btn.primary { background: var(--pine); color: var(--paper); border-color: var(--pine); }
     .btn.primary:hover { filter: brightness(1.04); }
     .btn.danger { color: var(--expense); background: color-mix(in srgb, var(--expense) 10%, var(--paper)); border-color: transparent; }
+    a.btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      color: inherit;
+    }
     .toolbar { padding: 14px; margin: 16px 0; }
     .period { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -435,10 +442,11 @@
       </section>
 
       <section class="panel-tab" id="panel-bill" role="tabpanel" aria-labelledby="tab-bill" hidden>
-        <div class="toolbar" style="margin-top:0">
+        <div class="toolbar" style="margin-top:0; display:flex; gap:12px; align-items:end; flex-wrap:wrap">
           <label class="field" style="max-width:220px"><span>月份</span><select id="billMonth"></select></label>
+          <a class="btn primary" id="openBillCanvas" href="/bill" target="_blank" rel="noopener">打开画布账单</a>
         </div>
-        <p class="hint" id="billHint">账单分两层：上面是数字，下面是助手写的结论。还没写的话，在对话里说「出一份这个月的账单」。</p>
+        <p class="hint" id="billHint">每月一张独立的画布页，和账本放在同一目录。还没写结论的话，在对话里说「出一份这个月的账单」。</p>
         <div class="bill-facts" id="billFacts"></div>
         <section class="panel">
           <div class="panel-head"><h2 id="billTitle">月度账单</h2><span class="panel-kicker" id="billStatus">结论</span></div>
@@ -874,6 +882,8 @@
       const current = pack.month || monthSelect.value;
       monthSelect.innerHTML = (months.length ? months : [current]).map((month) => `<option value="${escapeHtml(month)}">${escapeHtml(month)}</option>`).join("");
       if (current) monthSelect.value = current;
+      const canvasLink = document.getElementById("openBillCanvas");
+      canvasLink.href = current ? `/bill/${encodeURIComponent(current)}` : "/bill";
       document.getElementById("billFacts").innerHTML = [
         ["支出", money(totals.expense), "spend"],
         ["收入", money(totals.income), ""],
@@ -883,7 +893,7 @@
       if (saved.body) {
         document.getElementById("billStatus").textContent = "助手写的结论";
         document.getElementById("billBody").innerHTML = renderMarkdown(saved.body);
-        document.getElementById("billHint").textContent = "数字来自账本；下面的文字是助手根据这个月的事实写的。";
+        document.getElementById("billHint").textContent = "数字来自账本；文字是助手写的。完整版在「打开画布账单」，每月一个本地 HTML。";
       } else {
         const insights = facts.insights || [];
         document.getElementById("billStatus").textContent = "还没写结论";

@@ -18,6 +18,8 @@ from ledger_db import STORE_KIND, STORE_VERSION, atomic_write_json, read_json
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 DEFAULT_TEMPLATE = SKILL_DIR / "assets" / "ledger-viewer-template.html"
+DEFAULT_BILL_TEMPLATE = SKILL_DIR / "assets" / "ledger-bill-canvas.html"
+BILL_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 VALID_TYPES = {"expense", "income", "refund", "transfer"}
 VALID_SOURCES = {"text", "image", "voice", "manual", "import"}
 VALID_METHODS = {"wechat", "alipay", "cash", "card", "bank", "other"}
@@ -2513,6 +2515,7 @@ def build_bill_pack(ledger, month=None):
             "count": summary.get("count"),
             "daily_average": summary.get("daily_average"),
             "by_category": summary.get("by_category"),
+            "by_day": summary.get("by_day"),
             "by_weekday": summary.get("by_weekday"),
             "weekday": summary.get("weekday"),
             "top_merchants": summary.get("top_merchants"),
@@ -2564,9 +2567,53 @@ def render_bill_pack(pack, currency="CNY"):
     return "\n".join(lines) + "\n"
 
 
+def default_bill_html_path(ledger_path, month):
+    path = Path(ledger_path)
+    return path.with_name(f"{path.stem}-bill-{month}.html")
+
+
+def bill_canvas_payload(pack):
+    return {
+        "month": pack.get("month"),
+        "currency": pack.get("currency", "CNY"),
+        "facts": pack.get("facts") or {},
+        "bill": pack.get("bill"),
+    }
+
+
+def attach_bill_file(pack, ledger_path):
+    month = pack.get("month")
+    path = default_bill_html_path(ledger_path, month)
+    attached = dict(pack)
+    attached["file"] = {
+        "path": str(path.resolve()),
+        "name": path.name,
+        "exists": path.exists(),
+    }
+    return attached
+
+
+def write_bill_html(pack, output_path, template_path=None):
+    template = Path(template_path) if template_path else DEFAULT_BILL_TEMPLATE
+    html = template.read_text(encoding="utf-8")
+    payload = json.dumps(bill_canvas_payload(pack), ensure_ascii=False).replace("</", "<\\/")
+    html = html.replace("__BILL_DATA__", payload)
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(html, encoding="utf-8")
+    return output.resolve()
+
+
+def render_bill_html(ledger, ledger_path, month=None, output_path=None, template_path=None):
+    pack = build_bill_pack(ledger, month)
+    dest = Path(output_path) if output_path else default_bill_html_path(ledger_path, pack["month"])
+    path = write_bill_html(pack, dest, template_path=template_path)
+    return pack, path
+
+
 def bill_show_command(args):
     ledger = load_ledger(args.ledger, create=False)
-    pack = build_bill_pack(ledger, args.month)
+    pack = attach_bill_file(build_bill_pack(ledger, args.month), args.ledger)
     if args.json:
         print(json.dumps(pack, ensure_ascii=False, indent=2))
         return
@@ -2622,7 +2669,23 @@ def bill_save_command(args):
         }
         ledger.setdefault("bills", []).append(bill)
     save_ledger(args.ledger, ledger)
-    print(json.dumps(bill, ensure_ascii=False, indent=2))
+    pack = build_bill_pack(ledger, month)
+    html_path = write_bill_html(pack, default_bill_html_path(args.ledger, month))
+    payload = dict(bill)
+    payload["file"] = str(html_path)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def bill_render_command(args):
+    ledger = load_ledger(args.ledger, create=False)
+    pack, html_path = render_bill_html(
+        ledger,
+        args.ledger,
+        month=args.month,
+        output_path=args.output,
+        template_path=args.template,
+    )
+    print(json.dumps({"month": pack["month"], "file": str(html_path)}, ensure_ascii=False, indent=2))
 
 
 def format_list_row(tx):
@@ -3376,6 +3439,12 @@ def build_parser():
     p_bill_save.add_argument("--title", default=None)
     p_bill_save.add_argument("--body", required=True)
     p_bill_save.set_defaults(func=bill_save_command)
+    p_bill_render = bill_sub.add_parser("render", help="Write a standalone Canvas HTML bill")
+    p_bill_render.add_argument("--ledger", required=True)
+    p_bill_render.add_argument("--month", default=None, help="YYYY-MM")
+    p_bill_render.add_argument("--output", default=None, help="Defaults to {ledger-stem}-bill-YYYY-MM.html")
+    p_bill_render.add_argument("--template", default=None)
+    p_bill_render.set_defaults(func=bill_render_command)
 
     p_list = sub.add_parser("list", help="List transactions")
     add_filter_flags(p_list, limit=20, json_flag=True)

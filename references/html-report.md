@@ -17,7 +17,7 @@ python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
 - Reads and writes the same ledger file as the CLI
 - Four tabs: 记账 / 报表 / 月度账单 / 账本 (`#ledger` `#charts` `#bill` `#book`)
 - 报表: category donut, merchant bars, daily/monthly line, weekday and method charts (SVG, no libraries)
-- 月度账单: month facts plus the saved AI letter
+- 月度账单: month facts plus the saved AI letter; **打开画布账单** opens `/bill/YYYY-MM` (Canvas, one local HTML file per month)
 - 账本: add/edit accounts (opening, default) and budgets
 - No shortcut chips; habits stay in the background
 
@@ -59,3 +59,25 @@ The template includes:
 - CSV export of the current filter
 
 If the user wants a custom look, copy the template or generated file and edit the copy, not the bundled asset.
+
+## Monthly canvas bill
+
+Each month is a separate self-contained HTML file next to the ledger:
+
+```bash
+python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py bill save \
+  --ledger ./lazy-ledger.json \
+  --month 2026-08 \
+  --title "八月还是把钱花在吃上" \
+  --body "……"
+```
+
+Default path: `{ledger-stem}-bill-YYYY-MM.html` (for `./lazy-ledger.json` → `./lazy-ledger-bill-2026-08.html`).
+
+- Template: `assets/ledger-bill-canvas.html`
+- Draws on `<canvas>` (paper-ledger look); no network, no libraries
+- Also served live at `http://127.0.0.1:8765/bill/2026-08`
+- Export PNG / print from the page
+- `bill render --month YYYY-MM` regenerates the file from current facts + saved letter
+
+Do not put absolute file paths into `lazy-ledger.json`. Generated `*-bill-YYYY-MM.html` files are gitignored.
