@@ -632,6 +632,22 @@ class LiveServerTest(unittest.TestCase):
                 self.assertIn('role="tab"', html)
                 self.assertIn("月度账单", html)
                 self.assertIn("pieChart", html)
+                self.assertIn('id="icon-expense"', html)
+                self.assertIn('id="icon-food"', html)
+                self.assertIn("function categoryIcon(category, type)", html)
+                self.assertIn("icon(categoryIcon(tx.category, type))", html)
+                self.assertIn('id="icon-wechat"', html)
+                self.assertIn("function accountIcon(method, account)", html)
+                self.assertIn("icon(accountIcon(tx.method, account))", html)
+                self.assertIn("function shortWhen(tx)", html)
+                self.assertIn('class="row-when"', html)
+                self.assertIn('const showTypeBadge = (type) => type === "refund" || type === "transfer"', html)
+                self.assertIn("function groupTransactionsByDay(rows)", html)
+                self.assertIn("function dailyTotals(rows)", html)
+                self.assertIn('class="day-head"', html)
+                self.assertIn('class="row editable-row"', html)
+                self.assertNotIn("跳到账本", html)
+                self.assertNotIn('type="button">改</button>', html)
 
                 add_req = urllib.request.Request(
                     base + "/api/transactions",

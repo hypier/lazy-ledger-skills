@@ -61,18 +61,19 @@
     button, a, select, input, textarea { touch-action: manipulation; }
     button { cursor: pointer; }
     :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
-    .skip {
-      position: absolute;
-      left: 12px;
-      top: 12px;
-      transform: translateY(-120%);
-      background: var(--ink);
-      color: var(--paper);
-      padding: 10px 14px;
-      border-radius: 10px;
-      z-index: 20;
+    .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon {
+      width: 16px;
+      height: 16px;
+      display: inline-block;
+      flex: none;
+      vertical-align: -0.18em;
     }
-    .skip:focus { transform: none; }
+    .icon-label, .metric-label, .panel-head h2, .meta-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
     .wrap { max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px, 4vw, 36px) 72px; }
     .brand {
       display: flex;
@@ -143,6 +144,7 @@
       min-width: 44px;
       transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
     }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
     .btn:hover, .chip:hover { border-color: color-mix(in srgb, var(--ink) 35%, var(--line)); }
     .btn:active, .chip:active { transform: translateY(1px); }
     .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
@@ -171,6 +173,7 @@
     }
     .metric.spend::before { background: var(--expense); }
     .metric-label { color: var(--muted); font-size: 13px; }
+    .metric-label .icon { width: 15px; height: 15px; }
     .metric-value {
       margin-top: 8px;
       font-family: var(--serif);
@@ -221,11 +224,86 @@
     }
     .row:last-child { border-bottom: 0; }
     .row:hover { background: color-mix(in srgb, var(--chip) 45%, transparent); }
+    .editable-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      cursor: pointer;
+      transition: background 160ms ease, box-shadow 160ms ease;
+    }
+    .editable-row:focus-visible {
+      position: relative;
+      z-index: 1;
+      outline-offset: -3px;
+    }
+    .row-main {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+    .row-copy { min-width: 0; }
+    .row-icon {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--pine);
+      background: var(--pine-soft);
+    }
+    .row-icon.expense { color: var(--expense); background: color-mix(in srgb, var(--expense) 11%, var(--paper)); }
+    .row-icon.income { color: var(--income); background: color-mix(in srgb, var(--income) 12%, var(--paper)); }
+    .row-icon.refund { color: var(--refund); background: color-mix(in srgb, var(--refund) 12%, var(--paper)); }
+    .row-icon.transfer { color: var(--transfer); background: color-mix(in srgb, var(--transfer) 12%, var(--paper)); }
+    .row-icon .icon { width: 17px; height: 17px; }
     .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .meta-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+    .meta-item { gap: 4px; }
+    .meta-item .icon { width: 12px; height: 12px; }
+    .meta-inline .badge {
+      order: 10;
+      height: 18px;
+      padding: 0 6px;
+      margin: 0 0 0 auto;
+      gap: 3px;
+      font-size: 10px;
+    }
+    .meta-inline .badge .icon { width: 10px; height: 10px; }
     .amount { font-family: var(--mono); font-weight: 650; font-variant-numeric: tabular-nums; }
+    .row-amount { display: grid; justify-items: end; gap: 3px; min-width: max-content; }
+    .row-when {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .row-when .icon { width: 11px; height: 11px; }
+    .transaction-rows { padding: 0; }
+    .day-group + .day-group { border-top: 8px solid color-mix(in srgb, var(--bg) 72%, var(--paper)); }
+    .day-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      padding: 9px 16px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--chip) 42%, var(--paper));
+    }
+    .day-title, .day-summary { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .day-title strong { font-family: var(--serif); font-size: 15px; font-weight: 650; }
+    .day-title small { color: var(--muted); font-size: 11px; }
+    .day-title .icon { width: 14px; height: 14px; color: var(--pine); }
+    .day-summary { color: var(--muted); font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .day-summary > span { white-space: nowrap; }
+    .day-summary-dot { opacity: 0.55; }
     .badge {
       display: inline-flex;
       align-items: center;
+      gap: 4px;
       height: 22px;
       padding: 0 8px;
       border-radius: 999px;
@@ -275,7 +353,12 @@
       background: transparent;
       border-radius: 999px;
       color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
     }
+    .tabs .icon { width: 17px; height: 17px; }
     .tabs button[aria-selected="true"] {
       background: var(--ink);
       color: var(--paper);
@@ -428,6 +511,8 @@
     }
     @media (max-width: 720px) {
       .metrics { grid-template-columns: 1fr 1fr; }
+      .tabs button { gap: 5px; font-size: 14px; }
+      .tabs .icon { width: 15px; height: 15px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before { transition: none !important; }
@@ -435,7 +520,51 @@
   </style>
 </head>
 <body>
-  <a class="skip" href="#main">跳到账本</a>
+  <svg class="icon-sprite" aria-hidden="true">
+    <defs>
+      <symbol id="icon-pen" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6m-6 4h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Zm0 0V21m5-13h7m-7 4h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 10 9 5 9-5m-18 5 9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-tag" viewBox="0 0 24 24"><path d="M20 13 13 20l-9-9V4h7l9 9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/></symbol>
+      <symbol id="icon-wallet" viewBox="0 0 24 24"><path d="M4 6.5h14a2 2 0 0 1 2 2V19H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11m3 8h-5a2 2 0 0 0 0 4h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-expense" viewBox="0 0 24 24"><path d="M7 7h10v10M7 17 17 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-income" viewBox="0 0 24 24"><path d="M17 17H7V7m10 0L7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-refund" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-transfer" viewBox="0 0 24 24"><path d="M5 7h14l-3-3m3 13H5l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-scale" viewBox="0 0 24 24"><path d="M12 3v18M5 7h14M7 7l-4 7h8L7 7Zm10 0-4 7h8l-4-7ZM8 21h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-store" viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6a3 3 0 0 1-5 2 3 3 0 0 1-4 0 3 3 0 0 1-4 0 3 3 0 0 1-5-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-light" viewBox="0 0 24 24"><path d="M9 18h6m-5 3h4m4-10a6 6 0 1 0-10 4.5c.7.6 1 1.4 1 2.5h6c0-1.1.3-1.9 1-2.5A6 6 0 0 0 18 11Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-pie" viewBox="0 0 24 24"><path d="M11 3a9 9 0 1 0 10 10h-10V3Zm4 1.2A8 8 0 0 1 19.8 9H15V4.2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18m-14 5h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15 9 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 4h6v6m0-6-9 9M19 13v7H4V5h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-food" viewBox="0 0 24 24"><path d="M7 3v8m-3-8v5a3 3 0 0 0 6 0V3M7 11v10m10-18v18m0-18c-2.2 1.8-3 4-3 7h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-shopping" viewBox="0 0 24 24"><path d="M5 8h14l1 13H4L5 8Zm4 0V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3V11Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-car" viewBox="0 0 24 24"><path d="m5 11 2-5h10l2 5m-14 0h14a2 2 0 0 1 2 2v5H3v-5a2 2 0 0 1 2-2Zm1 7v2m12-2v2M7 14h.01M17 14h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-coffee" viewBox="0 0 24 24"><path d="M4 7h13v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V7Zm13 2h2a3 3 0 0 1 0 6h-2M7 3v2m4-2v2m4-2v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-gift" viewBox="0 0 24 24"><path d="M3 9h18v12H3V9Zm-1-4h20v4H2V5Zm10 0v16m0-16H8.5A2.5 2.5 0 1 1 11 2.5V5Zm0 0h3.5A2.5 2.5 0 1 0 13 2.5V5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-medical" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-education" viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Zm4 2.5V16c3 3 9 3 12 0v-5.5M22 8v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-entertainment" viewBox="0 0 24 24"><path d="M7 8h10a5 5 0 0 1 4.7 6.7l-1 3a2.5 2.5 0 0 1-4.4.7L15 17H9l-1.3 1.4a2.5 2.5 0 0 1-4.4-.7l-1-3A5 5 0 0 1 7 8Zm1 3v4m-2-2h4m6-1h.01m2 2h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-grocery" viewBox="0 0 24 24"><path d="M4 10h16l-2 10H6L4 10Zm4 0 4-7 4 7M8 14h.01M12 14h.01M16 14h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Zm-3 9 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-cash" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 9H6v1m11-1h1v1M7 15H6v-1m11 1h1v-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/></symbol>
+      <symbol id="icon-wechat" viewBox="0 0 24 24"><path d="M10.5 5C5.8 5 2 7.8 2 11.3c0 2 1.2 3.7 3.3 4.9L4.5 19l3.1-1.6c1 .3 2 .4 2.9.4h.7a5.2 5.2 0 0 1-.7-2.5c0-3.2 3.2-5.8 7.3-5.8h.7C17.4 6.9 14.3 5 10.5 5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M22 15.3c0-2.7-2.8-4.8-6.2-4.8s-6.2 2.1-6.2 4.8 2.8 4.8 6.2 4.8c.8 0 1.5-.1 2.2-.3l2.4 1.2-.6-2.1c1.4-.9 2.2-2.2 2.2-3.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7.5 10h.01m5-0.2h.01m1.2 5h.01m4.2 0h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-alipay" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 9h8m-4-3v7m-5 1c3.7 0 7.2 1.2 10 3m-8.5 1c3.5-1.1 6-3.5 7.5-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </defs>
+  </svg>
   <div class="wrap">
     <header class="brand">
       <div class="mark" aria-hidden="true">
@@ -454,21 +583,21 @@
 
     <main id="main">
       <div class="tabs" role="tablist" aria-label="账本分区">
-        <button type="button" role="tab" id="tab-ledger" aria-controls="panel-ledger" data-tab="ledger">记账</button>
-        <button type="button" role="tab" id="tab-charts" aria-controls="panel-charts" data-tab="charts">报表</button>
-        <button type="button" role="tab" id="tab-bill" aria-controls="panel-bill" data-tab="bill">月度账单</button>
-        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" data-tab="book">账本</button>
+        <button type="button" role="tab" id="tab-ledger" aria-controls="panel-ledger" data-tab="ledger"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>记账</button>
+        <button type="button" role="tab" id="tab-charts" aria-controls="panel-charts" data-tab="charts"><svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>报表</button>
+        <button type="button" role="tab" id="tab-bill" aria-controls="panel-bill" data-tab="bill"><svg class="icon" aria-hidden="true"><use href="#icon-receipt"></use></svg>月度账单</button>
+        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" data-tab="book"><svg class="icon" aria-hidden="true"><use href="#icon-book"></use></svg>账本</button>
       </div>
 
       <section class="panel-tab" id="panel-ledger" role="tabpanel" aria-labelledby="tab-ledger">
       <form class="composer" id="addForm">
         <label class="field">
-          <span>记一笔</span>
+          <span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>记一笔</span>
           <textarea id="textInput" placeholder="昨天星巴克 38，或从微信转到支付宝 500" required></textarea>
         </label>
         <div class="composer-row">
           <p class="msg" id="addMsg" role="status" aria-live="polite"></p>
-          <button class="btn primary" type="submit" id="addBtn">记账</button>
+          <button class="btn primary" type="submit" id="addBtn"><svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span>记账</span></button>
         </div>
       </form>
 
@@ -483,7 +612,7 @@
           <button class="chip" type="button" data-range="all">全部</button>
         </div>
         <div class="filters">
-          <label class="field"><span>类型</span>
+          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>类型</span>
             <select id="typeFilter">
               <option value="">全部类型</option>
               <option value="expense">支出</option>
@@ -492,22 +621,22 @@
               <option value="transfer">转账</option>
             </select>
           </label>
-          <label class="field"><span>分类</span><select id="categoryFilter"></select></label>
-          <label class="field"><span>账户</span><select id="accountFilter"></select></label>
-          <label class="field"><span>搜索</span><input id="searchInput" type="search" placeholder="商户、备注、金额"></label>
+          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类</span><select id="categoryFilter"></select></label>
+          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>账户</span><select id="accountFilter"></select></label>
+          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>搜索</span><input id="searchInput" type="search" placeholder="商户、备注、金额"></label>
         </div>
       </div>
 
       <section class="metrics" aria-label="汇总">
-        <div class="metric spend"><div class="metric-label">支出</div><div class="metric-value expense" id="expenseTotal">¥0.00</div></div>
-        <div class="metric"><div class="metric-label">收入</div><div class="metric-value income" id="incomeTotal">¥0.00</div></div>
-        <div class="metric"><div class="metric-label">净额</div><div class="metric-value" id="netTotal">¥0.00</div></div>
-        <div class="metric"><div class="metric-label" id="paceLabel">日均</div><div class="metric-value" id="paceValue">¥0.00</div></div>
+        <div class="metric spend"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-expense"></use></svg>支出</div><div class="metric-value expense" id="expenseTotal">¥0.00</div></div>
+        <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-income"></use></svg>收入</div><div class="metric-value income" id="incomeTotal">¥0.00</div></div>
+        <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg>净额</div><div class="metric-value" id="netTotal">¥0.00</div></div>
+        <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-clock"></use></svg><span id="paceLabel">日均</span></div><div class="metric-value" id="paceValue">¥0.00</div></div>
       </section>
 
       <section class="panel" style="margin-top:12px">
-        <div class="panel-head"><h2>流水</h2><span class="panel-kicker" id="rowCount">0 笔</span></div>
-        <div class="rows" id="txRows"></div>
+        <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-list"></use></svg>流水</h2><span class="panel-kicker" id="rowCount">0 笔</span></div>
+        <div class="rows transaction-rows" id="txRows"></div>
       </section>
       </section>
 
@@ -523,14 +652,14 @@
           <button class="chip" type="button" data-range="all">全部</button>
         </div>
         <section class="metrics" aria-label="报表汇总">
-          <div class="metric spend"><div class="metric-label">支出</div><div class="metric-value expense" id="chartExpense">¥0.00</div></div>
-          <div class="metric"><div class="metric-label">收入</div><div class="metric-value income" id="chartIncome">¥0.00</div></div>
-          <div class="metric"><div class="metric-label">净额</div><div class="metric-value" id="chartNet">¥0.00</div></div>
-          <div class="metric"><div class="metric-label">较上期</div><div class="metric-value" id="chartDelta">—</div></div>
+          <div class="metric spend"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-expense"></use></svg>支出</div><div class="metric-value expense" id="chartExpense">¥0.00</div></div>
+          <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-income"></use></svg>收入</div><div class="metric-value income" id="chartIncome">¥0.00</div></div>
+          <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg>净额</div><div class="metric-value" id="chartNet">¥0.00</div></div>
+          <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>较上期</div><div class="metric-value" id="chartDelta">—</div></div>
         </section>
         <div class="chart-grid">
           <section class="panel">
-            <div class="panel-head"><h2>分类占比</h2><span class="panel-kicker">支出</span></div>
+            <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-pie"></use></svg>分类占比</h2><span class="panel-kicker">支出</span></div>
             <div class="chart-body chart-split">
               <div id="pieChart"></div>
               <div class="legend" id="pieLegend"></div>
@@ -538,33 +667,33 @@
             <p class="sr" id="pieSummary"></p>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>商户排行</h2><span class="panel-kicker">按金额</span></div>
+            <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-store"></use></svg>商户排行</h2><span class="panel-kicker">按金额</span></div>
             <div class="chart-body" id="merchantChart"></div>
           </section>
           <section class="panel chart-wide">
-            <div class="panel-head"><h2 id="trendTitle">每日支出</h2><span class="panel-kicker" id="trendKicker">按日</span></div>
+            <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-calendar"></use></svg><span id="trendTitle">每日支出</span></h2><span class="panel-kicker" id="trendKicker">按日</span></div>
             <div class="chart-body" id="trendChart"></div>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>星期分布</h2><span class="panel-kicker">按星期</span></div>
+            <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>星期分布</h2><span class="panel-kicker">按星期</span></div>
             <div class="chart-body" id="weekdayChart"></div>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>支付渠道</h2><span class="panel-kicker">按金额</span></div>
+            <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-card"></use></svg>支付渠道</h2><span class="panel-kicker">按金额</span></div>
             <div class="chart-body" id="methodChart"></div>
           </section>
         </div>
         <section class="panel" style="margin-top:12px" id="insightPanel">
-          <div class="panel-head"><h2>账本观察</h2><span class="panel-kicker" id="insightKicker">按当前范围</span></div>
+          <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-light"></use></svg>账本观察</h2><span class="panel-kicker" id="insightKicker">按当前范围</span></div>
           <ul class="insight-list" id="insightList"></ul>
         </section>
         <div class="grid-2">
           <section class="panel">
-            <div class="panel-head"><h2>周期账</h2><span class="panel-kicker">稳定的每月支出</span></div>
+            <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-repeat"></use></svg>周期账</h2><span class="panel-kicker">稳定的每月支出</span></div>
             <div class="rows" id="recurringRows"></div>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>待办</h2><span class="panel-kicker">报销和退款</span></div>
+            <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>待办</h2><span class="panel-kicker">报销和退款</span></div>
             <div class="rows" id="todoRows"></div>
           </section>
         </div>
@@ -572,13 +701,13 @@
 
       <section class="panel-tab" id="panel-bill" role="tabpanel" aria-labelledby="tab-bill" hidden>
         <div class="toolbar" style="margin-top:0; display:flex; gap:12px; align-items:end; flex-wrap:wrap">
-          <label class="field" style="max-width:220px"><span>月份</span><select id="billMonth"></select></label>
-          <a class="btn primary" id="openBillCanvas" href="/bill" target="_blank" rel="noopener">打开画布账单</a>
+          <label class="field" style="max-width:220px"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>月份</span><select id="billMonth"></select></label>
+          <a class="btn primary" id="openBillCanvas" href="/bill" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg>打开画布账单</a>
         </div>
         <p class="hint" id="billHint">每月一张独立的画布页，和账本放在同一目录。还没写结论的话，在对话里说「出一份这个月的账单」。</p>
         <div class="bill-facts" id="billFacts"></div>
         <section class="panel">
-          <div class="panel-head"><h2 id="billTitle">月度账单</h2><span class="panel-kicker" id="billStatus">结论</span></div>
+          <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-receipt"></use></svg><span id="billTitle">月度账单</span></h2><span class="panel-kicker" id="billStatus">结论</span></div>
           <article class="bill-article" id="billBody"></article>
         </section>
       </section>
@@ -586,10 +715,10 @@
       <section class="panel-tab" id="panel-book" role="tabpanel" aria-labelledby="tab-book" hidden>
       <div class="grid-2" style="margin-top:0">
         <section class="panel">
-          <div class="panel-head"><h2>账户余额</h2><span class="panel-kicker" id="accountKicker">含期初</span></div>
+          <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>账户余额</h2><span class="panel-kicker" id="accountKicker">含期初</span></div>
           <form class="account-form" id="accountForm">
-            <label class="field"><span>名称</span><input id="accountName" placeholder="招行储蓄卡" required></label>
-            <label class="field"><span>类型</span>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>名称</span><input id="accountName" placeholder="招行储蓄卡" required></label>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>类型</span>
               <select id="accountType">
                 <option value="bank">银行卡</option>
                 <option value="wechat">微信</option>
@@ -599,21 +728,21 @@
                 <option value="other">其他</option>
               </select>
             </label>
-            <label class="field"><span>期初</span><input id="accountOpening" type="number" step="0.01" value="0"></label>
-            <button class="btn" type="submit">添加</button>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg>期初</span><input id="accountOpening" type="number" step="0.01" value="0"></label>
+            <button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>添加</button>
           </form>
           <div class="rows" id="accountRows"></div>
         </section>
         <section class="panel">
-          <div class="panel-head"><h2>预算</h2><span class="panel-kicker" id="budgetLabel">本月</span></div>
+          <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-target"></use></svg>预算</h2><span class="panel-kicker" id="budgetLabel">本月</span></div>
           <form class="budget-form" id="budgetForm">
-            <label class="field"><span>金额</span>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-target"></use></svg>金额</span>
               <input id="budgetAmount" type="number" min="0.01" step="0.01" placeholder="例如 8000" required>
             </label>
-            <label class="field"><span>分类（可空）</span>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类（可空）</span>
               <input id="budgetCategory" placeholder="餐饮">
             </label>
-            <button class="btn" type="submit">保存</button>
+            <button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>保存</button>
           </form>
           <div class="rows" id="budgetRows"></div>
         </section>
@@ -624,9 +753,9 @@
 
   <dialog id="accountDialog">
     <form class="dialog-body" id="accountEditForm">
-      <strong>改账户</strong>
-      <label class="field"><span>名称</span><input id="editAccountName" required></label>
-      <label class="field"><span>类型</span>
+      <strong class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>编辑账户</strong>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>名称</span><input id="editAccountName" required></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>类型</span>
         <select id="editAccountType">
           <option value="bank">银行卡</option>
           <option value="wechat">微信</option>
@@ -636,25 +765,25 @@
           <option value="other">其他</option>
         </select>
       </label>
-      <label class="field"><span>期初余额</span><input id="editAccountOpening" type="number" step="0.01" required></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg>期初余额</span><input id="editAccountOpening" type="number" step="0.01" required></label>
       <label class="field" style="grid-template-columns: auto 1fr; align-items: center;">
         <input id="editAccountDefault" type="checkbox">
         <span>设为记账默认账户</span>
       </label>
       <div class="dialog-actions">
-        <button class="btn danger" type="button" id="archiveAccountBtn">归档</button>
+        <button class="btn danger" type="button" id="archiveAccountBtn"><svg class="icon" aria-hidden="true"><use href="#icon-book"></use></svg>归档</button>
         <button class="btn" type="button" id="cancelAccountBtn">取消</button>
-        <button class="btn primary" type="submit">保存</button>
+        <button class="btn primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>保存</button>
       </div>
     </form>
   </dialog>
   <dialog id="editDialog">
     <form class="dialog-body" id="editForm">
-      <strong>改这一笔</strong>
-      <label class="field"><span>金额</span><input id="editAmount" type="number" step="0.01" min="0.01" required></label>
-      <label class="field"><span>商户</span><input id="editMerchant" placeholder="商户"></label>
-      <label class="field"><span>分类</span><input id="editCategory" placeholder="分类"></label>
-      <label class="field"><span>类型</span>
+      <strong class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>编辑这一笔</strong>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg>金额</span><input id="editAmount" type="number" step="0.01" min="0.01" required></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-store"></use></svg>商户</span><input id="editMerchant" placeholder="商户"></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类</span><input id="editCategory" placeholder="分类"></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>类型</span>
         <select id="editType">
           <option value="expense">支出</option>
           <option value="income">收入</option>
@@ -662,18 +791,25 @@
           <option value="transfer">转账</option>
         </select>
       </label>
-      <label class="field"><span>账户</span><select id="editAccount"></select></label>
-      <label class="field"><span>备注</span><input id="editNote" placeholder="备注"></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>账户</span><select id="editAccount"></select></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>备注</span><input id="editNote" placeholder="备注"></label>
       <div class="dialog-actions">
-        <button class="btn danger" type="button" id="deleteBtn">删除</button>
+        <button class="btn danger" type="button" id="deleteBtn"><svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>删除</button>
         <button class="btn" type="button" id="cancelBtn">取消</button>
-        <button class="btn primary" type="submit">保存</button>
+        <button class="btn primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>保存</button>
       </div>
     </form>
   </dialog>
 
   <script>
     const typeLabel = { expense: "支出", income: "收入", refund: "退款", transfer: "转账" };
+    const typeIcon = { expense: "expense", income: "income", refund: "refund", transfer: "transfer" };
+    const showTypeBadge = (type) => type === "refund" || type === "transfer";
+    const categoryIcons = {
+      餐饮: "food", 购物: "shopping", 居住: "home", 交通: "car", 咖啡: "coffee",
+      人情: "gift", 红包: "gift", 医疗: "medical", 教育: "education", 娱乐: "entertainment",
+      买菜: "grocery", 保险: "shield", 提现: "cash", 收入: "income", 转账: "transfer", 其他: "more"
+    };
     const cadenceLabel = { monthly: "每月", weekly: "每周", biweekly: "每两周" };
     const methodLabel = { wechat: "微信", alipay: "支付宝", cash: "现金", card: "信用卡", bank: "银行卡", other: "其他" };
     const TAB_IDS = ["ledger", "charts", "bill", "book"];
@@ -756,7 +892,7 @@
         return `<div class="hbar-row">
           <div class="hbar-meta">
             <span class="hbar-rank">${String(index + 1).padStart(2, "0")}</span>
-            <span class="hbar-name" title="${escapeHtml(full)}">${escapeHtml(label)}</span>
+            <span class="hbar-name icon-label" title="${escapeHtml(full)}">${icon("store")}${escapeHtml(label)}</span>
             <span class="hbar-amt">${money(item[1])}</span>
           </div>
           <div class="hbar-track"><div class="hbar-fill" style="width:${width}%;background:${color}"></div></div>
@@ -857,8 +993,76 @@
 
     const money = (value) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: LEDGER.currency || "CNY" }).format(Number(value || 0));
     const dayOf = (tx) => (tx.occurred_at || "").slice(0, 10);
+    function shortWhen(tx) {
+      const value = String(tx.occurred_at || "");
+      const date = value.match(/^\d{4}-(\d{2})-(\d{2})/);
+      if (!date) return "";
+      const time = value.match(/T(\d{2}):(\d{2})/);
+      return `${date[1]}-${date[2]}${time ? ` ${time[1]}:${time[2]}` : ""}`;
+    }
+    function groupTransactionsByDay(rows) {
+      const groups = [];
+      for (const tx of rows) {
+        const day = dayOf(tx) || "未标日期";
+        const current = groups[groups.length - 1];
+        if (current && current[0] === day) current[1].push(tx);
+        else groups.push([day, [tx]]);
+      }
+      return groups;
+    }
+    function dailyTotals(rows) {
+      const totals = { expense: 0, income: 0, refund: 0, transfer: 0 };
+      for (const tx of rows) {
+        const type = tx.type || "expense";
+        if (totals[type] !== undefined) totals[type] += Number(tx.amount || 0);
+      }
+      return totals;
+    }
+    function dayHeading(day) {
+      const match = String(day).match(/^\d{4}-(\d{2})-(\d{2})$/);
+      if (!match) return { date: String(day), weekday: "" };
+      const date = new Date(`${day}T12:00:00`);
+      const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+      return { date: `${Number(match[1])}月${Number(match[2])}日`, weekday: weekdays[date.getDay()] };
+    }
+    function dailySummary(rows) {
+      const totals = dailyTotals(rows);
+      const parts = [`<span>${rows.length} 笔</span>`];
+      if (totals.expense) parts.push(`<span class="expense">支出 ${money(totals.expense)}</span>`);
+      if (totals.income + totals.refund) parts.push(`<span class="income">入账 ${money(totals.income + totals.refund)}</span>`);
+      if (totals.transfer) parts.push(`<span class="transfer">转账 ${money(totals.transfer)}</span>`);
+      return parts.join(`<span class="day-summary-dot">·</span>`);
+    }
     const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#icon-${escapeHtml(name)}"></use></svg>`;
+    function categoryIcon(category, type) {
+      if (type === "transfer") return "transfer";
+      if (type === "income") return "income";
+      const value = String(category || "其他");
+      if (categoryIcons[value]) return categoryIcons[value];
+      if (/餐|饭|外卖|食品|奶茶/.test(value)) return "food";
+      if (/菜|生鲜|超市/.test(value)) return "grocery";
+      if (/购|衣|数码/.test(value)) return "shopping";
+      if (/房|住|水电|燃气|物业/.test(value)) return "home";
+      if (/交通|车|地铁|公交|机票|火车|停车|加油/.test(value)) return "car";
+      if (/咖啡|茶/.test(value)) return "coffee";
+      if (/医|药|健康|体检/.test(value)) return "medical";
+      if (/教|学|书|课程|培训/.test(value)) return "education";
+      if (/娱乐|游戏|电影|演出|会员/.test(value)) return "entertainment";
+      if (/人情|红包|礼物/.test(value)) return "gift";
+      if (/保险/.test(value)) return "shield";
+      if (/现金|提现/.test(value)) return "cash";
+      return type === "refund" ? "refund" : "more";
+    }
+    function accountIcon(method, account) {
+      const value = `${method || ""} ${account || ""}`.toLowerCase();
+      if (value.includes("wechat") || value.includes("微信")) return "wechat";
+      if (value.includes("alipay") || value.includes("支付宝") || value.includes("花呗")) return "alipay";
+      if (value.includes("cash") || value.includes("现金")) return "cash";
+      if (value.includes("card") || value.includes("bank") || /银行|储蓄卡|信用卡/.test(value)) return "card";
+      return "wallet";
+    }
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
@@ -958,14 +1162,15 @@
       const recurring = (INSIGHTS && INSIGHTS.recurring) || [];
       document.getElementById("recurringRows").innerHTML = recurring.length ? recurring.map((item) => {
         const status = item.missing_this_month ? "这月还没记" : (item.recorded_this_month ? "这月已记" : "");
-        return `<div class="row"><div>${escapeHtml(item.label)}<div class="meta">${escapeHtml(cadenceLabel[item.cadence] || item.cadence)}${status ? " · " + status : ""}</div></div><div class="amount">${money(item.typical_amount)}</div><span></span></div>`;
+        return `<div class="row"><div class="row-main"><span class="row-icon expense">${icon("repeat")}</span><div class="row-copy">${escapeHtml(item.label)}<div class="meta">${escapeHtml(cadenceLabel[item.cadence] || item.cadence)}${status ? " · " + status : ""}</div></div></div><div class="amount">${money(item.typical_amount)}</div><span></span></div>`;
       }).join("") : `<div class="empty">还没有稳定的周期支出</div>`;
 
       const pending = (INSIGHTS && INSIGHTS.pending_reimbursement) || [];
       const unmatched = (INSIGHTS && INSIGHTS.unmatched_refunds) || [];
       const todos = pending.map((item) => ({ ...item, kind: "待报销" })).concat(unmatched.map((item) => ({ ...item, kind: "未对上的退款" })));
       document.getElementById("todoRows").innerHTML = todos.length ? todos.map((item) => {
-        return `<div class="row"><div>${escapeHtml(item.merchant || item.note || item.id)}<div class="meta">${escapeHtml(item.kind)} · ${escapeHtml((item.occurred_at || "").slice(0, 10))}</div></div><div class="amount">${money(item.amount)}</div><span></span></div>`;
+        const itemIcon = item.kind === "待报销" ? "check" : "refund";
+        return `<div class="row"><div class="row-main"><span class="row-icon refund">${icon(itemIcon)}</span><div class="row-copy">${escapeHtml(item.merchant || item.note || item.id)}<div class="meta">${escapeHtml(item.kind)} · ${escapeHtml((item.occurred_at || "").slice(0, 10))}</div></div></div><div class="amount">${money(item.amount)}</div><span></span></div>`;
       }).join("") : `<div class="empty">没有待报销或未对上的退款</div>`;
 
       const categories = [...new Set((LEDGER.transactions || []).map((tx) => tx.category || "其他"))].sort();
@@ -980,10 +1185,13 @@
 
       const defaultId = (LEDGER.preferences || {}).default_account_id;
       const openingById = Object.fromEntries(accounts.map((item) => [item.id, Number(item.opening_balance || 0)]));
-      document.getElementById("accountKicker").textContent = defaultId ? "含期初 · 可改" : "含期初";
+      document.getElementById("accountKicker").textContent = "含期初";
       document.getElementById("accountRows").innerHTML = accountBalances().map((item) => {
         const mark = item.id === defaultId ? `<span class="default-mark">默认</span>` : "";
-        return `<div class="row"><div>${escapeHtml(item.name)}${mark}<div class="meta">期初 ${money(openingById[item.id] || 0)}</div></div><div class="amount">${money(item.balance)}</div><button class="btn" data-edit-account="${escapeHtml(item.id)}" type="button">改</button></div>`;
+        return `<div class="row editable-row" data-edit-account="${escapeHtml(item.id)}" role="button" tabindex="0" aria-label="编辑账户 ${escapeHtml(item.name)}">
+          <div class="row-main"><span class="row-icon">${icon("wallet")}</span><div class="row-copy"><strong>${escapeHtml(item.name)}</strong>${mark}<div class="meta">期初 ${money(openingById[item.id] || 0)}</div></div></div>
+          <div class="amount">${money(item.balance)}</div>
+        </div>`;
       }).join("") || `<div class="empty">还没有账户</div>`;
 
       const month = bounds.month;
@@ -992,18 +1200,41 @@
       document.getElementById("budgetRows").innerHTML = budgets.length ? budgets.map((item) => {
         const spent = rows.filter((tx) => tx.type === "expense" && (!item.category || tx.category === item.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
         const left = Number(item.amount) - spent;
-        return `<div class="row"><div>${escapeHtml(item.category || "本月总额")}<div class="meta">限额 ${money(item.amount)}</div></div><div class="amount ${left < 0 ? "expense" : ""}">${left < 0 ? "超支 " : "剩余 "}${money(Math.abs(left))}</div><button class="btn" data-del-budget="${escapeHtml(item.id)}" type="button">删</button></div>`;
+        const category = item.category || "本月总额";
+        return `<div class="row"><div class="row-main"><span class="row-icon">${icon("tag")}</span><div class="row-copy"><strong>${escapeHtml(category)}</strong><div class="meta">限额 ${money(item.amount)}</div></div></div><div class="amount ${left < 0 ? "expense" : ""}">${left < 0 ? "超支 " : "剩余 "}${money(Math.abs(left))}</div><button class="btn" data-del-budget="${escapeHtml(item.id)}" type="button" aria-label="删除 ${escapeHtml(category)} 预算" title="删除预算">${icon("trash")}</button></div>`;
       }).join("") : `<div class="empty">还没有预算</div>`;
 
-      document.getElementById("txRows").innerHTML = rows.length ? rows.map((tx) => {
-        const type = tx.type || "expense";
-        return `<div class="row">
-          <div><strong>${escapeHtml(tx.merchant || tx.category || "未命名")}</strong>
-            <div class="meta"><span class="badge ${escapeHtml(type)}">${escapeHtml(typeLabel[type] || type)}</span>${escapeHtml(dayOf(tx))} · ${escapeHtml(tx.category || "")}${tx.account ? " · " + escapeHtml(tx.to_account ? `${tx.account}→${tx.to_account}` : tx.account) : ""}</div>
+      const dayGroups = groupTransactionsByDay(rows);
+      document.getElementById("txRows").innerHTML = rows.length ? dayGroups.map(([day, dayRows]) => {
+        const heading = dayHeading(day);
+        return `<section class="day-group" aria-label="${escapeHtml(heading.date)}流水">
+          <div class="day-head">
+            <div class="day-title">${icon("calendar")}<strong>${escapeHtml(heading.date)}</strong>${heading.weekday ? `<small>${escapeHtml(heading.weekday)}</small>` : ""}</div>
+            <div class="day-summary">${dailySummary(dayRows)}</div>
           </div>
-          <div class="amount ${escapeHtml(type)}">${money(tx.amount)}</div>
-          <button class="btn" data-edit="${escapeHtml(tx.id)}" type="button">改</button>
-        </div>`;
+          ${dayRows.map((tx) => {
+            const type = tx.type || "expense";
+            const label = tx.merchant || tx.category || "未命名";
+            const account = tx.account ? (tx.to_account ? `${tx.account}→${tx.to_account}` : tx.account) : "";
+            const when = shortWhen(tx);
+            return `<div class="row editable-row" data-edit="${escapeHtml(tx.id)}" role="button" tabindex="0" aria-label="编辑 ${escapeHtml(label)} ${money(tx.amount)}">
+              <div class="row-main">
+                <span class="row-icon ${escapeHtml(type)}">${icon(categoryIcon(tx.category, type))}</span>
+                <div class="row-copy"><strong>${escapeHtml(label)}</strong>
+                  <div class="meta meta-inline">
+                    <span class="meta-item">${icon(categoryIcon(tx.category, type))}${escapeHtml(tx.category || "其他")}</span>
+                    ${account ? `<span class="meta-item">${icon(accountIcon(tx.method, account))}${escapeHtml(account)}</span>` : ""}
+                    ${showTypeBadge(type) ? `<span class="badge ${escapeHtml(type)}">${icon(typeIcon[type] || "receipt")}${escapeHtml(typeLabel[type] || type)}</span>` : ""}
+                  </div>
+                </div>
+              </div>
+              <div class="row-amount">
+                <div class="amount ${escapeHtml(type)}">${money(tx.amount)}</div>
+                ${when ? `<div class="row-when">${icon("clock")}${escapeHtml(when)}</div>` : ""}
+              </div>
+            </div>`;
+          }).join("")}
+        </section>`;
       }).join("") : `<div class="empty">这段时间没有流水。上面记一笔即可。</div>`;
       renderCharts();
     }
@@ -1028,7 +1259,7 @@
       document.getElementById("pieChart").innerHTML = slices.length ? donutSvg(slices) : `<div class="empty">暂无分类</div>`;
       document.getElementById("pieLegend").innerHTML = slices.map((item, index) => {
         const share = pieTotal ? Math.round(item[1] / pieTotal * 100) : 0;
-        return `<div class="legend-row" style="--swatch:${colors[index % colors.length]}"><span class="legend-name">${escapeHtml(item[0])}</span><span class="legend-share">${share}%</span><span class="legend-amt">${money(item[1])}</span></div>`;
+        return `<div class="legend-row" style="--swatch:${colors[index % colors.length]}"><span class="legend-name icon-label">${icon("tag")}${escapeHtml(item[0])}</span><span class="legend-share">${share}%</span><span class="legend-amt">${money(item[1])}</span></div>`;
       }).join("") || `<div class="empty">暂无分类</div>`;
       document.getElementById("pieSummary").textContent = slices.map((item) => `${item[0]} ${money(item[1])}`).join("，");
       const merchants = ((INSIGHTS && INSIGHTS.top_merchants) || []).map((item) => [item.merchant, item.amount]);
@@ -1061,10 +1292,10 @@
       const canvasLink = document.getElementById("openBillCanvas");
       canvasLink.href = current ? `/bill/${encodeURIComponent(current)}` : "/bill";
       document.getElementById("billFacts").innerHTML = [
-        ["支出", money(totals.expense), "spend"],
-        ["收入", money(totals.income), ""],
-        ["净额", money(totals.net), ""]
-      ].map(([label, value, klass]) => `<div class="metric ${klass}"><div class="metric-label">${label}</div><div class="metric-value">${value}</div></div>`).join("");
+        ["支出", money(totals.expense), "spend", "expense"],
+        ["收入", money(totals.income), "", "income"],
+        ["净额", money(totals.net), "", "scale"]
+      ].map(([label, value, klass, iconName]) => `<div class="metric ${klass}"><div class="metric-label">${icon(iconName)}${label}</div><div class="metric-value">${value}</div></div>`).join("");
       document.getElementById("billTitle").textContent = saved.title || `${current || ""} 月度账单`;
       if (saved.body) {
         document.getElementById("billStatus").textContent = "助手写的结论";
@@ -1122,7 +1353,7 @@
       msg.textContent = "";
       msg.className = "msg";
       addBtn.disabled = true;
-      addBtn.textContent = "记下…";
+      addBtn.innerHTML = `${icon("clock")}<span>记下…</span>`;
       try {
         await api("/api/transactions", { method: "POST", body: { text: document.getElementById("textInput").value } });
         document.getElementById("textInput").value = "";
@@ -1135,7 +1366,7 @@
         msg.setAttribute("role", "alert");
       } finally {
         addBtn.disabled = false;
-        addBtn.textContent = "记账";
+        addBtn.innerHTML = `${icon("plus")}<span>记账</span>`;
       }
     });
 
@@ -1164,9 +1395,7 @@
       await refresh();
     });
 
-    document.getElementById("accountRows").addEventListener("click", (event) => {
-      const id = event.target.dataset.editAccount;
-      if (!id) return;
+    function openAccountEditor(id) {
       const account = (LEDGER.accounts || []).find((item) => item.id === id);
       if (!account) return;
       editingAccountId = id;
@@ -1175,6 +1404,17 @@
       document.getElementById("editAccountOpening").value = account.opening_balance || 0;
       document.getElementById("editAccountDefault").checked = ((LEDGER.preferences || {}).default_account_id === id);
       accountDialog.showModal();
+    }
+
+    document.getElementById("accountRows").addEventListener("click", (event) => {
+      const row = event.target.closest("[data-edit-account]");
+      if (row) openAccountEditor(row.dataset.editAccount);
+    });
+    document.getElementById("accountRows").addEventListener("keydown", (event) => {
+      const row = event.target.closest("[data-edit-account]");
+      if (!row || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      openAccountEditor(row.dataset.editAccount);
     });
 
     document.getElementById("cancelAccountBtn").addEventListener("click", () => accountDialog.close());
@@ -1199,9 +1439,7 @@
       await refresh();
     });
 
-    document.getElementById("txRows").addEventListener("click", (event) => {
-      const id = event.target.dataset.edit;
-      if (!id) return;
+    function openTransactionEditor(id) {
       const tx = (LEDGER.transactions || []).find((item) => item.id === id);
       if (!tx) return;
       editingId = id;
@@ -1212,10 +1450,22 @@
       document.getElementById("editAccount").value = tx.account_id || "";
       document.getElementById("editNote").value = tx.note || "";
       dialog.showModal();
+    }
+
+    document.getElementById("txRows").addEventListener("click", (event) => {
+      const row = event.target.closest("[data-edit]");
+      if (row) openTransactionEditor(row.dataset.edit);
+    });
+    document.getElementById("txRows").addEventListener("keydown", (event) => {
+      const row = event.target.closest("[data-edit]");
+      if (!row || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      openTransactionEditor(row.dataset.edit);
     });
 
     document.getElementById("budgetRows").addEventListener("click", async (event) => {
-      const id = event.target.dataset.delBudget;
+      const button = event.target.closest("[data-del-budget]");
+      const id = button && button.dataset.delBudget;
       if (!id) return;
       await api(`/api/budgets/${id}`, { method: "DELETE" });
       await refresh();
