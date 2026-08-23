@@ -8,7 +8,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -259,6 +259,16 @@ def make_handler(ledger_path):
                 status, payload = _invoke(tool.bill_save_command, args)
                 _send(self, status, payload)
                 return
+            if path == "/api/categories":
+                args = SimpleNamespace(
+                    ledger=str(ledger_path),
+                    name=body.get("name"),
+                    icon=body.get("icon"),
+                    old_name=None,
+                )
+                status, payload = _invoke(tool.category_set_command, args)
+                _send(self, status, payload)
+                return
             _send(self, 404, {"error": "not_found"})
 
         def do_PATCH(self):
@@ -304,6 +314,16 @@ def make_handler(ledger_path):
                     unpin=bool(body.get("unpin")),
                 )
                 status, payload = _invoke(tool.habit_set_command, args)
+                _send(self, status, payload)
+                return
+            if len(parts) == 3 and parts[0] == "api" and parts[1] == "categories":
+                args = SimpleNamespace(
+                    ledger=str(ledger_path),
+                    old_name=unquote(parts[2]),
+                    name=body.get("name"),
+                    icon=body.get("icon"),
+                )
+                status, payload = _invoke(tool.category_set_command, args)
                 _send(self, status, payload)
                 return
             _send(self, 404, {"error": "not_found"})

@@ -649,6 +649,8 @@ class LiveServerTest(unittest.TestCase):
                 self.assertIn("function dailyTotals(rows)", html)
                 self.assertIn('class="day-head"', html)
                 self.assertIn('class="row editable-row"', html)
+                self.assertIn('id="categoryForm"', html)
+                self.assertIn('id="categoryDialog"', html)
                 self.assertNotIn("跳到账本", html)
                 self.assertNotIn('type="button">改</button>', html)
 
@@ -663,9 +665,30 @@ class LiveServerTest(unittest.TestCase):
                 self.assertEqual(payload["count"], 1)
                 tx_id = payload["added"][0]["id"]
 
+                rename_category = urllib.request.Request(
+                    base + "/api/categories/%E5%92%96%E5%95%A1",
+                    data=json.dumps({"name": "下午茶", "icon": "coffee"}).encode("utf-8"),
+                    method="PATCH",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(rename_category, timeout=5) as resp:
+                    category = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(category["category"]["name"], "下午茶")
+                create_category = urllib.request.Request(
+                    base + "/api/categories",
+                    data=json.dumps({"name": "旅行", "icon": "car"}).encode("utf-8"),
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(create_category, timeout=5) as resp:
+                    category = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(category["category"], {"name": "旅行", "icon": "car"})
+
                 with urllib.request.urlopen(base + "/api/ledger", timeout=5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                 self.assertEqual(len(data["transactions"]), 1)
+                self.assertEqual(data["transactions"][0]["category"], "下午茶")
+                self.assertIn({"name": "下午茶", "icon": "coffee"}, data["categories"])
                 self.assertEqual(data["store"], "lazy-ledger-docs")
 
                 patch_req = urllib.request.Request(

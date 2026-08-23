@@ -597,7 +597,7 @@
         <button type="button" role="tab" id="tab-ledger" aria-controls="panel-ledger" data-tab="ledger"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>记账</button>
         <button type="button" role="tab" id="tab-charts" aria-controls="panel-charts" data-tab="charts"><svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>报表</button>
         <button type="button" role="tab" id="tab-bill" aria-controls="panel-bill" data-tab="bill"><svg class="icon" aria-hidden="true"><use href="#icon-receipt"></use></svg>月度账单</button>
-        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" data-tab="book"><svg class="icon" aria-hidden="true"><use href="#icon-book"></use></svg>账本</button>
+        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" data-tab="book"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>设置</button>
       </div>
 
       <section class="panel-tab" id="panel-ledger" role="tabpanel" aria-labelledby="tab-ledger">
@@ -730,7 +730,16 @@
       </section>
 
       <section class="panel-tab" id="panel-book" role="tabpanel" aria-labelledby="tab-book" hidden>
-      <div class="grid-2" style="margin-top:0">
+      <section class="panel" style="margin-top:0">
+        <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类</h2><span class="panel-kicker">名称与图标</span></div>
+        <form class="account-form" id="categoryForm">
+          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>名称</span><input id="categoryName" placeholder="例如：旅行" required></label>
+          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>图标</span><select id="categoryIcon"></select></label>
+          <button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>添加</button>
+        </form>
+        <div class="rows" id="categoryRows"></div>
+      </section>
+      <div class="grid-2" style="margin-top:12px">
         <section class="panel">
           <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>账户余额</h2><span class="panel-kicker" id="accountKicker">含期初</span></div>
           <form class="account-form" id="accountForm">
@@ -792,6 +801,17 @@
       </div>
     </form>
   </dialog>
+  <dialog id="categoryDialog">
+    <form class="dialog-body" id="categoryEditForm">
+      <strong class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>编辑分类</strong>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>名称</span><input id="editCategoryName" required></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>图标</span><select id="editCategoryIcon"></select></label>
+      <div class="dialog-actions">
+        <button class="btn" type="button" id="cancelCategoryBtn">取消</button>
+        <button class="btn primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>保存</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="editDialog">
     <form class="dialog-body" id="editForm">
       <strong class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>编辑这一笔</strong>
@@ -829,6 +849,11 @@
       人情: "gift", 红包: "gift", 医疗: "medical", 教育: "education", 娱乐: "entertainment",
       买菜: "grocery", 保险: "shield", 提现: "cash", 收入: "income", 转账: "transfer", 其他: "more"
     };
+    const categoryIconOptions = [
+      ["food", "餐饮"], ["shopping", "购物"], ["grocery", "买菜"], ["home", "居住"], ["car", "交通"],
+      ["coffee", "咖啡"], ["gift", "人情"], ["medical", "医疗"], ["education", "教育"], ["entertainment", "娱乐"],
+      ["shield", "保险"], ["cash", "现金"], ["more", "其他"]
+    ];
     const cadenceLabel = { monthly: "每月", weekly: "每周", biweekly: "每两周" };
     const methodLabel = { wechat: "微信", alipay: "支付宝", cash: "现金", card: "信用卡", bank: "银行卡", other: "其他" };
     const accountTypeIcon = { wechat: "wechat", alipay: "alipay", cash: "cash", bank: "card", credit: "card", other: "wallet" };
@@ -841,6 +866,7 @@
     let currentTab = "ledger";
     let editingId = null;
     let editingAccountId = null;
+    let editingCategoryName = null;
     function palette() {
       const styles = getComputedStyle(document.documentElement);
       const pine = styles.getPropertyValue("--pine").trim();
@@ -851,7 +877,7 @@
     }
 
     function setTab(name, writeHash = true) {
-      const aliases = { 记账: "ledger", 报表: "charts", 账单: "bill", 月度账单: "bill", 账本: "book" };
+      const aliases = { 记账: "ledger", 报表: "charts", 账单: "bill", 月度账单: "bill", 账本: "book", 设置: "book" };
       currentTab = TAB_IDS.includes(name) ? name : (aliases[name] || "ledger");
       document.querySelectorAll("[role=tab]").forEach((tab) => {
         const on = tab.dataset.tab === currentTab;
@@ -1012,6 +1038,7 @@
     const searchInput = document.getElementById("searchInput");
     const dialog = document.getElementById("editDialog");
     const accountDialog = document.getElementById("accountDialog");
+    const categoryDialog = document.getElementById("categoryDialog");
     const addBtn = document.getElementById("addBtn");
 
     const money = (value) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: LEDGER.currency || "CNY" }).format(Number(value || 0));
@@ -1064,6 +1091,8 @@
       if (type === "transfer") return "transfer";
       if (type === "income") return "income";
       const value = String(category || "其他");
+      const configured = configuredCategoryIcon(value);
+      if (configured) return configured;
       if (categoryIcons[value]) return categoryIcons[value];
       if (/餐|饭|外卖|食品|奶茶/.test(value)) return "food";
       if (/菜|生鲜|超市/.test(value)) return "grocery";
@@ -1138,9 +1167,23 @@
       }).sort((a, b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")));
     }
 
+    function categoryDefinitions() {
+      const definitions = new Map();
+      for (const item of LEDGER.categories || []) {
+        const name = typeof item === "string" ? item : item && item.name;
+        if (name) definitions.set(name, { name, icon: typeof item === "object" ? item.icon : null });
+      }
+      for (const tx of LEDGER.transactions || []) {
+        const name = tx.category || "其他";
+        if (!definitions.has(name)) definitions.set(name, { name, icon: null });
+      }
+      return [...definitions.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+    }
     function categories() {
-      const fromLedger = (LEDGER.categories || []).map((item) => typeof item === "string" ? item : item && item.name).filter(Boolean);
-      return [...new Set(fromLedger.concat((LEDGER.transactions || []).map((tx) => tx.category || "其他")))].sort();
+      return categoryDefinitions().map((item) => item.name);
+    }
+    function configuredCategoryIcon(category) {
+      return categoryDefinitions().find((item) => item.name === category)?.icon || null;
     }
 
     function selectOptions(rows, selected, emptyLabel = "") {
@@ -1238,6 +1281,13 @@
       const categoryRows = categories().map((item) => [item, item]);
       categoryFilter.innerHTML = selectOptions(categoryRows, currentCategory, "全部分类");
       categoryFilter.value = currentCategory;
+      const categoryIconRows = categoryIconOptions.map(([value, label]) => [value, label]);
+      document.getElementById("categoryIcon").innerHTML = selectOptions(categoryIconRows, document.getElementById("categoryIcon").value || "more");
+      document.getElementById("editCategoryIcon").innerHTML = selectOptions(categoryIconRows, document.getElementById("editCategoryIcon").value || "more");
+      document.getElementById("categoryRows").innerHTML = categoryDefinitions().map((item) => {
+        const iconName = item.icon || categoryIcon(item.name, "expense");
+        return `<div class="row editable-row" data-edit-category="${escapeHtml(item.name)}" role="button" tabindex="0" aria-label="编辑分类 ${escapeHtml(item.name)}"><div class="row-main"><span class="row-icon">${icon(iconName)}</span><div class="row-copy"><strong>${escapeHtml(item.name)}</strong><div class="meta">${escapeHtml(categoryIconOptions.find(([value]) => value === iconName)?.[1] || "自定义图标")}</div></div></div>${icon("pen")}</div>`;
+      }).join("") || `<div class="empty">还没有分类。添加一条分类即可开始使用。</div>`;
       const accounts = (LEDGER.accounts || []).filter((item) => !item.archived);
       const currentAccount = accountFilter.value;
       accountFilter.innerHTML = `<option value="">全部账户</option>` + accounts.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
@@ -1528,6 +1578,46 @@
         }
       });
       accountDialog.close();
+      await refresh();
+    });
+
+    document.getElementById("categoryForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await api("/api/categories", { method: "POST", body: {
+        name: document.getElementById("categoryName").value.trim(),
+        icon: document.getElementById("categoryIcon").value
+      }});
+      document.getElementById("categoryName").value = "";
+      await refresh();
+    });
+
+    function openCategoryEditor(name) {
+      const category = categoryDefinitions().find((item) => item.name === name);
+      if (!category) return;
+      editingCategoryName = name;
+      document.getElementById("editCategoryName").value = category.name;
+      document.getElementById("editCategoryIcon").value = category.icon || categoryIcon(category.name, "expense");
+      categoryDialog.showModal();
+    }
+
+    document.getElementById("categoryRows").addEventListener("click", (event) => {
+      const row = event.target.closest("[data-edit-category]");
+      if (row) openCategoryEditor(row.dataset.editCategory);
+    });
+    document.getElementById("categoryRows").addEventListener("keydown", (event) => {
+      const row = event.target.closest("[data-edit-category]");
+      if (!row || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      openCategoryEditor(row.dataset.editCategory);
+    });
+    document.getElementById("cancelCategoryBtn").addEventListener("click", () => categoryDialog.close());
+    document.getElementById("categoryEditForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await api(`/api/categories/${encodeURIComponent(editingCategoryName)}`, { method: "PATCH", body: {
+        name: document.getElementById("editCategoryName").value.trim(),
+        icon: document.getElementById("editCategoryIcon").value
+      }});
+      categoryDialog.close();
       await refresh();
     });
 

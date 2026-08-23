@@ -3109,6 +3109,71 @@ def prefer_command(args):
     print(json.dumps(prefs, ensure_ascii=False, indent=2))
 
 
+def category_entries(ledger):
+    """Return persisted category definitions while accepting legacy string entries."""
+    entries = []
+    seen = set()
+    for item in ledger.get("categories") or []:
+        if isinstance(item, str):
+            name, icon = item.strip(), None
+        elif isinstance(item, dict):
+            name, icon = str(item.get("name") or "").strip(), item.get("icon")
+        else:
+            continue
+        if not name or name in seen:
+            continue
+        entries.append({"name": name, "icon": str(icon).strip() if icon else None})
+        seen.add(name)
+    return entries
+
+
+def category_set_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    old_name = str(getattr(args, "old_name", "") or "").strip()
+    name = str(getattr(args, "name", "") or "").strip()
+    icon = str(getattr(args, "icon", "") or "").strip() or None
+    if not name:
+        raise SystemExit("Category name is required")
+    entries = category_entries(ledger)
+    names = {item["name"] for item in entries}
+    if old_name and old_name not in names:
+        referenced = any(
+            item.get("category") == old_name
+            for collection in (ledger.get("transactions") or [], ledger.get("budgets") or [], ledger.get("habits") or [])
+            for item in collection
+            if isinstance(item, dict)
+        ) or old_name in (ledger_preferences(ledger).get("merchant_categories") or {}).values()
+        if not referenced:
+            raise SystemExit("Category not found")
+        entries.append({"name": old_name, "icon": None})
+        names.add(old_name)
+    if name != old_name and name in names:
+        raise SystemExit("Category name already exists")
+    if old_name:
+        for item in entries:
+            if item["name"] == old_name:
+                item["name"], item["icon"] = name, icon
+        for tx in ledger.get("transactions") or []:
+            if tx.get("category") == old_name:
+                tx["category"] = name
+        for budget in ledger.get("budgets") or []:
+            if budget.get("category") == old_name:
+                budget["category"] = name
+        for habit in ledger.get("habits") or []:
+            if habit.get("category") == old_name:
+                habit["category"] = name
+        prefs = ledger_preferences(ledger)
+        prefs["merchant_categories"] = {
+            merchant: name if category == old_name else category
+            for merchant, category in prefs["merchant_categories"].items()
+        }
+    else:
+        entries.append({"name": name, "icon": icon})
+    ledger["categories"] = entries
+    save_ledger(args.ledger, ledger)
+    print(json.dumps({"category": next(item for item in entries if item["name"] == name)}, ensure_ascii=False, indent=2))
+
+
 def habit_list_command(args):
     ledger = load_ledger(args.ledger, create=True)
     seed_habits_if_needed(ledger)

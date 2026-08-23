@@ -5,3 +5,4 @@ wechat-bill-rows.tsv
 *-bill-rows.tsv
 *-memory.md
 dist/*
+scripts/__pycache__/*
