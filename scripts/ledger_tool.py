@@ -85,23 +85,52 @@ REQUIRED_TX_FIELDS = {
     "updated_at",
 }
 CATEGORY_KEYWORDS = {
-    "咖啡": ["星巴克", "瑞幸", "咖啡", "拿铁", "美式"],
-    "餐饮": ["饭", "午饭", "晚饭", "早餐", "外卖", "火锅", "奶茶", "餐厅", "美团", "饿了么"],
-    "交通": ["地铁", "公交", "打车", "滴滴", "高铁", "火车", "机票", "停车", "加油"],
-    "购物": ["淘宝", "京东", "拼多多", "超市", "便利店", "衣服", "数码"],
-    "居住": ["房租", "水电", "燃气", "物业", "宽带"],
+    "咖啡茶饮": ["星巴克", "瑞幸", "咖啡", "拿铁", "美式", "奶茶", "喜茶", "茶饮"],
+    "外食": ["饭", "午饭", "晚饭", "早餐", "外卖", "火锅", "餐厅", "美团", "饿了么", "烧腊", "烘焙"],
+    "买菜": ["买菜", "蔬菜", "水果", "海鲜", "买虾", "菜市场"],
+    "零食": ["零食", "赵一鸣"],
+    "加油": ["加油", "中国石化", "中国石油"],
+    "停车通行": ["停车", "停车费", "过路费", "高速费"],
+    "车辆养护": ["养车", "洗车", "修车", "保养", "途虎"],
+    "交通": ["地铁", "公交", "打车", "滴滴", "高铁", "火车", "机票"],
+    "服饰": ["衣服", "服饰", "URBAN REVIVO"],
+    "超市": ["超市", "百佳汇"],
+    "日用百货": ["百货", "日用品", "便利店"],
+    "其他购物": ["淘宝", "京东", "拼多多", "数码"],
+    "物业": ["房租", "水电", "燃气", "物业", "宽带"],
     "娱乐": ["电影", "游戏", "演出", "KTV", "会员"],
     "医疗": ["医院", "药", "挂号", "体检"],
     "教育": ["课程", "书", "学费", "培训"],
-    "人情": ["红包", "礼物", "请客"],
+    "红包": ["红包"],
+    "人情往来": ["礼物", "请客"],
+    "保险": ["保险", "保费"],
+    "软件服务": ["软件", "订阅", "DeepSeek", "深度求索"],
     "收入": ["工资", "奖金", "报销", "利息"],
+}
+DEFAULT_CATEGORY_PARENTS = {
+    "外食": "餐饮",
+    "咖啡茶饮": "餐饮",
+    "买菜": "餐饮",
+    "零食": "餐饮",
+    "服饰": "购物",
+    "超市": "购物",
+    "日用百货": "购物",
+    "其他购物": "购物",
+    "物业": "居住",
+    "加油": "交通",
+    "停车通行": "交通",
+    "车辆养护": "交通",
+    "红包": "人情",
+    "人情往来": "人情",
+    "保险": "理财",
+    "软件服务": "数字服务",
 }
 KNOWN_MERCHANTS = ["星巴克", "瑞幸", "麦当劳", "肯德基", "喜茶", "奈雪", "盒马"]
 FALLBACK_MERCHANTS = ["美团", "饿了么", "京东", "淘宝", "拼多多", "滴滴"]
 TYPE_KEYWORDS = {
     "income": ["工资", "奖金", "收入", "利息", "报销到账"],
     "refund": ["退款", "退回", "返现"],
-    "transfer": ["转账", "转入", "转出", "还信用卡"],
+    "transfer": ["还信用卡"],
 }
 TYPE_LINE_MAP = {"支出": "expense", "收入": "income", "退款": "refund", "转账": "transfer"}
 METHOD_KEYWORDS = {
@@ -491,12 +520,16 @@ def budget_progress(ledger, transactions, period=None):
     budgets = budgets_for_month(ledger, month)
     expense_total = 0.0
     by_category = defaultdict(float)
+    category_parents = category_parent_map(ledger)
     for tx in transactions:
         if tx.get("type") != "expense":
             continue
         amount = float(tx.get("amount") or 0)
         expense_total += amount
-        by_category[tx.get("category") or "其他"] += amount
+        category = tx.get("category") or "其他"
+        by_category[category] += amount
+        if category_parents.get(category):
+            by_category[category_parents[category]] += amount
     rows = []
     for budget in budgets:
         try:
@@ -802,9 +835,17 @@ def _mode(values):
 def build_usage_profile(ledger, summary=None):
     txs = [tx for tx in ledger.get("transactions", []) if isinstance(tx, dict)]
     expenses = [tx for tx in txs if tx.get("type") == "expense"]
-    account, account_n = _mode([tx.get("account") for tx in expenses])
+    account, _ = _mode([tx.get("account") for tx in expenses])
     account_id, _ = _mode([tx.get("account_id") for tx in expenses if tx.get("account") == account])
     method, method_n = _mode([tx.get("method") for tx in expenses])
+    configured_default = default_account(ledger)
+    default_name = configured_default.get("name") if configured_default else account
+    default_id = configured_default.get("id") if configured_default else account_id
+    default_method = (
+        ACCOUNT_TYPE_TO_METHOD.get(configured_default.get("type"))
+        if configured_default
+        else (method if method_n >= 2 else None)
+    )
     top_categories = [name for name, _count in Counter((tx.get("category") or "其他") for tx in expenses).most_common(4)]
     stable = []
     variable = []
@@ -831,13 +872,13 @@ def build_usage_profile(ledger, summary=None):
             hour = datetime.fromisoformat(tx.get("occurred_at") or "").hour
         except ValueError:
             continue
-        if 11 <= hour <= 14 and (tx.get("category") in {"餐饮", "咖啡"} or "饭" in str(tx.get("note") or "")):
+        if 11 <= hour <= 14 and (tx.get("category") in {"餐饮", "外食", "咖啡茶饮", "买菜", "零食"} or "饭" in str(tx.get("note") or "")):
             lunch_hours += 1
     parts = []
-    if account and account_n >= 2:
-        method_label = METHOD_LABELS.get(method) if method and method_n >= 2 else None
+    if default_name:
+        method_label = METHOD_LABELS.get(default_method) if default_method else None
         extra = f"（{method_label}）" if method_label else ""
-        parts.append(f"记账默认走{account}{extra}，缺账户时不必再问。")
+        parts.append(f"记账默认走{default_name}{extra}，缺账户时不必再问。")
     if top_categories:
         parts.append("支出主要记在" + "、".join(top_categories[:3]) + "。")
     if lunch_hours >= 3:
@@ -852,15 +893,14 @@ def build_usage_profile(ledger, summary=None):
     if not parts:
         parts.append("流水还少。按字面记，账户用默认，缺金额就问。")
     portrait = summary if summary else "".join(parts)
-    default_acc = find_account(ledger, account_id or account) if ledger else None
     return {
         "updated_at": now_iso(),
         "tx_count": len(txs),
         "summary": portrait,
         "defaults": {
-            "account": default_acc["name"] if default_acc else account,
-            "account_id": default_acc["id"] if default_acc else account_id,
-            "method": method if method_n >= 2 else None,
+            "account": default_name,
+            "account_id": default_id,
+            "method": default_method,
         },
         "top_categories": top_categories,
         "stable_amounts": stable[:8],
@@ -1157,6 +1197,8 @@ def infer_type(text):
 
 def infer_category(text, tx_type="expense"):
     if tx_type == "income":
+        if "红包" in text:
+            return "红包"
         return "收入"
     for category in CATEGORY_KEYWORDS:
         if category in text:
@@ -1355,6 +1397,8 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
     tx_type = infer_type(raw_text)
     merchant = infer_merchant(amount_removed, infer_category(raw_text, tx_type), raw_text)
     category = preferred_category(ledger, merchant, infer_category(raw_text, tx_type))
+    if tx_type == "expense" and re.search(r"(?:转账-?转给|转账给|转给)", raw_text):
+        category = "人情往来"
     method = infer_method(raw_text)
     account = infer_account(raw_text, method)
     tags = infer_tags(raw_text)
@@ -1446,15 +1490,24 @@ def compact_candidate(tx):
         "note": tx.get("note"),
         "occurred_at": tx.get("occurred_at"),
         "confidence": tx.get("confidence"),
+        "wechat_transaction_id": tx.get("wechat_transaction_id"),
     }
 
 
 def likely_duplicate_candidates(transactions, tx):
     candidates = []
+    tx_external_id = normalized_text(tx.get("wechat_transaction_id"))
     tx_amount = round(float(tx.get("amount", 0) or 0), 2)
     tx_merchant = normalized_text(tx.get("merchant"))
     tx_note = normalized_text(tx.get("note"))
     for existing in transactions:
+        existing_external_id = normalized_text(existing.get("wechat_transaction_id"))
+        if tx_external_id and existing_external_id:
+            if tx_external_id == existing_external_id:
+                candidates.append(compact_candidate(existing))
+            continue
+        if tx.get("type") and existing.get("type") and tx.get("type") != existing.get("type"):
+            continue
         try:
             existing_amount = round(float(existing.get("amount", 0) or 0), 2)
         except (TypeError, ValueError):
@@ -1593,7 +1646,7 @@ def payload_from_proposal(ledger, proposal, args, tx_id=None):
 def month_snapshot(ledger, month):
     rows = [tx for tx in ledger.get("transactions", []) if month_key(tx.get("occurred_at")) == month]
     period = {"label": month, "start": f"{month}-01" if month else None, "end": None, "month": month}
-    data = summarize(rows, period=period)
+    data = summarize(rows, period=period, category_parents=category_parent_map(ledger))
     data["budgets"] = budget_progress(ledger, rows, period)
     return {
         "key": month,
@@ -1849,6 +1902,7 @@ def filter_transactions(
     start=None,
     end=None,
     account=None,
+    category_parents=None,
 ):
     rows = []
     q = (query or "").lower()
@@ -1862,7 +1916,8 @@ def filter_transactions(
             continue
         if tx_type and tx.get("type") != tx_type:
             continue
-        if category and tx.get("category") != category:
+        tx_category = tx.get("category")
+        if category and tx_category != category and (category_parents or {}).get(tx_category) != category:
             continue
         if method and tx.get("method") != method:
             continue
@@ -1881,7 +1936,7 @@ def filter_transactions(
     return rows
 
 
-def filter_from_args(transactions, args):
+def filter_from_args(transactions, args, category_parents=None):
     period = resolve_period(
         month=getattr(args, "month", None),
         range_name=getattr(args, "range", None),
@@ -1898,6 +1953,7 @@ def filter_from_args(transactions, args):
         start=period["start"],
         end=period["end"],
         account=getattr(args, "account", None),
+        category_parents=category_parents,
     )
     return rows, period
 
@@ -1922,23 +1978,28 @@ def pct_change(new, old):
     return round((new - old) / old * 100, 1)
 
 
-def summarize(transactions, period=None, previous_transactions=None, previous_period_info=None):
+def summarize(transactions, period=None, previous_transactions=None, previous_period_info=None, category_parents=None):
     totals = {"expense": 0.0, "income": 0.0, "refund": 0.0, "transfer": 0.0}
     by_category = defaultdict(float)
     by_merchant = defaultdict(float)
+    by_income_merchant = defaultdict(float)
     by_day = defaultdict(float)
     by_method = defaultdict(float)
     by_month = defaultdict(float)
     by_weekday = defaultdict(float)
     expenses = []
+    type_counts = Counter()
     needs_review = []
     for tx in transactions:
         tx_type = tx.get("type", "expense")
         amount = float(tx.get("amount", 0) or 0)
+        type_counts[tx_type] += 1
         if tx_type in totals:
             totals[tx_type] += amount
+        if tx_type == "income":
+            by_income_merchant[tx.get("merchant") or "未填来源"] += amount
         if tx_type == "expense":
-            category = tx.get("category") or "其他"
+            category = (category_parents or {}).get(tx.get("category"), tx.get("category") or "其他")
             merchant = tx.get("merchant") or "未填商户"
             method = tx.get("method") or "未填渠道"
             day = tx_day(tx)
@@ -1984,6 +2045,10 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
         "totals": totals,
         "by_category": dict(sorted(by_category.items(), key=lambda item: item[1], reverse=True)),
         "by_merchant": dict(sorted(by_merchant.items(), key=lambda item: item[1], reverse=True)),
+        "by_income_merchant": {
+            key: round(value, 2)
+            for key, value in sorted(by_income_merchant.items(), key=lambda item: item[1], reverse=True)
+        },
         "by_day": dict(sorted(by_day.items())),
         "by_method": dict(sorted(by_method.items(), key=lambda item: item[1], reverse=True)),
         "top_merchants": [
@@ -1999,12 +2064,14 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             "weekend": round(by_weekday.get(5, 0.0) + by_weekday.get(6, 0.0), 2),
         },
         "count": len(transactions),
+        "income_count": type_counts["income"],
+        "refund_count": type_counts["refund"],
         "daily_average": daily_average,
         "needs_review": needs_review[:20],
         "outliers": outliers[:10],
     }
     if previous_transactions is not None:
-        previous = summarize(previous_transactions, period=previous_period_info)
+        previous = summarize(previous_transactions, period=previous_period_info, category_parents=category_parents)
         result["comparison"] = {
             "previous_label": (previous_period_info or {}).get("label"),
             "previous_totals": previous["totals"],
@@ -2395,6 +2462,7 @@ def build_summary(ledger, args, default_range=None):
         start=getattr(args, "start", None),
         end=getattr(args, "end", None),
     )
+    category_parents = category_parent_map(ledger)
     rows = filter_transactions(
         ledger["transactions"],
         query=getattr(args, "query", None),
@@ -2404,6 +2472,7 @@ def build_summary(ledger, args, default_range=None):
         start=period["start"],
         end=period["end"],
         account=getattr(args, "account", None),
+        category_parents=category_parents,
     )
     previous_rows = None
     previous_info = None
@@ -2419,8 +2488,9 @@ def build_summary(ledger, args, default_range=None):
                 start=previous_info["start"],
                 end=previous_info["end"],
                 account=getattr(args, "account", None),
+                category_parents=category_parents,
             )
-    data = summarize(rows, period=period, previous_transactions=previous_rows, previous_period_info=previous_info)
+    data = summarize(rows, period=period, previous_transactions=previous_rows, previous_period_info=previous_info, category_parents=category_parents)
     data["accounts"] = account_balances(ledger)
     data["budgets"] = budget_progress(ledger, rows, period)
     data["recurring"] = detect_recurring(ledger.get("transactions") or [])
@@ -2497,6 +2567,7 @@ def build_bill_pack(ledger, month=None):
         compare=True,
     )
     summary = build_summary(ledger, args)
+    category_parents = category_parent_map(ledger)
     category_counts = defaultdict(int)
     daily_expense = defaultdict(float)
     weekly_expense = defaultdict(float)
@@ -2504,7 +2575,8 @@ def build_bill_pack(ledger, month=None):
     for transaction in ledger.get("transactions") or []:
         if month_key(transaction.get("occurred_at")) != month or transaction.get("type") != "expense":
             continue
-        category_counts[transaction.get("category") or "其他"] += 1
+        category = transaction.get("category") or "其他"
+        category_counts[category_parents.get(category, category)] += 1
         day = tx_day(transaction)
         if not day:
             continue
@@ -3115,16 +3187,26 @@ def category_entries(ledger):
     seen = set()
     for item in ledger.get("categories") or []:
         if isinstance(item, str):
-            name, icon = item.strip(), None
+            name, icon, parent = item.strip(), None, None
         elif isinstance(item, dict):
-            name, icon = str(item.get("name") or "").strip(), item.get("icon")
+            name, icon, parent = str(item.get("name") or "").strip(), item.get("icon"), item.get("parent")
         else:
             continue
         if not name or name in seen:
             continue
-        entries.append({"name": name, "icon": str(icon).strip() if icon else None})
+        entries.append({"name": name, "icon": str(icon).strip() if icon else None, "parent": str(parent).strip() if parent else None})
         seen.add(name)
     return entries
+
+
+def category_parent_map(ledger):
+    parents = dict(DEFAULT_CATEGORY_PARENTS)
+    for item in category_entries(ledger):
+        if item["parent"]:
+            parents[item["name"]] = item["parent"]
+        else:
+            parents.pop(item["name"], None)
+    return parents
 
 
 def category_set_command(args):
@@ -3132,8 +3214,11 @@ def category_set_command(args):
     old_name = str(getattr(args, "old_name", "") or "").strip()
     name = str(getattr(args, "name", "") or "").strip()
     icon = str(getattr(args, "icon", "") or "").strip() or None
+    parent = str(getattr(args, "parent", "") or "").strip() or None
     if not name:
         raise SystemExit("Category name is required")
+    if parent == name:
+        raise SystemExit("Category cannot be its own parent")
     entries = category_entries(ledger)
     names = {item["name"] for item in entries}
     if old_name and old_name not in names:
@@ -3145,14 +3230,29 @@ def category_set_command(args):
         ) or old_name in (ledger_preferences(ledger).get("merchant_categories") or {}).values()
         if not referenced:
             raise SystemExit("Category not found")
-        entries.append({"name": old_name, "icon": None})
+        entries.append({"name": old_name, "icon": None, "parent": None})
         names.add(old_name)
+    if parent and parent not in names:
+        referenced = any(
+            item.get("category") == parent
+            for collection in (ledger.get("transactions") or [], ledger.get("budgets") or [], ledger.get("habits") or [])
+            for item in collection
+            if isinstance(item, dict)
+        )
+        if not referenced:
+            raise SystemExit("Parent category not found")
+        entries.append({"name": parent, "icon": None, "parent": None})
+        names.add(parent)
+    if parent and next(item for item in entries if item["name"] == parent)["parent"]:
+        raise SystemExit("A secondary category cannot contain another category")
     if name != old_name and name in names:
         raise SystemExit("Category name already exists")
     if old_name:
         for item in entries:
             if item["name"] == old_name:
-                item["name"], item["icon"] = name, icon
+                item["name"], item["icon"], item["parent"] = name, icon, parent
+            elif item["parent"] == old_name:
+                item["parent"] = name
         for tx in ledger.get("transactions") or []:
             if tx.get("category") == old_name:
                 tx["category"] = name
@@ -3168,10 +3268,14 @@ def category_set_command(args):
             for merchant, category in prefs["merchant_categories"].items()
         }
     else:
-        entries.append({"name": name, "icon": icon})
+        entries.append({"name": name, "icon": icon, "parent": parent})
     ledger["categories"] = entries
     save_ledger(args.ledger, ledger)
-    print(json.dumps({"category": next(item for item in entries if item["name"] == name)}, ensure_ascii=False, indent=2))
+    category = next(item for item in entries if item["name"] == name)
+    payload = {"name": category["name"], "icon": category["icon"]}
+    if category["parent"]:
+        payload["parent"] = category["parent"]
+    print(json.dumps({"category": payload}, ensure_ascii=False, indent=2))
 
 
 def habit_list_command(args):

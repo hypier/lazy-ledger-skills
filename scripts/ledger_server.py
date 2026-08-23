@@ -136,7 +136,7 @@ def make_handler(ledger_path):
             path = parsed.path.rstrip("/") or "/"
             query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
             tool = _tool()
-            if path == "/":
+            if path in {"/", "/settings"}:
                 _send(self, 200, body=APP_HTML.read_bytes(), content_type="text/html; charset=utf-8")
                 return
             if path == "/bill" or path.startswith("/bill/"):
@@ -264,6 +264,7 @@ def make_handler(ledger_path):
                     ledger=str(ledger_path),
                     name=body.get("name"),
                     icon=body.get("icon"),
+                    parent=body.get("parent"),
                     old_name=None,
                 )
                 status, payload = _invoke(tool.category_set_command, args)
@@ -322,6 +323,7 @@ def make_handler(ledger_path):
                     old_name=unquote(parts[2]),
                     name=body.get("name"),
                     icon=body.get("icon"),
+                    parent=body.get("parent"),
                 )
                 status, payload = _invoke(tool.category_set_command, args)
                 _send(self, status, payload)

@@ -115,14 +115,13 @@ Missing `accounts` on an old file is filled with the five defaults. Do not repla
 
 ```json
 {
-  "id": "cat_food",
   "name": "餐饮",
-  "keywords": ["饭", "外卖", "奶茶"],
-  "created_at": "2026-07-08T12:00:00+08:00"
+  "icon": "food",
+  "parent": null
 }
 ```
 
-Hints only. Transactions store the category name directly. Merchant habits live in `preferences.merchant_categories`, not here.
+`parent` is null for a first-level category and contains the first-level category name for a second-level category. Only two levels are supported. Transactions store the most specific category name directly; reports roll second-level values into their parent. Merchant habits live in `preferences.merchant_categories`, not here.
 
 ## Habit
 

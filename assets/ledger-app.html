@@ -81,6 +81,11 @@
       align-items: flex-start;
       margin-bottom: 22px;
     }
+    .header-settings { margin-left: auto; width: 40px; min-width: 40px; height: 40px; padding: 0; border-radius: 12px; background: var(--paper); color: var(--pine); }
+    .header-settings .icon { width: 19px; height: 19px; }
+    .settings-back { display: none !important; text-decoration: none; }
+    body.settings-page .tabs, body.settings-page .panel-tab:not(#panel-settings), body.settings-page #settingsBtn { display: none !important; }
+    body.settings-page .settings-back { display: inline-flex !important; }
     .mark {
       width: 44px;
       height: 44px;
@@ -202,6 +207,14 @@
     .panel-kicker { color: var(--muted); font-size: 13px; }
     .budget-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
     .account-form { display: grid; grid-template-columns: 1.2fr 0.9fr 0.8fr auto; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .icon-picker-field { grid-column: 1 / -1; }
+    .icon-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--bg) 55%, var(--paper)); }
+    .icon-choice { width: 100%; height: 42px; padding: 0; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); display: grid; place-items: center; }
+    .icon-choice .icon { width: 19px; height: 19px; }
+    .icon-choice:hover { background: var(--paper); color: var(--pine); }
+    .icon-choice[aria-pressed="true"] { background: var(--pine); border-color: var(--pine); color: var(--paper); }
+    .category-row-child { margin-left: 28px; border-left: 2px solid var(--line); }
+    .category-row-child .row-main { padding-left: 8px; }
     .bill-editor { display: grid; gap: 12px; padding: 16px; border-top: 1px solid var(--line); }
     .bill-editor textarea { min-height: 150px; }
     .drill-row { border: 0; padding: 0; color: inherit; background: transparent; text-align: left; font: inherit; cursor: pointer; }
@@ -375,6 +388,12 @@
     .chart-wide { grid-column: 1 / -1; }
     .chart-body { padding: 16px; }
     .chart-split { display: grid; grid-template-columns: minmax(190px, 0.9fr) minmax(0, 1.1fr); align-items: center; gap: 20px; }
+    .income-layout { display: grid; grid-template-columns: minmax(210px, 0.7fr) minmax(0, 1.3fr); gap: 24px; align-items: center; }
+    .income-stat { border-right: 1px solid var(--line); padding-right: 24px; min-width: 0; }
+    .income-stat-label { color: var(--muted); font-size: 12px; }
+    .income-stat-value { color: var(--income); font-family: var(--serif); font-size: 30px; font-weight: 650; line-height: 1.15; margin-top: 5px; }
+    .income-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .income-meta strong { color: var(--ink); font-family: var(--mono); font-weight: 600; }
     #pieChart { display: grid; place-items: center; min-height: 236px; }
     .legend { display: grid; gap: 6px; min-width: 0; }
     .legend-row {
@@ -519,6 +538,8 @@
     }
     @media (max-width: 720px) {
       .chart-split { grid-template-columns: 1fr; gap: 12px; }
+      .income-layout { grid-template-columns: 1fr; gap: 16px; }
+      .income-stat { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 16px; }
       #pieChart { min-height: 0; }
       .donut-wrap { width: min(190px, 62vw); }
       .metrics { grid-template-columns: 1fr 1fr; }
@@ -571,7 +592,18 @@
       <symbol id="icon-grocery" viewBox="0 0 24 24"><path d="M4 10h16l-2 10H6L4 10Zm4 0 4-7 4 7M8 14h.01M12 14h.01M16 14h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Zm-3 9 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="icon-cash" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 9H6v1m11-1h1v1M7 15H6v-1m11 1h1v-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-utilities" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-phone" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 18h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="icon-clothes" viewBox="0 0 24 24"><path d="m8 4 4 2 4-2 5 4-3 4-2-1v9H8v-9l-2 1-3-4 5-4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-plane" viewBox="0 0 24 24"><path d="m22 16-9-3-5 6-2-1 3-6-6-4 2-1 6 3 3-8 2 1-1 8 6 3 1 2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-bed" viewBox="0 0 24 24"><path d="M3 19V7m0 8h18v4m-18-8h7a3 3 0 0 1 3 3v1M5 11V8h5v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-investment" viewBox="0 0 24 24"><path d="M4 20V4m0 16h16M7 15l4-4 3 2 5-6M16 7h3v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-heart" viewBox="0 0 24 24"><path d="M20.8 5.8a5.2 5.2 0 0 0-7.4 0L12 7.2l-1.4-1.4a5.2 5.2 0 0 0-7.4 7.4L12 22l8.8-8.8a5.2 5.2 0 0 0 0-7.4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.4 5.6L19 10l-5.6 1.4L12 17l-1.4-5.6L5 10l5.6-1.4L12 3Zm7 13 .6 2.4L22 19l-2.4.6L19 22l-.6-2.4L16 19l2.4-.6L19 16Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
       <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/></symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.1 2.1-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56v.08h-3v-.08a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.1-2.1.06-.06A1.7 1.7 0 0 0 7.04 15a1.7 1.7 0 0 0-1.56-1.04H5.4v-3h.08A1.7 1.7 0 0 0 7.04 9.92a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.1-2.1.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1.04-1.56V4.64h3v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.1 2.1-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.04h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-tune" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="6" r="2" fill="var(--paper)" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="2" fill="var(--paper)" stroke="currentColor" stroke-width="1.7"/><circle cx="11" cy="18" r="2" fill="var(--paper)" stroke="currentColor" stroke-width="1.7"/></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
       <symbol id="icon-wechat" viewBox="0 0 24 24"><path d="M10.5 5C5.8 5 2 7.8 2 11.3c0 2 1.2 3.7 3.3 4.9L4.5 19l3.1-1.6c1 .3 2 .4 2.9.4h.7a5.2 5.2 0 0 1-.7-2.5c0-3.2 3.2-5.8 7.3-5.8h.7C17.4 6.9 14.3 5 10.5 5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M22 15.3c0-2.7-2.8-4.8-6.2-4.8s-6.2 2.1-6.2 4.8 2.8 4.8 6.2 4.8c.8 0 1.5-.1 2.2-.3l2.4 1.2-.6-2.1c1.4-.9 2.2-2.2 2.2-3.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7.5 10h.01m5-0.2h.01m1.2 5h.01m4.2 0h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
       <symbol id="icon-alipay" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 9h8m-4-3v7m-5 1c3.7 0 7.2 1.2 10 3m-8.5 1c3.5-1.1 6-3.5 7.5-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     </defs>
@@ -590,6 +622,8 @@
         <h1>懒人记账</h1>
         <div class="sub" id="ledgerMeta">正在读取本地账本</div>
       </div>
+      <button class="btn header-settings" type="button" id="settingsBtn" aria-label="打开设置" title="设置"><svg class="icon" aria-hidden="true"><use href="#icon-tune"></use></svg></button>
+      <a class="btn header-settings settings-back" href="/" aria-label="返回账本" title="返回账本"><svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg></a>
     </header>
 
     <main id="main">
@@ -597,7 +631,7 @@
         <button type="button" role="tab" id="tab-ledger" aria-controls="panel-ledger" data-tab="ledger"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>记账</button>
         <button type="button" role="tab" id="tab-charts" aria-controls="panel-charts" data-tab="charts"><svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>报表</button>
         <button type="button" role="tab" id="tab-bill" aria-controls="panel-bill" data-tab="bill"><svg class="icon" aria-hidden="true"><use href="#icon-receipt"></use></svg>月度账单</button>
-        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" data-tab="book"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>设置</button>
+        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" data-tab="book"><svg class="icon" aria-hidden="true"><use href="#icon-book"></use></svg>账本</button>
       </div>
 
       <section class="panel-tab" id="panel-ledger" role="tabpanel" aria-labelledby="tab-ledger">
@@ -669,6 +703,21 @@
           <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-scale"></use></svg>净额</div><div class="metric-value" id="chartNet">¥0.00</div></div>
           <div class="metric"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>较上期</div><div class="metric-value" id="chartDelta">—</div></div>
         </section>
+        <section class="panel" style="margin-top:12px" aria-labelledby="incomeAnalysisTitle">
+          <div class="panel-head"><h2 id="incomeAnalysisTitle"><svg class="icon" aria-hidden="true"><use href="#icon-income"></use></svg>收入分析</h2><span class="panel-kicker" id="incomeKicker">0 笔</span></div>
+          <div class="chart-body income-layout" id="incomeAnalysis">
+            <div class="income-stat">
+              <div class="income-stat-label">本期收入</div>
+              <div class="income-stat-value" id="incomeDetailTotal">¥0.00</div>
+              <div class="income-meta">
+                <span>平均每笔 <strong id="incomeAverage">¥0.00</strong></span>
+                <span>较上期 <strong id="incomeChange">—</strong></span>
+                <span id="incomeRefundWrap" hidden>退款 <strong id="incomeRefund">¥0.00</strong></span>
+              </div>
+            </div>
+            <div id="incomeSourceChart"></div>
+          </div>
+        </section>
         <div class="chart-grid">
           <section class="panel">
             <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-pie"></use></svg>分类占比</h2><span class="panel-kicker">支出</span></div>
@@ -730,16 +779,7 @@
       </section>
 
       <section class="panel-tab" id="panel-book" role="tabpanel" aria-labelledby="tab-book" hidden>
-      <section class="panel" style="margin-top:0">
-        <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>分类</h2><span class="panel-kicker">名称与图标</span></div>
-        <form class="account-form" id="categoryForm">
-          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>名称</span><input id="categoryName" placeholder="例如：旅行" required></label>
-          <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>图标</span><select id="categoryIcon"></select></label>
-          <button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>添加</button>
-        </form>
-        <div class="rows" id="categoryRows"></div>
-      </section>
-      <div class="grid-2" style="margin-top:12px">
+      <div class="grid-2" style="margin-top:0">
         <section class="panel">
           <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-wallet"></use></svg>账户余额</h2><span class="panel-kicker" id="accountKicker">含期初</span></div>
           <form class="account-form" id="accountForm">
@@ -771,6 +811,18 @@
           <div class="rows" id="budgetRows"></div>
         </section>
       </div>
+      </section>
+      <section class="panel-tab" id="panel-settings" role="tabpanel" aria-label="设置" hidden>
+        <section class="panel" style="margin-top:0">
+          <div class="panel-head"><h2><svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>设置</h2><span class="panel-kicker">分类管理</span></div>
+          <form class="account-form" id="categoryForm">
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>名称</span><input id="categoryName" placeholder="例如：旅行" required></label>
+            <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>归属一级分类</span><select id="categoryParent"></select></label>
+            <label class="field icon-picker-field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>图标</span><input id="categoryIcon" type="hidden" value="more"><div class="icon-picker" id="categoryIconPicker" role="group" aria-label="选择图标"></div></label>
+            <button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>添加</button>
+          </form>
+          <div class="rows" id="categoryRows"></div>
+        </section>
       </section>
     </main>
   </div>
@@ -805,7 +857,8 @@
     <form class="dialog-body" id="categoryEditForm">
       <strong class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>编辑分类</strong>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>名称</span><input id="editCategoryName" required></label>
-      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>图标</span><select id="editCategoryIcon"></select></label>
+      <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>归属一级分类</span><select id="editCategoryParent"></select></label>
+      <label class="field icon-picker-field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>图标</span><input id="editCategoryIcon" type="hidden" value="more"><div class="icon-picker" id="editCategoryIconPicker" role="group" aria-label="选择图标"></div></label>
       <div class="dialog-actions">
         <button class="btn" type="button" id="cancelCategoryBtn">取消</button>
         <button class="btn primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>保存</button>
@@ -845,19 +898,30 @@
     const typeIcon = { expense: "expense", income: "income", refund: "refund", transfer: "transfer" };
     const showTypeBadge = (type) => type === "refund" || type === "transfer";
     const categoryIcons = {
-      餐饮: "food", 购物: "shopping", 居住: "home", 交通: "car", 咖啡: "coffee",
+      餐饮: "food", 外食: "food", 咖啡茶饮: "coffee", 买菜: "grocery", 零食: "shopping",
+      购物: "shopping", 服饰: "clothes", 超市: "shopping", 日用百货: "shopping", 其他购物: "receipt",
+      居住: "home", 物业: "home", 交通: "car", 加油: "car", 停车通行: "car", 车辆养护: "car",
       人情: "gift", 红包: "gift", 医疗: "medical", 教育: "education", 娱乐: "entertainment",
-      买菜: "grocery", 保险: "shield", 提现: "cash", 收入: "income", 转账: "transfer", 其他: "more"
+      人情往来: "heart", 理财: "investment", 保险: "shield", 数字服务: "phone", 软件服务: "phone",
+      收入: "income", 转账: "transfer", 其他: "more"
+    };
+    const defaultCategoryParents = {
+      外食: "餐饮", 咖啡茶饮: "餐饮", 买菜: "餐饮", 零食: "餐饮",
+      服饰: "购物", 超市: "购物", 日用百货: "购物", 其他购物: "购物",
+      物业: "居住", 加油: "交通", 停车通行: "交通", 车辆养护: "交通",
+      红包: "人情", 人情往来: "人情", 保险: "理财", 软件服务: "数字服务"
     };
     const categoryIconOptions = [
-      ["food", "餐饮"], ["shopping", "购物"], ["grocery", "买菜"], ["home", "居住"], ["car", "交通"],
-      ["coffee", "咖啡"], ["gift", "人情"], ["medical", "医疗"], ["education", "教育"], ["entertainment", "娱乐"],
-      ["shield", "保险"], ["cash", "现金"], ["more", "其他"]
+      ["food", "餐具"], ["shopping", "购物袋"], ["grocery", "菜篮"], ["home", "房屋"], ["car", "车辆"],
+      ["coffee", "咖啡杯"], ["gift", "礼盒"], ["medical", "医疗十字"], ["education", "学位帽"], ["entertainment", "游戏手柄"],
+      ["shield", "保障盾牌"], ["cash", "纸币"], ["receipt", "账单"], ["utilities", "水电"], ["phone", "通讯"],
+      ["clothes", "服饰"], ["plane", "出行"], ["bed", "住宿"], ["repeat", "订阅"], ["investment", "投资"],
+      ["income", "收入"], ["refund", "退款"], ["transfer", "转账"], ["heart", "关怀"], ["sparkles", "美妆"], ["more", "省略号"]
     ];
     const cadenceLabel = { monthly: "每月", weekly: "每周", biweekly: "每两周" };
     const methodLabel = { wechat: "微信", alipay: "支付宝", cash: "现金", card: "信用卡", bank: "银行卡", other: "其他" };
     const accountTypeIcon = { wechat: "wechat", alipay: "alipay", cash: "cash", bank: "card", credit: "card", other: "wallet" };
-    const TAB_IDS = ["ledger", "charts", "bill", "book"];
+    const TAB_IDS = ["ledger", "charts", "bill", "book", "settings"];
     const CHART_COLORS = ["#2c5c4f", "#9e3a32", "#3d5a80", "#c4a35a", "#6b8f71", "#6a5470"];
     let LEDGER = { transactions: [], accounts: [], budgets: [], bills: [], currency: "CNY" };
     let INSIGHTS = null;
@@ -877,7 +941,7 @@
     }
 
     function setTab(name, writeHash = true) {
-      const aliases = { 记账: "ledger", 报表: "charts", 账单: "bill", 月度账单: "bill", 账本: "book", 设置: "book" };
+      const aliases = { 记账: "ledger", 报表: "charts", 账单: "bill", 月度账单: "bill", 账本: "book", 设置: "settings" };
       currentTab = TAB_IDS.includes(name) ? name : (aliases[name] || "ledger");
       document.querySelectorAll("[role=tab]").forEach((tab) => {
         const on = tab.dataset.tab === currentTab;
@@ -1087,6 +1151,19 @@
     const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
     const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#icon-${escapeHtml(name)}"></use></svg>`;
+    const iconPickerIds = {
+      categoryIcon: "categoryIconPicker",
+      editCategoryIcon: "editCategoryIconPicker"
+    };
+    function renderIconPicker(inputId) {
+      const input = document.getElementById(inputId);
+      const picker = document.getElementById(iconPickerIds[inputId]);
+      if (!input || !picker) return;
+      const selected = input.value || "more";
+      picker.innerHTML = categoryIconOptions.map(([value, label]) => `
+        <button class="icon-choice" type="button" data-icon-input="${inputId}" data-icon-value="${escapeHtml(value)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" aria-pressed="${value === selected ? "true" : "false"}">${icon(value)}</button>
+      `).join("");
+    }
     function categoryIcon(category, type) {
       if (type === "transfer") return "transfer";
       if (type === "income") return "income";
@@ -1159,7 +1236,7 @@
         if (bounds.start && day < bounds.start) return false;
         if (bounds.end && day > bounds.end) return false;
         if (type && tx.type !== type) return false;
-        if (category && (tx.category || "其他") !== category) return false;
+        if (category && (tx.category || "其他") !== category && categoryParent(tx.category) !== category) return false;
         if (account && ![tx.account_id, tx.account, tx.to_account_id, tx.to_account].includes(account)) return false;
         if (method && tx.method !== method) return false;
         if (query && ![tx.merchant, tx.note, tx.category, tx.amount, tx.account].join(" ").toLowerCase().includes(query)) return false;
@@ -1171,19 +1248,34 @@
       const definitions = new Map();
       for (const item of LEDGER.categories || []) {
         const name = typeof item === "string" ? item : item && item.name;
-        if (name) definitions.set(name, { name, icon: typeof item === "object" ? item.icon : null });
+        if (name) definitions.set(name, { name, icon: typeof item === "object" ? item.icon : null, parent: typeof item === "object" ? (item.parent || null) : (defaultCategoryParents[name] || null) });
       }
       for (const tx of LEDGER.transactions || []) {
+        if (tx.type === "transfer") continue;
         const name = tx.category || "其他";
-        if (!definitions.has(name)) definitions.set(name, { name, icon: null });
+        if (!definitions.has(name)) definitions.set(name, { name, icon: null, parent: defaultCategoryParents[name] || null });
       }
-      return [...definitions.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+      for (const item of [...definitions.values()]) {
+        if (item.parent && !definitions.has(item.parent)) definitions.set(item.parent, { name: item.parent, icon: null, parent: null });
+      }
+      return [...definitions.values()].sort((a, b) => {
+        const aRoot = a.parent || a.name;
+        const bRoot = b.parent || b.name;
+        return `${aRoot}|${a.parent ? "1" : "0"}|${a.name}`.localeCompare(`${bRoot}|${b.parent ? "1" : "0"}|${b.name}`, "zh-CN");
+      });
     }
     function categories() {
       return categoryDefinitions().map((item) => item.name);
     }
     function configuredCategoryIcon(category) {
       return categoryDefinitions().find((item) => item.name === category)?.icon || null;
+    }
+    function categoryParent(category) {
+      return categoryDefinitions().find((item) => item.name === category)?.parent || null;
+    }
+    function categoryParentOptions(selected, excludeName = "") {
+      const parents = categoryDefinitions().filter((item) => !item.parent && item.name !== excludeName).map((item) => [item.name, item.name]);
+      return selectOptions(parents, selected, "作为一级分类");
     }
 
     function selectOptions(rows, selected, emptyLabel = "") {
@@ -1281,12 +1373,20 @@
       const categoryRows = categories().map((item) => [item, item]);
       categoryFilter.innerHTML = selectOptions(categoryRows, currentCategory, "全部分类");
       categoryFilter.value = currentCategory;
-      const categoryIconRows = categoryIconOptions.map(([value, label]) => [value, label]);
-      document.getElementById("categoryIcon").innerHTML = selectOptions(categoryIconRows, document.getElementById("categoryIcon").value || "more");
-      document.getElementById("editCategoryIcon").innerHTML = selectOptions(categoryIconRows, document.getElementById("editCategoryIcon").value || "more");
+      const categoryParent = document.getElementById("categoryParent");
+      const currentCategoryParent = categoryParent.value;
+      categoryParent.innerHTML = categoryParentOptions(currentCategoryParent);
+      categoryParent.value = currentCategoryParent;
+      const editCategoryParent = document.getElementById("editCategoryParent");
+      const currentEditCategoryParent = editCategoryParent.value;
+      editCategoryParent.innerHTML = categoryParentOptions(currentEditCategoryParent, editingCategoryName || "");
+      editCategoryParent.value = currentEditCategoryParent;
+      renderIconPicker("categoryIcon");
+      renderIconPicker("editCategoryIcon");
       document.getElementById("categoryRows").innerHTML = categoryDefinitions().map((item) => {
         const iconName = item.icon || categoryIcon(item.name, "expense");
-        return `<div class="row editable-row" data-edit-category="${escapeHtml(item.name)}" role="button" tabindex="0" aria-label="编辑分类 ${escapeHtml(item.name)}"><div class="row-main"><span class="row-icon">${icon(iconName)}</span><div class="row-copy"><strong>${escapeHtml(item.name)}</strong><div class="meta">${escapeHtml(categoryIconOptions.find(([value]) => value === iconName)?.[1] || "自定义图标")}</div></div></div>${icon("pen")}</div>`;
+        const level = item.parent ? `二级分类 · 归属 ${item.parent}` : "一级分类";
+        return `<div class="row editable-row ${item.parent ? "category-row-child" : ""}" data-edit-category="${escapeHtml(item.name)}" role="button" tabindex="0" aria-label="编辑分类 ${escapeHtml(item.name)}"><div class="row-main"><span class="row-icon">${icon(iconName)}</span><div class="row-copy"><strong>${escapeHtml(item.name)}</strong><div class="meta">${escapeHtml(level)} · ${escapeHtml(categoryIconOptions.find(([value]) => value === iconName)?.[1] || "自定义图标")}</div></div></div>${icon("pen")}</div>`;
       }).join("") || `<div class="empty">还没有分类。添加一条分类即可开始使用。</div>`;
       const accounts = (LEDGER.accounts || []).filter((item) => !item.archived);
       const currentAccount = accountFilter.value;
@@ -1318,7 +1418,7 @@
       document.getElementById("budgetLabel").textContent = month || "选择月份";
       const budgets = (LEDGER.budgets || []).filter((item) => !month || !item.month || item.month === month);
       document.getElementById("budgetRows").innerHTML = budgets.length ? budgets.map((item) => {
-        const spent = rows.filter((tx) => tx.type === "expense" && (!item.category || tx.category === item.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+        const spent = rows.filter((tx) => tx.type === "expense" && (!item.category || tx.category === item.category || categoryParent(tx.category) === item.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
         const left = Number(item.amount) - spent;
         const category = item.category || "本月总额";
         return `<div class="row"><div class="row-main"><span class="row-icon">${icon("tag")}</span><div class="row-copy"><strong>${escapeHtml(category)}</strong><div class="meta">限额 ${money(item.amount)}</div></div></div><div class="amount ${left < 0 ? "expense" : ""}">${left < 0 ? "超支 " : "剩余 "}${money(Math.abs(left))}</div><button class="btn" data-del-budget="${escapeHtml(item.id)}" type="button" aria-label="删除 ${escapeHtml(category)} 预算" title="删除预算">${icon("trash")}</button></div>`;
@@ -1373,6 +1473,17 @@
       deltaEl.textContent = change == null ? "—" : `${change > 0 ? "+" : ""}${Number(change).toFixed(1)}%`;
       deltaEl.classList.toggle("expense", Number(change) > 0);
       deltaEl.classList.toggle("income", Number(change) < 0);
+      const incomeCount = Number((INSIGHTS && INSIGHTS.income_count) || 0);
+      const incomeChange = comparison.income_change_pct;
+      document.getElementById("incomeKicker").textContent = `${incomeCount} 笔`;
+      document.getElementById("incomeDetailTotal").textContent = money(totals.income);
+      document.getElementById("incomeAverage").textContent = money(incomeCount ? Number(totals.income || 0) / incomeCount : 0);
+      document.getElementById("incomeChange").textContent = incomeChange == null ? "—" : `${incomeChange > 0 ? "+" : ""}${Number(incomeChange).toFixed(1)}%`;
+      const refundWrap = document.getElementById("incomeRefundWrap");
+      refundWrap.hidden = !Number(totals.refund);
+      document.getElementById("incomeRefund").textContent = money(totals.refund);
+      const incomeSources = Object.entries((INSIGHTS && INSIGHTS.by_income_merchant) || {});
+      document.getElementById("incomeSourceChart").innerHTML = hbarSvg(incomeSources, "这段时间没有收入", "query");
       const slices = topSlices(INSIGHTS && INSIGHTS.by_category);
       const colors = palette();
       const pieTotal = slices.reduce((sum, item) => sum + item[1], 0);
@@ -1585,9 +1696,11 @@
       event.preventDefault();
       await api("/api/categories", { method: "POST", body: {
         name: document.getElementById("categoryName").value.trim(),
-        icon: document.getElementById("categoryIcon").value
+        icon: document.getElementById("categoryIcon").value,
+        parent: document.getElementById("categoryParent").value || null
       }});
       document.getElementById("categoryName").value = "";
+      document.getElementById("categoryParent").value = "";
       await refresh();
     });
 
@@ -1596,9 +1709,21 @@
       if (!category) return;
       editingCategoryName = name;
       document.getElementById("editCategoryName").value = category.name;
+      document.getElementById("editCategoryParent").innerHTML = categoryParentOptions(category.parent, category.name);
+      document.getElementById("editCategoryParent").value = category.parent || "";
       document.getElementById("editCategoryIcon").value = category.icon || categoryIcon(category.name, "expense");
+      renderIconPicker("editCategoryIcon");
       categoryDialog.showModal();
     }
+
+    document.addEventListener("click", (event) => {
+      const choice = event.target.closest("[data-icon-input][data-icon-value]");
+      if (!choice) return;
+      const input = document.getElementById(choice.dataset.iconInput);
+      if (!input) return;
+      input.value = choice.dataset.iconValue;
+      renderIconPicker(choice.dataset.iconInput);
+    });
 
     document.getElementById("categoryRows").addEventListener("click", (event) => {
       const row = event.target.closest("[data-edit-category]");
@@ -1615,11 +1740,13 @@
       event.preventDefault();
       await api(`/api/categories/${encodeURIComponent(editingCategoryName)}`, { method: "PATCH", body: {
         name: document.getElementById("editCategoryName").value.trim(),
-        icon: document.getElementById("editCategoryIcon").value
+        icon: document.getElementById("editCategoryIcon").value,
+        parent: document.getElementById("editCategoryParent").value || null
       }});
       categoryDialog.close();
       await refresh();
     });
+    document.getElementById("settingsBtn").addEventListener("click", () => { window.location.href = "/settings"; });
 
     function openTransactionEditor(id) {
       const tx = (LEDGER.transactions || []).find((item) => item.id === id);
@@ -1722,8 +1849,9 @@
     });
     window.addEventListener("hashchange", () => setTab(location.hash.replace("#", ""), false));
     document.getElementById("billMonth").addEventListener("change", loadBill);
+    document.body.classList.toggle("settings-page", location.pathname === "/settings");
     refresh()
-      .then(() => setTab(location.hash.replace("#", "") || "ledger", false))
+      .then(() => setTab(location.pathname === "/settings" ? "settings" : (location.hash.replace("#", "") || "ledger"), false))
       .catch((error) => {
         document.getElementById("ledgerMeta").textContent = error.message;
       });

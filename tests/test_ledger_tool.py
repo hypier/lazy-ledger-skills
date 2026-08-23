@@ -43,7 +43,7 @@ class LedgerToolTest(unittest.TestCase):
             proposal = json.loads(result.stdout)
             self.assertEqual(proposal["amount"], 38.0)
             self.assertEqual(proposal["type"], "expense")
-            self.assertEqual(proposal["category"], "咖啡")
+            self.assertEqual(proposal["category"], "咖啡茶饮")
             self.assertEqual(proposal["merchant"], "星巴克")
             self.assertEqual(proposal["occurred_at"][:10], "2026-07-07")
             self.assertFalse(ledger.exists())
@@ -52,7 +52,7 @@ class LedgerToolTest(unittest.TestCase):
         result = run_tool("parse", "--text", "2026-07-07 瑞幸咖啡 19.9")
 
         proposal = json.loads(result.stdout)
-        self.assertEqual(proposal["category"], "咖啡")
+        self.assertEqual(proposal["category"], "咖啡茶饮")
         self.assertEqual(proposal["merchant"], "瑞幸")
 
     def test_add_text_refuses_likely_duplicate_unless_allowed(self):
@@ -181,6 +181,36 @@ class LedgerToolTest(unittest.TestCase):
             self.assertFalse(report["ok"])
             self.assertIn("likely_duplicate", {issue["code"] for issue in report["issues"]})
 
+    def test_doctor_uses_wechat_transaction_id_and_type_for_duplicates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("init", "--ledger", str(ledger))
+            data = json.loads(ledger.read_text())
+            base = {
+                "amount": 38,
+                "currency": "CNY",
+                "category": "其他",
+                "merchant": "同一商户",
+                "occurred_at": "2026-07-07T12:00:00+08:00",
+                "source": "import",
+                "created_at": "2026-07-08T12:00:00+08:00",
+                "updated_at": "2026-07-08T12:00:00+08:00",
+            }
+            data["transactions"] = [
+                {**base, "id": "tx_expense", "type": "expense", "wechat_transaction_id": "wx_1"},
+                {**base, "id": "tx_refund", "type": "refund", "wechat_transaction_id": "wx_2"},
+            ]
+            ledger.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+            report = json.loads(run_tool("doctor", "--ledger", str(ledger), "--json").stdout)
+
+            self.assertTrue(report["ok"])
+
+            data["transactions"][1]["wechat_transaction_id"] = "wx_1"
+            ledger.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            report = json.loads(run_tool("doctor", "--ledger", str(ledger), "--json").stdout)
+            self.assertIn("likely_duplicate", {issue["code"] for issue in report["issues"]})
+
     def test_parse_paid_amount_beats_original_price(self):
         result = run_tool("parse", "--text", "2026-07-07 星巴克 原价45 实付38")
         proposal = json.loads(result.stdout)
@@ -209,7 +239,7 @@ class LedgerToolTest(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["count"], 2)
         self.assertEqual([item["amount"] for item in payload["proposals"]], [26.0, 38.0])
-        self.assertEqual(payload["proposals"][0]["category"], "餐饮")
+        self.assertEqual(payload["proposals"][0]["category"], "外食")
 
     def test_parse_stacked_payment_paste(self):
         paste = "\n".join(
@@ -290,7 +320,7 @@ class LedgerToolTest(unittest.TestCase):
             run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 星巴克 38")
             result = run_tool("show", "--ledger", str(ledger), "--month", "2026-07", "--compare")
             self.assertIn("## 2026-07", result.stdout)
-            self.assertIn("咖啡", result.stdout)
+            self.assertIn("餐饮", result.stdout)
             self.assertIn("较2026-06", result.stdout)
 
     def test_export_csv_writes_header_and_row(self):
@@ -345,6 +375,20 @@ class LedgerToolTest(unittest.TestCase):
         self.assertEqual(proposal["to_account"], "支付宝")
         self.assertEqual(proposal["amount"], 500.0)
 
+    def test_parse_person_transfer_remains_an_expense(self):
+        result = run_tool("parse", "--text", "转账给陈超 500")
+        proposal = json.loads(result.stdout)
+        self.assertEqual(proposal["type"], "expense")
+        self.assertEqual(proposal["category"], "人情往来")
+        self.assertNotIn("to_account", proposal)
+
+    def test_parse_credit_card_repayment_is_an_account_transfer(self):
+        result = run_tool("parse", "--text", "银行卡还信用卡 500")
+        proposal = json.loads(result.stdout)
+        self.assertEqual(proposal["type"], "transfer")
+        self.assertEqual(proposal["account"], "银行卡")
+        self.assertEqual(proposal["to_account"], "信用卡")
+
     def test_account_balance_decreases_after_expense(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
@@ -357,11 +401,11 @@ class LedgerToolTest(unittest.TestCase):
     def test_budget_progress_shows_remaining_in_show(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
-            run_tool("budget", "set", "--ledger", str(ledger), "--month", "2026-07", "--category", "咖啡", "--amount", "100")
+            run_tool("budget", "set", "--ledger", str(ledger), "--month", "2026-07", "--category", "咖啡茶饮", "--amount", "100")
             run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 星巴克 38")
             result = run_tool("show", "--ledger", str(ledger), "--month", "2026-07")
             self.assertIn("### 预算", result.stdout)
-            self.assertIn("咖啡", result.stdout)
+            self.assertIn("咖啡茶饮", result.stdout)
             self.assertIn("剩余", result.stdout)
 
     def test_show_this_year_and_insights_include_recurring(self):
@@ -472,6 +516,23 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("周期账", html)
             self.assertIn("微信零钱", html)
 
+    def test_summary_json_includes_income_indicators(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--amount", "100", "--type", "income", "--merchant", "公司", "--date", "2026-07-01")
+            run_tool("add", "--ledger", str(ledger), "--amount", "50", "--type", "income", "--merchant", "朋友", "--date", "2026-07-02")
+
+            summary = json.loads(run_tool("summary", "--ledger", str(ledger), "--json").stdout)
+
+            self.assertEqual(summary["totals"]["income"], 150.0)
+            self.assertEqual(summary["income_count"], 2)
+            self.assertEqual(summary["by_income_merchant"], {"公司": 100.0, "朋友": 50.0})
+
+    def test_live_app_contains_income_analysis_panel(self):
+        html = (ROOT / "assets" / "ledger-app.html").read_text(encoding="utf-8")
+        self.assertIn('id="incomeAnalysis"', html)
+        self.assertIn('id="incomeSourceChart"', html)
+
     def test_init_marks_json_as_document_store(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
@@ -495,7 +556,7 @@ class LedgerToolTest(unittest.TestCase):
             self.assertEqual(lunch["amount"], 16.0)
             parsed = json.loads(run_tool("parse", "--ledger", str(ledger), "--text", "午饭").stdout)
             self.assertEqual(parsed["amount"], 16.0)
-            self.assertEqual(parsed["category"], "餐饮")
+            self.assertEqual(parsed["category"], "外食")
             added = json.loads(run_tool("add", "--ledger", str(ledger), "--text", "午饭").stdout)
             self.assertEqual(added["added"][0]["amount"], 16.0)
 
@@ -513,6 +574,20 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("## 画像", text)
             self.assertIn("午饭", text)
             self.assertIn("稳定金额", text)
+
+    def test_usage_profile_respects_configured_default_account(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            run_tool("add", "--ledger", str(ledger), "--amount", "10", "--merchant", "商户一", "--account", "银行卡")
+            run_tool("add", "--ledger", str(ledger), "--amount", "20", "--merchant", "商户二", "--account", "银行卡")
+
+            run_tool("habit", "memory", "--ledger", str(ledger))
+            data = json.loads(ledger.read_text(encoding="utf-8"))
+            defaults = data["preferences"]["usage_profile"]["defaults"]
+
+            self.assertEqual(defaults["account_id"], "acc_wechat")
+            self.assertEqual(defaults["account"], "微信零钱")
+            self.assertEqual(defaults["method"], "wechat")
 
     def test_long_company_merchant_is_not_an_amount_default(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -651,6 +726,9 @@ class LiveServerTest(unittest.TestCase):
                 self.assertIn('class="row editable-row"', html)
                 self.assertIn('id="categoryForm"', html)
                 self.assertIn('id="categoryDialog"', html)
+                with urllib.request.urlopen(base + "/settings", timeout=2) as resp:
+                    settings_html = resp.read().decode("utf-8")
+                self.assertIn('id="panel-settings"', settings_html)
                 self.assertNotIn("跳到账本", html)
                 self.assertNotIn('type="button">改</button>', html)
 
@@ -666,7 +744,7 @@ class LiveServerTest(unittest.TestCase):
                 tx_id = payload["added"][0]["id"]
 
                 rename_category = urllib.request.Request(
-                    base + "/api/categories/%E5%92%96%E5%95%A1",
+                    base + "/api/categories/%E5%92%96%E5%95%A1%E8%8C%B6%E9%A5%AE",
                     data=json.dumps({"name": "下午茶", "icon": "coffee"}).encode("utf-8"),
                     method="PATCH",
                     headers={"Content-Type": "application/json"},
@@ -688,7 +766,7 @@ class LiveServerTest(unittest.TestCase):
                     data = json.loads(resp.read().decode("utf-8"))
                 self.assertEqual(len(data["transactions"]), 1)
                 self.assertEqual(data["transactions"][0]["category"], "下午茶")
-                self.assertIn({"name": "下午茶", "icon": "coffee"}, data["categories"])
+                self.assertIn({"name": "下午茶", "icon": "coffee", "parent": None}, data["categories"])
                 self.assertEqual(data["store"], "lazy-ledger-docs")
 
                 patch_req = urllib.request.Request(
