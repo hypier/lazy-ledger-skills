@@ -532,6 +532,14 @@ class LedgerToolTest(unittest.TestCase):
         html = (ROOT / "assets" / "ledger-app.html").read_text(encoding="utf-8")
         self.assertIn('id="incomeAnalysis"', html)
         self.assertIn('id="incomeSourceChart"', html)
+        self.assertEqual(html.count('class="month-select"'), 2)
+        self.assertIn('params.set("month", rangeMode.slice(6))', html)
+        self.assertIn('id="annualReport"', html)
+        self.assertIn('id="annualTrend"', html)
+        self.assertIn('id="annualMonths"', html)
+        self.assertIn("function renderAnnualReport()", html)
+        self.assertIn('class="annual-trend-line ${type}"', html)
+        self.assertIn('class="annual-trend-value${below ? " below" : ""}"', html)
 
     def test_init_marks_json_as_document_store(self):
         with tempfile.TemporaryDirectory() as tmp:

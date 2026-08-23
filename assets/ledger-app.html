@@ -165,6 +165,14 @@
     }
     .toolbar { padding: 14px; margin: 16px 0; }
     .period { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .month-select {
+      width: auto;
+      min-width: 132px;
+      height: 44px;
+      border-radius: 999px;
+      background-color: var(--chip);
+      padding: 0 34px 0 14px;
+    }
     .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
     .filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
     .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
@@ -394,6 +402,52 @@
     .income-stat-value { color: var(--income); font-family: var(--serif); font-size: 30px; font-weight: 650; line-height: 1.15; margin-top: 5px; }
     .income-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; color: var(--muted); font-size: 12px; }
     .income-meta strong { color: var(--ink); font-family: var(--mono); font-weight: 600; }
+    .annual-year-select { width: auto; min-width: 108px; height: 36px; border-radius: 999px; padding: 0 32px 0 12px; }
+    .annual-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+    .annual-summary-item { padding: 14px 16px; min-width: 0; }
+    .annual-summary-item + .annual-summary-item { border-left: 1px solid var(--line); }
+    .annual-summary-item span { display: block; color: var(--muted); font-size: 12px; }
+    .annual-summary-item strong { display: block; margin-top: 4px; font-family: var(--serif); font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .annual-trend { padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+    .annual-trend-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .annual-trend-head strong { font-family: var(--serif); font-size: 15px; font-weight: 650; }
+    .annual-trend-legend { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 11px; }
+    .annual-trend-key { display: inline-flex; align-items: center; gap: 5px; }
+    .annual-trend-key::before { width: 16px; height: 3px; border-radius: 999px; background: currentColor; content: ""; }
+    .annual-trend-key.income { color: var(--income); }
+    .annual-trend-key.expense { color: var(--expense); }
+    .annual-trend-chart { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; }
+    .annual-trend-y { position: relative; height: 176px; color: var(--muted); font-family: var(--mono); font-size: 10px; text-align: right; }
+    .annual-trend-y span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+    .annual-trend-y span:first-child { top: 0; transform: none; }
+    .annual-trend-y span:nth-child(2) { top: 50%; }
+    .annual-trend-y span:last-child { bottom: 0; transform: none; }
+    .annual-trend-plot { position: relative; height: 176px; border-bottom: 1px solid var(--line); }
+    .annual-trend-grid { position: absolute; inset: 0; background: linear-gradient(to bottom, var(--line) 1px, transparent 1px) 0 0 / 100% 50%; opacity: 0.7; }
+    .annual-trend-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .annual-trend-line { fill: none; stroke-width: 2.3; vector-effect: non-scaling-stroke; }
+    .annual-trend-line.income { stroke: var(--income); }
+    .annual-trend-line.expense { stroke: var(--expense); }
+    .annual-trend-point { position: absolute; z-index: 1; width: 10px; height: 10px; border: 2px solid var(--paper); border-radius: 50%; transform: translate(-50%, 50%); box-shadow: 0 0 0 1px currentColor; }
+    .annual-trend-point.income { color: var(--income); background: var(--income); }
+    .annual-trend-point.expense { color: var(--expense); background: var(--expense); }
+    .annual-trend-point:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+    .annual-trend-value { position: absolute; z-index: 2; padding: 1px 3px; border-radius: 3px; background: color-mix(in srgb, var(--paper) 86%, transparent); color: var(--ink); font-family: var(--mono); font-size: 9px; font-weight: 600; line-height: 1.2; white-space: nowrap; pointer-events: none; transform: translate(-50%, -11px); }
+    .annual-trend-value.below { transform: translate(-50%, calc(100% + 11px)); }
+    .annual-trend-x { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); margin: 7px 0 0 66px; color: var(--muted); font-family: var(--mono); font-size: 10px; text-align: center; }
+    .annual-trend-x small { font-size: inherit; }
+    .annual-months { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(6, auto); grid-auto-flow: column; gap: 0 26px; padding: 8px 16px 16px; }
+    .annual-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); }
+    .annual-month { font-family: var(--serif); font-size: 15px; font-weight: 650; }
+    .annual-flows { display: grid; gap: 7px; min-width: 0; }
+    .annual-flow-meta { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; font-size: 11px; }
+    .annual-flow-label { font-weight: 650; }
+    .annual-flow-amount { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-family: var(--mono); text-align: right; }
+    .annual-flow-share { color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+    .annual-track { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--chip) 58%, var(--paper)); overflow: hidden; }
+    .annual-fill { height: 100%; border-radius: inherit; }
+    .annual-fill.income { background: var(--income); }
+    .annual-fill.expense { background: var(--expense); }
     #pieChart { display: grid; place-items: center; min-height: 236px; }
     .legend { display: grid; gap: 6px; min-width: 0; }
     .legend-row {
@@ -540,6 +594,10 @@
       .chart-split { grid-template-columns: 1fr; gap: 12px; }
       .income-layout { grid-template-columns: 1fr; gap: 16px; }
       .income-stat { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 16px; }
+      .annual-summary { grid-template-columns: 1fr; }
+      .annual-summary-item + .annual-summary-item { border-left: 0; border-top: 1px solid var(--line); }
+      .annual-trend-x small { display: none; }
+      .annual-months { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-flow: row; }
       #pieChart { min-height: 0; }
       .donut-wrap { width: min(190px, 62vw); }
       .metrics { grid-template-columns: 1fr 1fr; }
@@ -655,6 +713,7 @@
           <button class="chip" type="button" data-range="last7">近7天</button>
           <button class="chip" type="button" data-range="last30">近30天</button>
           <button class="chip" type="button" data-range="all">全部</button>
+          <select class="month-select" aria-label="选择月份"><option value="">选择月份</option></select>
         </div>
         <div class="filters">
           <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg>类型</span>
@@ -696,6 +755,7 @@
           <button class="chip" type="button" data-range="last7">近7天</button>
           <button class="chip" type="button" data-range="last30">近30天</button>
           <button class="chip" type="button" data-range="all">全部</button>
+          <select class="month-select" aria-label="选择月份"><option value="">选择月份</option></select>
         </div>
         <section class="metrics" aria-label="报表汇总">
           <div class="metric spend"><div class="metric-label"><svg class="icon" aria-hidden="true"><use href="#icon-expense"></use></svg>支出</div><div class="metric-value expense" id="chartExpense">¥0.00</div></div>
@@ -716,6 +776,17 @@
               </div>
             </div>
             <div id="incomeSourceChart"></div>
+          </div>
+        </section>
+        <section class="panel" style="margin-top:12px" aria-labelledby="annualReportTitle">
+          <div class="panel-head">
+            <h2 id="annualReportTitle"><svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>年度收支</h2>
+            <select class="annual-year-select" id="annualYear" aria-label="选择年度"></select>
+          </div>
+          <div id="annualReport">
+            <div class="annual-summary" id="annualSummary"></div>
+            <div class="annual-trend" id="annualTrend"></div>
+            <div class="annual-months" id="annualMonths"></div>
           </div>
         </section>
         <div class="chart-grid">
@@ -1095,6 +1166,7 @@
       }).join("");
     }
     const chips = [...document.querySelectorAll(".chip[data-range]")];
+    const monthSelects = [...document.querySelectorAll(".month-select")];
     const typeFilter = document.getElementById("typeFilter");
     const categoryFilter = document.getElementById("categoryFilter");
     const accountFilter = document.getElementById("accountFilter");
@@ -1221,7 +1293,30 @@
         return { start: iso(new Date(today.getFullYear(), startMonth, 1)), end: iso(today) };
       }
       if (rangeMode === "this-year") return { start: iso(new Date(today.getFullYear(), 0, 1)), end: iso(today) };
+      if (rangeMode.startsWith("month:")) {
+        const month = rangeMode.slice(6);
+        const [year, monthNumber] = month.split("-").map(Number);
+        if (year && monthNumber >= 1 && monthNumber <= 12) {
+          const start = new Date(year, monthNumber - 1, 1);
+          const monthEnd = last(start);
+          const end = month === iso(today).slice(0, 7) ? today : monthEnd;
+          return { start: iso(start), end: iso(end), month };
+        }
+      }
       return { start: "", end: "" };
+    }
+
+    function renderMonthSelects() {
+      const selected = rangeMode.startsWith("month:") ? rangeMode.slice(6) : "";
+      const months = [...new Set((LEDGER.transactions || []).map((tx) => String(tx.occurred_at || "").slice(0, 7)).filter((month) => /^\d{4}-\d{2}$/.test(month)))].sort().reverse();
+      const options = `<option value="">选择月份</option>` + months.map((month) => {
+        const [year, monthNumber] = month.split("-");
+        return `<option value="${escapeHtml(month)}">${escapeHtml(year)}年${Number(monthNumber)}月</option>`;
+      }).join("");
+      monthSelects.forEach((select) => {
+        select.innerHTML = options;
+        select.value = selected;
+      });
     }
 
     function filteredRows() {
@@ -1329,6 +1424,7 @@
 
     function render() {
       chips.forEach((chip) => chip.setAttribute("aria-pressed", chip.dataset.range === rangeMode ? "true" : "false"));
+      renderMonthSelects();
       const bounds = periodBounds();
       const rows = filteredRows();
       const totals = { expense: 0, income: 0, refund: 0 };
@@ -1484,6 +1580,7 @@
       document.getElementById("incomeRefund").textContent = money(totals.refund);
       const incomeSources = Object.entries((INSIGHTS && INSIGHTS.by_income_merchant) || {});
       document.getElementById("incomeSourceChart").innerHTML = hbarSvg(incomeSources, "这段时间没有收入", "query");
+      renderAnnualReport();
       const slices = topSlices(INSIGHTS && INSIGHTS.by_category);
       const colors = palette();
       const pieTotal = slices.reduce((sum, item) => sum + item[1], 0);
@@ -1508,6 +1605,73 @@
       document.getElementById("weekdayChart").innerHTML = columnSvg(weekday, "暂无星期分布", "week");
       const methods = Object.entries((INSIGHTS && INSIGHTS.by_method) || {}).map(([key, amount]) => [methodLabel[key] || key, amount]);
       document.getElementById("methodChart").innerHTML = hbarSvg(methods, "暂无渠道统计", "method");
+    }
+
+    function renderAnnualReport() {
+      const yearSelect = document.getElementById("annualYear");
+      const years = [...new Set((LEDGER.transactions || []).map((tx) => String(tx.occurred_at || "").slice(0, 4)).filter((year) => /^\d{4}$/.test(year)))].sort().reverse();
+      const currentYear = String(new Date().getFullYear());
+      const previous = yearSelect.value;
+      const selectedYear = years.includes(previous) ? previous : (years.includes(currentYear) ? currentYear : (years[0] || currentYear));
+      yearSelect.innerHTML = (years.length ? years : [currentYear]).map((year) => `<option value="${escapeHtml(year)}">${escapeHtml(year)}年</option>`).join("");
+      yearSelect.value = selectedYear;
+
+      const months = Array.from({ length: 12 }, (_, index) => ({ month: index + 1, income: 0, expense: 0 }));
+      for (const tx of LEDGER.transactions || []) {
+        const occurred = String(tx.occurred_at || "");
+        if (!occurred.startsWith(`${selectedYear}-`)) continue;
+        const monthIndex = Number(occurred.slice(5, 7)) - 1;
+        if (monthIndex < 0 || monthIndex > 11) continue;
+        if (tx.type === "income" || tx.type === "expense") months[monthIndex][tx.type] += Number(tx.amount || 0);
+      }
+      const incomeTotal = months.reduce((sum, item) => sum + item.income, 0);
+      const expenseTotal = months.reduce((sum, item) => sum + item.expense, 0);
+      const net = incomeTotal - expenseTotal;
+      document.getElementById("annualSummary").innerHTML = [
+        ["全年收入", incomeTotal, "income"],
+        ["全年支出", expenseTotal, "expense"],
+        ["全年净额", net, net >= 0 ? "income" : "expense"]
+      ].map(([label, amount, klass]) => `<div class="annual-summary-item"><span>${label}</span><strong class="${klass}">${money(amount)}</strong></div>`).join("");
+      const trendMax = Math.max(...months.flatMap((item) => [item.income, item.expense]), 1);
+      const trendPoints = (type) => months.map((item, index) => {
+        const x = index / 11 * 100;
+        const y = item[type] / trendMax * 100;
+        return { x, y, amount: item[type], month: item.month };
+      });
+      const trendSeries = (type, label) => {
+        const points = trendPoints(type);
+        const line = points.map((point) => `${point.x},${100 - point.y}`).join(" ");
+        const dots = points.filter((point) => point.amount > 0).map((point) => {
+          const below = point.y > 88;
+          return `<span class="annual-trend-value${below ? " below" : ""}" style="left:${point.x}%;bottom:${point.y}%" aria-hidden="true">${compactMoney(point.amount, true)}</span><span class="annual-trend-point ${type}" style="left:${point.x}%;bottom:${point.y}%" tabindex="0" role="img" aria-label="${point.month}月${label}${money(point.amount)}" title="${point.month}月${label} · ${money(point.amount)}"></span>`;
+        }).join("");
+        return { line: `<polyline class="annual-trend-line ${type}" points="${line}"></polyline>`, dots };
+      };
+      const incomeTrend = trendSeries("income", "收入");
+      const expenseTrend = trendSeries("expense", "支出");
+      document.getElementById("annualTrend").innerHTML = `
+        <div class="annual-trend-head"><strong>月度趋势</strong><div class="annual-trend-legend"><span class="annual-trend-key income">收入</span><span class="annual-trend-key expense">支出</span></div></div>
+        <div class="annual-trend-chart">
+          <div class="annual-trend-y" aria-hidden="true"><span>${compactMoney(trendMax, true)}</span><span>${compactMoney(trendMax / 2, true)}</span><span>¥0</span></div>
+          <div class="annual-trend-plot">
+            <div class="annual-trend-grid" aria-hidden="true"></div>
+            <svg class="annual-trend-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${incomeTrend.line}${expenseTrend.line}</svg>
+            ${incomeTrend.dots}${expenseTrend.dots}
+          </div>
+        </div>
+        <div class="annual-trend-x" aria-hidden="true">${months.map((item) => `<span>${item.month}<small>月</small></span>`).join("")}</div>`;
+      document.getElementById("annualMonths").innerHTML = months.map((item) => {
+        const incomeShare = incomeTotal ? item.income / incomeTotal * 100 : 0;
+        const expenseShare = expenseTotal ? item.expense / expenseTotal * 100 : 0;
+        const flow = (label, amount, share, klass) => `<div>
+          <div class="annual-flow-meta"><span class="annual-flow-label ${klass}">${label}</span><span class="annual-flow-amount">${money(amount)}</span><span class="annual-flow-share">${share.toFixed(1)}%</span></div>
+          <div class="annual-track"><div class="annual-fill ${klass}" style="width:${amount ? Math.max(2, share) : 0}%"></div></div>
+        </div>`;
+        return `<div class="annual-row" aria-label="${item.month}月收入${money(item.income)}支出${money(item.expense)}">
+          <div class="annual-month">${item.month}月</div>
+          <div class="annual-flows">${flow("收入", item.income, incomeShare, "income")}${flow("支出", item.expense, expenseShare, "expense")}</div>
+        </div>`;
+      }).join("");
     }
 
     function renderBill() {
@@ -1557,6 +1721,8 @@
       const params = new URLSearchParams();
       if (["this-month", "last-month", "last7", "last30", "this-quarter", "this-year"].includes(rangeMode)) {
         params.set("range", rangeMode);
+      } else if (rangeMode.startsWith("month:")) {
+        params.set("month", rangeMode.slice(6));
       }
       if (typeFilter.value) params.set("type", typeFilter.value);
       if (categoryFilter.value) params.set("category", categoryFilter.value);
@@ -1837,6 +2003,11 @@
     });
 
     chips.forEach((chip) => chip.addEventListener("click", () => { rangeMode = chip.dataset.range; applyView(); }));
+    monthSelects.forEach((select) => select.addEventListener("change", () => {
+      rangeMode = select.value ? `month:${select.value}` : "all";
+      applyView();
+    }));
+    document.getElementById("annualYear").addEventListener("change", renderAnnualReport);
     [typeFilter, categoryFilter, accountFilter, methodFilter].forEach((el) => el.addEventListener("change", applyView));
     let searchTimer;
     searchInput.addEventListener("input", () => {
