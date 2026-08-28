@@ -539,7 +539,7 @@ class LedgerToolTest(unittest.TestCase):
         self.assertIn('id="annualMonths"', html)
         self.assertIn("function renderAnnualReport()", html)
         self.assertIn('class="annual-trend-line ${type}"', html)
-        self.assertIn('class="annual-trend-value${below ? " below" : ""}"', html)
+        self.assertIn('class="annual-trend-value${raised ? " raised" : ""}${below ? " below" : ""}"', html)
 
     def test_init_marks_json_as_document_store(self):
         with tempfile.TemporaryDirectory() as tmp:

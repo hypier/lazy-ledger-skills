@@ -433,6 +433,7 @@
     .annual-trend-point.expense { color: var(--expense); background: var(--expense); }
     .annual-trend-point:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
     .annual-trend-value { position: absolute; z-index: 2; padding: 1px 3px; border-radius: 3px; background: color-mix(in srgb, var(--paper) 86%, transparent); color: var(--ink); font-family: var(--mono); font-size: 9px; font-weight: 600; line-height: 1.2; white-space: nowrap; pointer-events: none; transform: translate(-50%, -11px); }
+    .annual-trend-value.raised { transform: translate(-50%, -23px); }
     .annual-trend-value.below { transform: translate(-50%, calc(100% + 11px)); }
     .annual-trend-x { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); margin: 7px 0 0 66px; color: var(--muted); font-family: var(--mono); font-size: 10px; text-align: center; }
     .annual-trend-x small { font-size: inherit; }
@@ -1643,7 +1644,9 @@
         const line = points.map((point) => `${point.x},${100 - point.y}`).join(" ");
         const dots = points.filter((point) => point.amount > 0).map((point) => {
           const below = point.y > 88;
-          return `<span class="annual-trend-value${below ? " below" : ""}" style="left:${point.x}%;bottom:${point.y}%" aria-hidden="true">${compactMoney(point.amount, true)}</span><span class="annual-trend-point ${type}" style="left:${point.x}%;bottom:${point.y}%" tabindex="0" role="img" aria-label="${point.month}月${label}${money(point.amount)}" title="${point.month}月${label} · ${money(point.amount)}"></span>`;
+          const raised = type === "expense" && point.month % 4 === 1 && !below;
+          const pointMoney = money(point.amount).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+          return `<span class="annual-trend-value${raised ? " raised" : ""}${below ? " below" : ""}" style="left:${point.x}%;bottom:${point.y}%" aria-hidden="true">${pointMoney}</span><span class="annual-trend-point ${type}" style="left:${point.x}%;bottom:${point.y}%" tabindex="0" role="img" aria-label="${point.month}月${label}${money(point.amount)}" title="${point.month}月${label} · ${money(point.amount)}"></span>`;
         }).join("");
         return { line: `<polyline class="annual-trend-line ${type}" points="${line}"></polyline>`, dots };
       };
