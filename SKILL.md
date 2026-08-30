@@ -1,93 +1,61 @@
 ---
 name: lazy-ledger
-description: Personal lazy bookkeeping assistant. Records expenses, income, refunds, and transfers into a local JSON document ledger from casual Chinese text, receipts, screenshots, or pasted payment history; learns a usage portrait from the ledger so later records can default account, category, and stable amounts without asking; tracks accounts and monthly budgets; summarizes spending in chat with year/quarter views, recurring bills, and budget pace; serves a localhost page with tabs for recording, charts, a monthly AI canvas bill, and accounts; and can also generate a self-contained HTML snapshot. Use when the user asks to 记账, 懒人记账, 记一笔, 这个月花了多少, 今年花了多少, 看账, 对账, 预算, 转账, 账户余额, 打开页面, 改账, 月度账单, 删掉刚才那笔, 记账习惯, 备份, record a purchase, import WeChat/Alipay history, summarize spending, or inspect ledger data.
+description: Maintain a local JSON personal ledger. Use for recording or correcting transactions, reconciling WeChat/Alipay/bank/credit-card statements without duplicates, managing accounts/categories/budgets, summarizing or generating monthly bills, and opening the localhost ledger UI.
 ---
 
 # Lazy Ledger
 
-Maintain a local personal ledger with minimal friction. Infer fields, write structured transactions, answer in Chinese with a readable summary, and open the localhost page when the user wants to look at or edit the data.
+Operate the user's local ledger with minimal questions and source-faithful accounting. Chat is the default surface; the localhost app is for browsing and editing.
 
-## Paths
+## Runtime
 
-- Tool: `scripts/ledger_tool.py` next to this SKILL.md. Typical invocation: `python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py`
-- Screenshot prepare: `python3 /Users/barry/.agents/skills/lazy-ledger/scripts/bill_screenshot.py prepare --image …` (table only; no ledger write)
-- Ledger: `./lazy-ledger.json` in the user's working directory unless they name another file
-- Habit memory: `./lazy-ledger-memory.md` next to the ledger (periodic portrait for the agent to Read)
-- Dashboard: `./lazy-ledger-report.html` unless they name another output
-- Monthly canvas bill: `./lazy-ledger-bill-YYYY-MM.html` next to the ledger (one HTML file per month)
-- Live page: `python3 ... serve --ledger ./lazy-ledger.json` on 127.0.0.1 only
+- CLI: `scripts/ledger_tool.py` in this skill.
+- Screenshot OCR: `scripts/bill_screenshot.py`.
+- Cross-source audit: `scripts/ledger_audit.py`.
+- Ledger: the user-named file, otherwise `./lazy-ledger.json` in the working directory.
+- Habit portrait: `{ledger-stem}-memory.md` beside the ledger.
+- Local app: `127.0.0.1` only, normally port `8765`.
 
-Never write the ledger into the skill directory. The ledger file is a JSON document database (`store: lazy-ledger-docs`) with collections: `transactions`, `accounts`, `budgets`, `categories`, `habits`, `bills`.
+Set `LEDGER_SKILL_DIR` to the absolute directory containing this `SKILL.md` before running reference commands. Do not assume the user's working directory is the installed skill directory.
 
-## Route intent
+The ledger is a JSON document store (`transactions`, `accounts`, `budgets`, `categories`, `habits`, `bills`), not SQL. Preserve unknown fields. Do not put runtime data inside an installed skill package unless the user is intentionally operating in this skill's source repository.
 
-| User intent | Read | Command |
+## Route The Request
+
+Read only the references needed for the current request.
+
+| Intent | Read | Primary command |
 |---|---|---|
-| Record one or many items | [references/record.md](references/record.md) | `add --text` |
-| "午饭一般 16 / 记账习惯 / 我平时怎么记" | [references/record.md](references/record.md) | Read `lazy-ledger-memory.md`; `habit memory` if missing/stale |
-| Unclear amount / several totals | [references/record.md](references/record.md) | `parse --text` first |
-| Correct or delete | [references/record.md](references/record.md) | `find` then `update` / `delete --yes` |
-| Screenshot, receipt, payment-history paste | [references/record.md](references/record.md), [references/image-batch-import.md](references/image-batch-import.md) | Long bill: `bill_screenshot.py prepare` → table → wait → `import-tsv`. One receipt: `add --source image` |
-| "花了多少 / 汇总 / 对账 / 预算" | [references/present.md](references/present.md) | `show --compare` |
-| "今年花了多少 / 这季度 / 订阅还没记" | [references/present.md](references/present.md) | `show --range this-year` or `--range this-quarter --compare` |
-| 账户 / 转账 / 余额 | [references/record.md](references/record.md) | `account list` / `add --text` with 转到 |
-| 备份账本 | [references/present.md](references/present.md) | `backup` |
-| 设预算 / 这个月还能花多少 | [references/present.md](references/present.md) | `budget set` then `show` |
-| "看数据 / 打开报表 / 改账 / 本地页面" | [references/present.md](references/present.md), [references/html-report.md](references/html-report.md) | `serve` then URL `#charts` or `#ledger` |
-| "月度账单 / 出一份账单" | [references/present.md](references/present.md) | `bill show --json`, write the letter, `bill save` (writes a Canvas HTML file) |
-| Schema or manual JSON edits | [references/ledger-schema.md](references/ledger-schema.md) | `doctor --json` |
-| Field inference details | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) | — |
+| Add, parse, correct, delete, account, budget | [references/record.md](references/record.md) | `add`, `parse`, `update`, `delete`, `account`, `budget` |
+| Field inference and accounting semantics | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) | Used by record/import decisions |
+| Habit, usual amount, merchant preference | [references/habits.md](references/habits.md) | `habit`, `prefer` |
+| Long screenshot or several visible rows | [references/image-batch-import.md](references/image-batch-import.md) | `bill_screenshot.py prepare`, then `import-tsv` after confirmation |
+| Official WeChat/Alipay/bank/credit-card file, duplicate audit, account reconciliation | [references/reconcile-imports.md](references/reconcile-imports.md) | `ledger_audit.py`, source parser, preview import |
+| Totals, comparison, export, backup, monthly bill | [references/present.md](references/present.md) | `show`, `summary`, `export`, `backup`, `bill` |
+| Open/edit in browser or render HTML | [references/html-report.md](references/html-report.md) | `serve`, `render` |
+| Schema, category hierarchy, manual JSON changes | [references/ledger-schema.md](references/ledger-schema.md) | `doctor --json` |
 
-Do the obvious write when amount and meaning are clear. Do not ask the user to fill a form. Exception: a payment-history screenshot is always table-then-confirm, never a silent `import-tsv`.
+## Accounting Invariants
 
-## Record
+- Store positive `amount`; `type` determines direction. Own-account movement is `transfer` and is excluded from income/expense.
+- Keep the actual funding account separate from the payment channel. A WeChat payment funded by a named bank card belongs to that bank account with `payment_channel: wechat`.
+- Use specific bank and credit-card accounts when the source identifies them; do not collapse them into a generic `银行卡` account.
+- Preserve authoritative source references and statement attachments. Never delete or merge rows only because date and amount match.
+- A full refund remains two rows: the original `expense` and a `refund`.
+- Transactions store the most specific second-level category; reports roll it into its parent.
+- For bulk imports, validate source totals, reconcile against the current ledger, test on a copy, back up, apply once, then verify IDs, balances, `doctor`, summaries, and idempotency where supported.
 
-Clear input such as `昨天星巴克 38` or a multi-line paste → `add --text` immediately.
+## Interaction Defaults
 
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py add \
-  --ledger ./lazy-ledger.json \
-  --text "昨天星巴克 38"
-```
-
-`add` prints `{added, count, month}`. Reply with the recorded line plus this month's expense total from `month.totals.expense`. If `month.budgets` has a matching category, mention remaining.
-
-Ask only when amount is missing (and no stable usual amount exists for that short phrase), several amounts could be the total, or type (expense/income/refund/transfer) would change totals.
-
-Before recording, Read `./lazy-ledger-memory.md` (same folder as the ledger). If it is missing, or its `tx_count` lags the ledger by 10+ rows, or it is older than 7 days, run `habit memory --ledger ./lazy-ledger.json` then Read the file again. Apply 默认 / 稳定金额 silently. Do not show shortcut chips, do not ask to 存为常用, and do not guess amounts under 不要猜金额. After a large import or when the user asks to 更新习惯, run `habit memory` (optionally `--summary` with a 2–4 sentence portrait).
-
-Read [references/record.md](references/record.md) before handling screenshots, stacked WeChat/Alipay pastes, merchant habits, or corrections. For a long 账单截图, follow [references/image-batch-import.md](references/image-batch-import.md): run `bill_screenshot.py prepare`, show the table, and **do not import until the user confirms**.
-
-## Present
-
-Always answer in Chinese with a short human summary. Do not dump raw JSON unless the user asks.
-
-For spending questions:
-
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py show \
-  --ledger ./lazy-ledger.json \
-  --compare
-```
-
-`show` defaults to this month. If this month is empty, say so and rerun with `--month YYYY-MM` or omit the default by using `summary`.
-
-To look at or edit data in a browser, start the local page in the background (do not block the session on it):
-
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
-  --ledger ./lazy-ledger.json
-```
-
-The command prints `{"url":"http://127.0.0.1:8765/","ledger":"..."}`. Give the user that URL. Append `#charts` for the chart report, `#bill` for the monthly letter, `#book` for accounts. A canvas bill is also at `/bill/YYYY-MM`. Bind only to localhost. Use `render` for a full snapshot; `bill save` / `bill render` for one month's canvas page.
-
-Then give the file path or URL. Read [references/present.md](references/present.md) for chat templates and when to add the dashboard.
+- A clear single transaction is written immediately. Ask only when amount, type, or correction target is materially ambiguous.
+- A payment-history screenshot always requires a visible confirmation table before any write, even when the initial request says “导入”.
+- Before recording, use the habit portrait only when current; never guess an amount outside its stable-amount section.
+- After a write, reply in Chinese with the affected rows, important assumptions, and the relevant period total. Do not dump raw ledger JSON unless requested.
 
 ## Safety
 
-- Never invent exact transactions. If the amount is unknown, ask. Do not guess rows from an unreadable thumbnail.
-- Keep amounts positive; use `type` for direction.
-- Do not overwrite an existing ledger's transactions.
-- Do not store secrets, bank logins, card numbers, or payment credentials.
-- Preserve uncertainty in `note` / `confidence` for screenshots and imports.
-- Financial advice stays descriptive unless the user explicitly asks for broader guidance.
+- Never invent unreadable transactions, merchant suffixes, account numbers, or exact totals.
+- Do not store bank logins, full card numbers, payment credentials, or secrets.
+- Preserve uncertainty in `note` and `confidence`.
+- Do not overwrite an existing ledger or silently remove suspected duplicates.
+- Keep financial commentary descriptive unless the user explicitly asks for advice.

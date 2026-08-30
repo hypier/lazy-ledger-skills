@@ -1,83 +1,62 @@
-# HTML Report
+# Local App And HTML Reports
 
-Two surfaces:
+Use the live localhost app for viewing or editing the current ledger. Use `render` for a self-contained read-only snapshot.
 
-1. Live local page (`serve`) — view and edit against the JSON document store. Default when the user wants to 看账 or 改账.
-2. Static snapshot (`render`) — self-contained HTML file, no server.
+## Live App
 
-## Live page
+Before starting another server, check whether port 8765 already serves the intended ledger:
 
 ```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py serve \
+lsof -nP -iTCP:8765 -sTCP:LISTEN
+curl -fsS http://127.0.0.1:8765/api/health
+```
+
+If it is stopped or points at a different ledger, start the service in the background:
+
+```bash
+python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" serve \
   --ledger ./lazy-ledger.json
 ```
 
-- Binds 127.0.0.1 only
-- Uses `assets/ledger-app.html`
-- Reads and writes the same ledger file as the CLI
-- Four tabs: 记账 / 报表 / 月度账单 / 账本 (`#ledger` `#charts` `#bill` `#book`)
-- 报表: category donut, merchant ranking, daily/monthly bars with amounts, weekday and method charts (no libraries)
-- 月度账单: month facts plus the saved AI letter; **打开画布账单** opens `/bill/YYYY-MM` (Canvas, one local HTML file per month)
-- 账本: add/edit accounts (opening, default) and budgets
-- No shortcut chips; habits stay in the background
+Use `--port` when 8765 belongs to another process. Bind only to `127.0.0.1`.
 
-Start it in the background and give the printed URL.
+Useful routes:
 
-## Static snapshot
+- `/#ledger`: transactions.
+- `/#charts`: reports.
+- `/#bill`: monthly bill.
+- `/#book`: accounts and budgets.
+- `/settings`: category names, hierarchy, and icons.
+- `/bill/YYYY-MM`: one monthly canvas bill.
 
-Use `assets/ledger-viewer-template.html` via `scripts/ledger_tool.py render`.
+After a write, `/api/ledger` should report the same transaction count as the file. Server health proves only that the service is running; it does not prove the user's current browser tab refreshed.
 
-The report is local inspection only:
+If an in-app browser blocks `goto` or `reload` for localhost, do not bypass the URL policy and do not claim the page was refreshed. Keep the server running and ask the user to refresh the existing tab or click the URL.
 
-- No network calls
-- No external libraries
-- Ledger JSON is embedded in the file
-- Open it directly in a browser
+## Live UI Boundaries
+
+The app reads and writes the same JSON document as the CLI. It supports transaction editing, accounts, budgets, two-level categories, monthly and annual reports, and saved bill letters.
+
+Habits remain an internal signal: do not add frequent-item chips or “save as common” UI. Category/account/type icons and direct row editing are established UI conventions; preserve them when changing the bundled frontend.
+
+## Static Snapshot
 
 ```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py render \
+python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" render \
   --ledger ./lazy-ledger.json \
   --output ./lazy-ledger-report.html
 ```
 
-The template includes:
+The generated page is self-contained, makes no network requests, embeds a snapshot of ledger data, and opens directly in a browser. It includes filters, period comparison, account balances, budgets, category/merchant/day views, review queues, transaction rows, and CSV export.
 
-- Period chips: 本月 / 上月 / 本季 / 今年 / 近7天 / 近30天 / 全部
-- Month, type, category, method, account, and search filters with visible labels
-- Expense vs previous period, income, net, daily average, review count
-- Insight bullets: pace, recurring due, weekend share, vs previous
-- Account balances (opening + all history)
-- Budget bars for the selected month
-- Recurring charges and a 6-month spend trend
-- Month spend calendar (heatmap)
-- Category bars with amounts
-- Top merchants
-- Daily spend list
-- Needs-review queue (low confidence or category `其他`)
-- Transaction table on desktop, stacked cards on small screens
-- Type badges (not color alone)
-- CSV export of the current filter
+When the user wants a custom one-off appearance, edit a copy of the generated file. Change `assets/ledger-viewer-template.html` only when they explicitly ask to change the skill itself.
 
-If the user wants a custom look, copy the template or generated file and edit the copy, not the bundled asset.
+## Monthly Canvas Bill
 
-## Monthly canvas bill
+`bill save` writes a separate self-contained HTML file beside the ledger:
 
-Each month is a separate self-contained HTML file next to the ledger:
-
-```bash
-python3 /Users/barry/.agents/skills/lazy-ledger/scripts/ledger_tool.py bill save \
-  --ledger ./lazy-ledger.json \
-  --month 2026-08 \
-  --title "八月还是把钱花在吃上" \
-  --body "……"
+```text
+{ledger-stem}-bill-YYYY-MM.html
 ```
 
-Default path: `{ledger-stem}-bill-YYYY-MM.html` (for `./lazy-ledger.json` → `./lazy-ledger-bill-2026-08.html`).
-
-- Template: `assets/ledger-bill-canvas.html`
-- Draws on `<canvas>` (paper-ledger look); no network, no libraries
-- Also served live at `http://127.0.0.1:8765/bill/2026-08`
-- Export PNG / print from the page
-- `bill render --month YYYY-MM` regenerates the file from current facts + saved letter
-
-Do not put absolute file paths into `lazy-ledger.json`. Generated `*-bill-YYYY-MM.html` files are gitignored.
+It is also served at `/bill/YYYY-MM`. The page supports PNG export and printing. Do not store generated absolute paths in the ledger JSON.

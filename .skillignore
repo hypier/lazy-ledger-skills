@@ -1,12 +1,19 @@
 # Packaging outputs
 dist/
+.git/
 __pycache__/
 scripts/__pycache__/
 tests/__pycache__/
+.DS_Store
 
 # Runtime data
-lazy-ledger.json
+lazy-ledger*.json
+lazy-ledger-memory.md
+lazy-ledger-bill-*.html
 lazy-ledger-report.html
+lazy-ledger*.csv
+wechat-bill-rows*.tsv
+*-bill-rows.tsv
 
 # Repository-only files
 .gitignore

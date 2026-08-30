@@ -1,89 +1,91 @@
 # Bookkeeping Rules
 
-Field inference for casual Chinese input. Workflows live in [record.md](record.md).
+Use these rules to infer transaction fields. Workflows live in [record.md](record.md); source reconciliation lives in [reconcile-imports.md](reconcile-imports.md).
 
-## Minimal friction
+## When To Ask
 
-Do the obvious write when amount and meaning are clear. Prefer `add --text` so parsing, duplicate checks, and category defaults run together. Use explicit `--amount` / `--category` / `--merchant` / `--date` only to override or for non-text sources.
+Write the obvious transaction directly. Ask only when:
 
-Ask only when:
+- No amount is present and no stable habit applies.
+- Several amounts could be the actual total.
+- The row could be income, refund, or own-account transfer instead of expense.
+- A correction target is ambiguous.
+- Choosing an account would materially change balances and the source does not identify one.
 
-- No amount is present, and no matching habit has a usual amount
-- Several amounts could be the transaction total (`一共`, two prices with no 实付)
-- The entry may be income / refund / transfer rather than expense
-- A correction target is ambiguous
+## Type And Sign
 
-## Types
+Store a positive `amount`; reports apply direction from `type`.
 
-Store a positive `amount` for every type. Reports apply the sign.
+- `expense`: spending.
+- `income`: salary, interest, side income, reimbursement received.
+- `refund`: money returned from an earlier expense.
+- `transfer`: movement between the user's own accounts; excluded from income and expense.
 
-- `expense`: spending, default
-- `income`: salary, reimbursement received, interest, side income
-- `refund`: money returned from an earlier expense
-- `transfer`: movement between own accounts; listed but excluded from spend totals
+Keep a fully refunded purchase as one `expense` plus one `refund`.
 
-## Dates
+## Date And Time
 
-- No date → today at 12:00 local
-- Keep explicit dates and times
-- `今天` / `昨天` / `前天`
-- `上周五`, `周一` / `这周一` (most recent that weekday, including today)
-- `7月7日`, `7月7号`, `7/7` (current year; if the date is far in the future, use last year)
+- No date: today at local noon.
+- Keep exact source time when visible.
+- Support `今天`, `昨天`, `前天`, recent weekday phrases, and explicit month/day forms.
+- For a month/day without year, use the current year unless that would place it implausibly far in the future.
+- Do not replace an exact payment time with a bank posting date. Store posting date in source metadata.
 
-## Amounts
+## Amount
 
-- One amount → that amount
-- No amount, but a short stable phrase matches the usage portrait (`午饭`) → that amount, slightly lower confidence
-- `原价45 实付38` or `券后` → paid amount, drop 原价
-- `一共` / `合计` / `总计` with several numbers → last number
-- Newline or `；` → separate transactions
-- `午饭26 晚饭38` → two expenses
-- Otherwise several amounts on one line → ask
+- One amount: use it.
+- `实付` or `券后`: use paid amount, not original price.
+- `一共` / `合计` / `总计` with several numbers: use the labeled total.
+- Multiple independently labeled items: split them.
+- Otherwise, ask which amount is the transaction total.
+- Fill a missing amount only from the stable-amount section of the current habit portrait.
 
 ## Category
 
-User `preferences.merchant_categories` wins. Then keywords:
+Explicit user choice and `preferences.merchant_categories` win over keyword inference.
 
-- 咖啡: 星巴克, 瑞幸, 咖啡, 拿铁, 美式
-- 餐饮: 饭, 午饭, 晚饭, 早餐, 外卖, 火锅, 奶茶, 餐厅, 美团, 饿了么
-- 交通: 地铁, 公交, 打车, 滴滴, 高铁, 火车, 机票, 停车, 加油
-- 购物: 淘宝, 京东, 拼多多, 超市, 便利店, 衣服, 数码
-- 居住: 房租, 水电, 燃气, 物业, 宽带
-- 娱乐: 电影, 游戏, 演出, KTV, 会员
-- 医疗: 医院, 药, 挂号, 体检
-- 教育: 课程, 书, 学费, 培训
-- 人情: 红包, 礼物, 请客
-- 收入: 工资, 奖金, 报销, 利息
-- 其他: cannot infer; lower confidence
+Common roots and cues:
 
-Explicit user category beats merchant inference. `prefer` and `update --category` remember the merchant map. The usage portrait fills missing account / method, and fills amount only for short stable phrases. Long company names are not amount defaults.
+- 餐饮: meals, restaurant, takeaway, tea drinks.
+- 交通: transit, taxi, rail/air, parking, fuel.
+- 购物: ecommerce, supermarket, convenience, clothing, electronics.
+- 居住: rent, utilities, property management, broadband.
+- 娱乐: movies, games, performances, memberships.
+- 医疗: hospital, medicine, registration, health checks.
+- 教育: courses, books, tuition, training.
+- 人情: gifts, red packets, treating others.
+- 理财: insurance, investment, financing fees where the ledger taxonomy defines them.
+- 其他: evidence is insufficient; lower confidence.
 
-## Method, account, tags
+Use the most specific configured second-level category (for example `咖啡茶饮` under `餐饮`). Reports aggregate it into its parent. Do not create a new top-level category when an existing parent/child relationship expresses the meaning.
 
-Infer when the text names them; leave unset otherwise.
+## Method, Account, And Channel
 
-- method: 微信 → `wechat`; 支付宝 / 花呗 → `alipay`; 现金 → `cash`; 信用卡 / 刷卡 → `card`; 银行卡 → `bank`
-- account: map method/name onto ledger accounts. Default new expenses to `preferences.default_account_id` (微信零钱)
-- transfer route: `从微信转到支付宝 500`, `微信转支付宝`, `还信用卡`
-- tags: 报销 / 对公 → `报销`; 出差 / 差旅 → `出差`; 订阅 → `订阅`
+- `method`: how the payment was executed (`wechat`, `alipay`, `cash`, `card`, `bank`, `other`).
+- `account`: the balance-bearing source account.
+- `payment_channel`: optional processor route on imported rows.
 
-## Screenshots
+Examples:
 
-- Do not force receipt vs payment-history classification
-- Visible paid amount wins over original price
-- Multiple visible rows: run the screenshot prepare script, show a table, wait for confirmation. Do not import in the same turn.
-- Truncated merchants stay truncated; lower `confidence`
+- WeChat balance payment: method `wechat`, account `微信零钱`.
+- WeChat payment funded by 招商银行信用卡(1080): method `card`, that credit account, payment channel `wechat`.
+- Credit-card repayment: transfer from the funding account to the credit account.
 
-## Duplicates
+Prefer a specifically named account over generic `银行卡` or `信用卡`. When an ordinary text entry omits the account, use the current habit default.
 
-Likely duplicate = same amount, same day, and same merchant or very similar note (or same attachment). Ask before adding. CLI refuses unless `--allow-duplicate`.
+Tags: `报销` / `对公` -> `报销`; `出差` / `差旅` -> `出差`; `订阅` -> `订阅`.
 
-## Summaries
+## Duplicate Boundary
 
-- Expense total: `expense` only
-- Income total: `income` only
-- Refund total: `refund` only
-- Net = income + refund − expense
-- Transfers listed, excluded from expense/income
-- Always name the date range
-- `show` / `summary --compare` contrast with the previous equal period
+For an ordinary add, same day, type, amount, and same merchant/note is a likely duplicate and requires confirmation.
+
+For imported data, do not rely on this heuristic alone. Authoritative source IDs, exact time, posting date, account, and cross-source linkage decide whether rows should merge. Follow [reconcile-imports.md](reconcile-imports.md).
+
+## Summary Math
+
+- Expense total: `expense` only.
+- Income total: `income` only.
+- Refund total: `refund` only.
+- Net: income + refund - expense.
+- Transfers are listed but excluded from income/expense.
+- Always name the date range and compare against an equal previous period.

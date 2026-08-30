@@ -76,7 +76,11 @@ Account fields:
 - `account` / `account_id`: source account. Required in practice for new writes; old rows may omit them.
 - `to_account` / `to_account_id`: destination, used by `transfer`
 
-Also optional: `merchant`, `note`, `confidence` (0–1), `tags`, `attachment`.
+Also optional: `merchant`, `note`, `confidence` (0–1), `tags`, `attachment`, and `payment_channel`.
+
+`method` and `account` describe how balances move. `payment_channel` records an imported processor route without replacing the actual account. For example, a WeChat payment funded by a named credit card keeps that credit-card `account_id` and uses `payment_channel: "wechat"`.
+
+Imported rows may carry authoritative evidence fields such as `wechat_transaction_id`, `wechat_merchant_order_id`, `bank_statement_ref`, `credit_statement_ref`, statement dates/descriptions, counterparties, balances, or `derived_ref`. Preserve these unknown/optional fields during updates. See [reconcile-imports.md](reconcile-imports.md) for matching rules.
 
 `amount` is always positive.
 
@@ -96,7 +100,7 @@ Also optional: `merchant`, `note`, `confidence` (0–1), `tags`, `attachment`.
 
 `type`: `cash` | `wechat` | `alipay` | `bank` | `credit` | `other`
 
-Missing `accounts` on an old file is filled with the five defaults. Do not replace an existing list.
+Missing `accounts` on an old file is filled with the five defaults. Do not replace an existing list. Prefer specifically identified bank/card accounts over generic defaults when reconciling official statements.
 
 ## Budget
 
