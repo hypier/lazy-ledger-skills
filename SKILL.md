@@ -24,12 +24,13 @@ Treat each message as an intent and evidence problem before choosing a command. 
 
 AI bookkeeping is also an ongoing conversation about data quality. After a write, import, correction, or query that exposes relevant rows, look for actionable issues with `audit` or `doctor` and explain only findings that matter to the user's question. Typical findings include likely duplicates, missing accounts, implausible amounts or dates, low-confidence classifications, unmatched refunds, and expenses that look like transfers or reimbursements.
 
-For each finding, state one affected issue, why it was noticed, and one proposed repair in plain Chinese. Handle issues sequentially: ask one confirmation question, wait for the answer, apply only that repair, rerun the relevant check, and then present the next highest-priority issue. Never make the user choose among several repairs in one message or bundle multiple issues into one confirmation.
+Analyze findings before involving the user. When source references, timing, amount, merchant, and transaction type make the intended result clear, apply a reversible field update or relation automatically and report it. Only surface findings where multiple reasonable interpretations remain, the repair changes financial meaning, or deletion/merging is proposed. Group unresolved findings that have the same repair type and evidence pattern into one confirmation question. Within that group, show each affected row and one proposed action. Handle groups sequentially: ask one confirmation question, wait for the answer, apply only that group, rerun the relevant check, and then present the next highest-priority group.
 
-- `doctor` detects structural and referential problems; `audit` detects duplicate and source-reference problems. Neither result is permission to mutate data.
+- `doctor` detects structural and referential problems; `audit` detects duplicate and source-reference problems. Their results are evidence for AI analysis, not a requirement to ask the user about every row.
 - A low-confidence or unusual row is a review suggestion, not proof of an error. Preserve the original evidence and uncertainty until the user confirms.
 - If the user asks only for a total, do not derail the answer with every warning. Mention a concise material warning and offer the repair path when it could change the total.
 - Keep a review queue internally, but expose only its highest-priority unresolved item. A clean result or a user decline advances to the next item.
+- Before asking about an unlinked refund, search a nearby date window for the same merchant and amount, including normalized merchant names and source descriptions. Present reliable candidates first; ask only when no candidate or several materially different candidates remain.
 
 ## Runtime
 

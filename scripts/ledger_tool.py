@@ -1551,6 +1551,12 @@ def likely_duplicate_candidates(transactions, tx):
     tx_note = normalized_text(tx.get("note"))
     for existing in transactions:
         existing_external_id = normalized_text(existing.get("wechat_transaction_id"))
+        # Distinct authoritative statement references are separate source rows,
+        # even when date, amount, and merchant happen to match.
+        tx_statement_ref = normalized_text(tx.get("credit_statement_ref") or tx.get("bank_statement_ref"))
+        existing_statement_ref = normalized_text(existing.get("credit_statement_ref") or existing.get("bank_statement_ref"))
+        if tx_statement_ref and existing_statement_ref and tx_statement_ref != existing_statement_ref:
+            continue
         if tx_external_id and existing_external_id:
             if tx_external_id == existing_external_id:
                 candidates.append(compact_candidate(existing))
@@ -2253,6 +2259,8 @@ def unmatched_refunds(transactions, period_rows):
     rows = []
     for refund in period_rows:
         if refund.get("type") != "refund":
+            continue
+        if refund.get("related_transaction_id"):
             continue
         refund_day = tx_day(refund)
         try:

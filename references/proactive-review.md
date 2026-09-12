@@ -1,6 +1,6 @@
 # Proactive Review And Repair
 
-Use this reference whenever recording, importing, correcting, or answering a query reveals a possible data problem. The goal is a short conversation that leaves the ledger more trustworthy.
+Use this reference whenever recording, importing, correcting, or answering a query reveals a possible data problem. The agent should resolve clear cases itself and reserve conversation for genuine ambiguity.
 
 ## Detect
 
@@ -15,16 +15,16 @@ Use `doctor` for missing fields, invalid types or amounts, unknown accounts, bro
 
 ## Discuss
 
-Present one compact finding at a time with the affected row, finding, evidence, and one proposed action. Say what is known and what is uncertain. A duplicate candidate is not a confirmed duplicate; an unusual amount is not automatically an error. Keep source references and attachments visible in the explanation. Maintain the remaining findings as an internal queue.
+Resolve clear findings automatically when evidence agrees: distinct authoritative source references imply independent source rows; a single nearby same-merchant, same-amount expense is a strong refund link; a malformed field with one deterministic correction can be fixed in place. Present one unresolved repair group at a time. Findings with the same repair type and evidence pattern may share one confirmation question; list every affected row, finding, evidence, and proposed action in that group. Keep unrelated or destructive decisions separate. Say what is known and what is uncertain.
 
 ## Confirm And Repair
 
-Ask exactly one confirmation question before deleting or merging a transaction, changing its type, amount, account, or date, or adding or changing a relation. After the answer, either apply that single repair or record that the user declined it. Update by transaction ID, preserve unknown fields, and make the smallest requested change. Create a backup before a deletion. Then rerun `doctor --json` or `audit --json`, report the result, and only then present the next issue.
+Ask exactly one confirmation question before deleting or merging a transaction, changing its type, amount, account, or date, or adding or changing a relation. After the answer, either apply that repair group or record that the user declined it. Update by transaction ID, preserve unknown fields, and make the smallest requested change. Create a backup before a deletion. Then rerun `doctor --json` or `audit --json`, report the result, and only then present the next group.
 
 If no deterministic repair exists, leave the rows unchanged and ask one focused question. Do not hide the issue by changing it to `其他`, lowering the amount, or suppressing the warning.
 
 ## Timing
 
 - After a single clear add: check the new row and obvious duplicate candidates; keep the response concise when clean.
-- After an import or bulk edit: run the full checks, then present the highest-priority finding before asking about another one.
+- Before asking about a refund relation, search nearby dates for the same merchant and amount; ask only if the search is inconclusive. After an import or bulk edit: run the full checks, then present the highest-priority repair group.
 - During a totals query: answer the requested total first, then mention a warning only when it may affect that total or indicates data loss.
