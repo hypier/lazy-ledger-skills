@@ -22,8 +22,7 @@ Do not paste raw ledger JSON unless requested.
 ## Spending Summary
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" show \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" show \
   --compare
 ```
 
@@ -34,8 +33,7 @@ Paste the command's markdown without redoing its arithmetic. The generated obser
 For calculations or a custom explanation, use deterministic summary JSON:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" summary \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" summary \
   --range this-month \
   --compare \
   --json
@@ -51,14 +49,24 @@ Keep chat output compact and include IDs only when correction or deletion needs 
 - 08-17 地铁 · 公共交通 · ¥4.00
 ```
 
+### Default Limits And Truncation
+
+`list` returns at most 20 rows and `recent` at most 5 unless `--limit` says otherwise. Always pass an explicit `--limit` when the answer depends on the full set — counting, period totals, or "was anything recorded that day".
+
+`--json` returns an object, not a bare array:
+
+```json
+{ "transactions": [], "count": 20, "total": 435, "limit": 20, "truncated": true, "period": {} }
+```
+
+Read `total` and `truncated` before drawing conclusions: `truncated: true` means rows were cut off, so an absent date or merchant proves nothing. Re-run with `--limit <total>` to see everything. Plain-text output prints a matching `匹配共 N 笔` reminder when rows are cut.
+
 ## Backup And Export
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" backup \
-  --ledger ./lazy-ledger.json
+"$LEDGER_SKILL_DIR/scripts/ledger" backup
 
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" export \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" export \
   --range this-month \
   --format csv \
   --output ./lazy-ledger.csv
@@ -74,8 +82,7 @@ The bill has two layers:
 2. A short agent-written letter based only on those facts.
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" bill show \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" bill show \
   --month 2026-08 \
   --json
 ```
@@ -83,8 +90,7 @@ python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" bill show \
 Follow the returned brief. Write 400-800 Chinese characters, describe what changed, and offer one useful observation without moralizing or inventing amounts.
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" bill save \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" bill save \
   --month 2026-08 \
   --title "八月还是把钱花在吃上" \
   --body "……"

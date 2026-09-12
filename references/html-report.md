@@ -14,8 +14,7 @@ curl -fsS http://127.0.0.1:8765/api/health
 If it is stopped or points at a different ledger, start the service in the background:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" serve \
-  --ledger ./lazy-ledger.json
+"$LEDGER_SKILL_DIR/scripts/ledger" serve
 ```
 
 Use `--port` when 8765 belongs to another process. Bind only to `127.0.0.1`.
@@ -42,8 +41,7 @@ Habits remain an internal signal: do not add frequent-item chips or “save as c
 ## Static Snapshot
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" render \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" render \
   --output ./lazy-ledger-report.html
 ```
 

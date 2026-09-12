@@ -10,8 +10,7 @@ Use this reference when the user mentions usual prices, default accounts, mercha
 Refresh the portrait when it is missing, older than 7 days, at least 10 transactions behind, after a large import, or when the user explicitly asks to update habits:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" habit memory \
-  --ledger ./lazy-ledger.json
+"$LEDGER_SKILL_DIR/scripts/ledger" habit memory
 ```
 
 ## Applying The Portrait
@@ -29,8 +28,7 @@ Mention a silently applied default only when it matters, for example `按你习�
 Set a usual amount only when the user states it:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" habit set \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" habit set \
   --phrase 午饭 \
   --amount 16 \
   --category 餐饮
@@ -39,12 +37,11 @@ python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" habit set \
 Remember a merchant category or alias with `prefer`:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" prefer \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" prefer \
   --merchant 星巴克 \
   --category 咖啡茶饮
 ```
 
-Updating a transaction category while a merchant is present also records that preference.
+Updating a transaction category while a merchant is present may record a learned preference only when the pattern is stable. A one-off correction is scoped to that transaction; use `prefer` or an explicit “以后都这样记” request for a permanent rule.
 
 Do not learn a merchant mapping from a guessed `其他` category. Do not lock an amount merely because several imported processor rows happen to match.

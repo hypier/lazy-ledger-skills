@@ -5,7 +5,7 @@ Use this workflow for a long WeChat/bank bill screenshot or any image containing
 ## 1. Prepare
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/bill_screenshot.py" prepare \
+"$LEDGER_SKILL_DIR/scripts/ledger" shot prepare \
   --image /path/to/screenshot.jpg \
   --output ./wechat-bill-rows.tsv \
   --json
@@ -41,7 +41,7 @@ Stop after the table. Import only after the user replies with an explicit confir
 3. Import the reviewed new-row TSV:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" import-tsv \
+"$LEDGER_SKILL_DIR/scripts/ledger" import-tsv \
   --ledger /tmp/lazy-ledger-preview.json \
   --input ./wechat-bill-rows.tsv
 ```
@@ -57,12 +57,9 @@ Use `--allow-duplicate` only when the reviewed TSV intentionally contains a vali
 Run:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_audit.py" \
-  --ledger ./lazy-ledger.json --json
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" doctor \
-  --ledger ./lazy-ledger.json --json
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" show \
-  --ledger ./lazy-ledger.json --month YYYY-MM --compare
+"$LEDGER_SKILL_DIR/scripts/ledger" audit --json
+"$LEDGER_SKILL_DIR/scripts/ledger" doctor --json
+"$LEDGER_SKILL_DIR/scripts/ledger" show --month YYYY-MM --compare
 ```
 
 Refresh `habit memory` after a large import. If the local app is running, verify `/api/health` and `/api/ledger`. Remove the temporary TSV and preview files after successful application; keep the real backup.

@@ -1,21 +1,27 @@
-# Packaging outputs
+# Packaging outputs (never ship build artifacts)
 dist/
+*.skill
+
+# VCS, caches, and editor noise
 .git/
 __pycache__/
-scripts/__pycache__/
-tests/__pycache__/
+*.pyc
 .DS_Store
+.venv/
+.workbuddy/
 
-# Runtime data
+# Runtime data — a ledger, backup, or report must never enter the package
+data/
 lazy-ledger*.json
-lazy-ledger-memory.md
+*-memory.md
 lazy-ledger-bill-*.html
 lazy-ledger-report.html
 lazy-ledger*.csv
-wechat-bill-rows*.tsv
 *-bill-rows.tsv
+*.tmp
 
-# Repository-only files
+# Repository-only files (useful in git, useless at runtime)
+.skillignore
 .gitignore
 README.md
 tests/

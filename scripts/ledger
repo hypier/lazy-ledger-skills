@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Unified CLI entry for Lazy Ledger.
+#
+# Wraps the three Python entry points so callers do not repeat the full
+# interpreter path, skill directory, and --ledger flag on every invocation.
+#
+#   ledger add --text "昨天微信 星巴克 38"
+#   ledger show --compare
+#   ledger audit --json
+#   ledger shot prepare --image ./bill.jpg --output ./rows.tsv --json
+#
+# Environment:
+#   LAZY_LEDGER_FILE  ledger JSON path (default: ./lazy-ledger.json)
+#   LAZY_PYTHON       interpreter (default: python3)
+#
+# Every subcommand not listed below is forwarded verbatim to ledger_tool.py, so
+# new CLI verbs work without touching this wrapper.
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="${LAZY_PYTHON:-python3}"
+if [ -n "${LAZY_LEDGER_FILE:-}" ]; then
+  LEDGER_FILE="$LAZY_LEDGER_FILE"
+elif [ -n "${LAZY_LEDGER_HOME:-}" ]; then
+  LEDGER_FILE="$LAZY_LEDGER_HOME/ledgers/default/ledger.json"
+else
+  LEDGER_FILE="$PWD/data/ledgers/default/ledger.json"
+fi
+
+usage() {
+  cat <<'EOF'
+Usage: ledger <command> [options]
+
+Commands are forwarded to the matching script:
+  <any ledger_tool subcommand>   add parse update delete show summary bill list
+                                 recent find prefer habit account budget doctor
+                                 import-tsv export backup render serve init
+  audit [options]                ledger_audit.py (needs the ledger)
+  shot <prepare|...> [options]   bill_screenshot.py (does not use the ledger)
+  which                          print resolved skill dir, ledger, interpreter
+
+Environment:
+  LAZY_LEDGER_FILE   ledger JSON path (default: ./data/lazy-ledger.json)
+  LAZY_LEDGER_HOME   data root; default ledger is ledgers/default/ledger.json
+  LAZY_PYTHON        interpreter (default: python3)
+EOF
+}
+
+has_ledger_flag() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --ledger | --ledger=*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+if [ "$#" -eq 0 ]; then
+  usage
+  exit 0
+fi
+
+group="$1"
+shift
+rest=("$@")
+
+case "$group" in
+  -h | --help | help)
+    usage
+    exit 0
+    ;;
+  which)
+    echo "skill_dir:  $SCRIPT_DIR"
+    echo "ledger:     $LEDGER_FILE"
+    echo "python:     $PYTHON_BIN"
+    exit 0
+    ;;
+  audit)
+    target="$SCRIPT_DIR/ledger_audit.py"
+    forward_group=0
+    inject_ledger=1
+    ;;
+  shot | screenshot)
+    target="$SCRIPT_DIR/bill_screenshot.py"
+    forward_group=0
+    inject_ledger=0
+    ;;
+  *)
+    target="$SCRIPT_DIR/ledger_tool.py"
+    forward_group=1
+    inject_ledger=1
+    ;;
+esac
+
+if [ "$inject_ledger" -eq 1 ] && ! has_ledger_flag "${rest[@]}"; then
+  # --ledger belongs to the innermost subparser, so it has to sit after every
+  # positional subcommand (`account list`, `habit memory`, `bill show`) and
+  # before the first flag.
+  positional=()
+  remainder=()
+  seen_flag=0
+  if [ "${#rest[@]}" -gt 0 ]; then
+    for arg in "${rest[@]}"; do
+      case "$arg" in
+        -*)
+          seen_flag=1
+          remainder+=("$arg")
+          ;;
+        *)
+          if [ "$seen_flag" -eq 0 ]; then
+            positional+=("$arg")
+          else
+            remainder+=("$arg")
+          fi
+          ;;
+      esac
+    done
+  fi
+  # Build incrementally: bash 3.2 expands an empty array to a single "".
+  rest=()
+  if [ "${#positional[@]}" -gt 0 ]; then
+    rest+=("${positional[@]}")
+  fi
+  rest+=(--ledger "$LEDGER_FILE")
+  if [ "${#remainder[@]}" -gt 0 ]; then
+    rest+=("${remainder[@]}")
+  fi
+fi
+
+if [ "$forward_group" -eq 1 ]; then
+  if [ "${#rest[@]}" -eq 0 ]; then
+    exec "$PYTHON_BIN" "$target" "$group"
+  fi
+  exec "$PYTHON_BIN" "$target" "$group" "${rest[@]}"
+fi
+
+if [ "${#rest[@]}" -eq 0 ]; then
+  exec "$PYTHON_BIN" "$target"
+fi
+exec "$PYTHON_BIN" "$target" "${rest[@]}"

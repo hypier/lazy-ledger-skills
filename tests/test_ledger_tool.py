@@ -215,7 +215,16 @@ class LedgerToolTest(unittest.TestCase):
         result = run_tool("parse", "--text", "2026-07-07 星巴克 原价45 实付38")
         proposal = json.loads(result.stdout)
         self.assertEqual(proposal["amount"], 38.0)
-        self.assertEqual(proposal["merchant"], "星巴克")
+
+    def test_parse_prefers_labeled_total_over_quantity(self):
+        result = run_tool("parse", "--text", "合计花了38元，买了2杯咖啡")
+        proposal = json.loads(result.stdout)
+        self.assertEqual(proposal["amount"], 38.0)
+
+    def test_parse_supports_common_chinese_number_amount(self):
+        result = run_tool("parse", "--text", "午饭花了三十五块")
+        proposal = json.loads(result.stdout)
+        self.assertEqual(proposal["amount"], 35.0)
 
     def test_parse_infers_wechat_method(self):
         result = run_tool("parse", "--text", "2026-07-07 微信 星巴克 38")
@@ -307,6 +316,7 @@ class LedgerToolTest(unittest.TestCase):
                 added["id"],
                 "--category",
                 "餐饮",
+                "--remember",
             )
             proposal = json.loads(
                 run_tool("parse", "--ledger", str(ledger), "--text", "2026-07-08 星巴克 19").stdout

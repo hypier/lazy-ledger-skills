@@ -21,6 +21,7 @@ DEFAULT_TEMPLATE = SKILL_DIR / "assets" / "ledger-viewer-template.html"
 DEFAULT_BILL_TEMPLATE = SKILL_DIR / "assets" / "ledger-bill-canvas.html"
 BILL_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 VALID_TYPES = {"expense", "income", "refund", "transfer"}
+VALID_RELATIONS = {"refund", "reimbursement", "repayment", "split"}
 VALID_SOURCES = {"text", "image", "voice", "manual", "import"}
 VALID_METHODS = {"wechat", "alipay", "cash", "card", "bank", "other"}
 VALID_ACCOUNT_TYPES = {"cash", "wechat", "alipay", "bank", "credit", "other"}
@@ -934,7 +935,9 @@ def refresh_usage_profile(ledger, *, force=False, summary=None):
 
 def habit_memory_path(ledger_path):
     path = Path(ledger_path)
-    return path.with_name(f"{path.stem}-memory.md")
+    target = path.parent / "memory" / "habit-memory.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 def parse_habit_memory_meta(text):
@@ -1247,7 +1250,46 @@ def parse_amount_line(line):
     return None
 
 
+CHINESE_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+
+
+def chinese_amount(value):
+    """Convert the common short Chinese money forms used in chat."""
+    if value.isdigit():
+        return float(value)
+    total = 0
+    current = 0
+    units = {"十": 10, "百": 100, "千": 1000}
+    for char in value:
+        if char in CHINESE_DIGITS:
+            current = CHINESE_DIGITS[char]
+        elif char in units:
+            total += (current or 1) * units[char]
+            current = 0
+        else:
+            return None
+    return float(total + current) if total or current else None
+
+
 def extract_amount(text):
+    chinese = re.search(r"(?:实付|券后|合计|一共|总计|总共|共计|花了|用了)\s*(?:[为是:：]?\s*)?([零〇一二两三四五六七八九十百千]+)\s*(?:元|块|块钱)", text)
+    if chinese:
+        value = chinese_amount(chinese.group(1))
+        if value is not None:
+            cleaned = f"{text[:chinese.start()]} {text[chinese.end():]}"
+            return round(value, 2), cleaned
+    # A labeled total is semantic evidence, so prefer its number over a
+    # nearby quantity (for example, “合计38元，买了2杯咖啡”).
+    labeled_total = re.search(
+        r"(?:实付|券后|合计|一共|总计|总共|共计)(?:花了|用了)?\s*(?:[为是:：]?\s*)?(\d+(?:\.\d{1,2})?)\s*(?:元|块|块钱)?",
+        text,
+    )
+    if labeled_total and not re.search(r"(?:实付|券后)", text[: labeled_total.start()]):
+        value = round(float(labeled_total.group(1)), 2)
+        cleaned = f"{text[:labeled_total.start()]} {text[labeled_total.end():]}"
+        # Remove other numeric tokens only after retaining the labeled total.
+        cleaned = AMOUNT_RE.sub(" ", cleaned)
+        return value, cleaned
     paid = PAID_AMOUNT_RE.search(text)
     cleaned = ORIGINAL_PRICE_RE.sub(" ", text)
     if paid:
@@ -1384,7 +1426,12 @@ def try_parse_stacked_rows(text):
     return None
 
 
-def parse_text_transaction(text, ledger=None, currency="CNY", source="text", confidence=None):
+def parse_text_transaction(text, ledger=None, currency="CNY", source="text", confidence=None, require_amount=True):
+    """Build a proposal from casual text.
+
+    `require_amount=False` is for lookup paths such as `find`, where the caller
+    only needs the merchant/category/date signals and has no amount to give.
+    """
     raw_text = text.strip()
     if not raw_text:
         raise SystemExit("Text is required")
@@ -1413,7 +1460,7 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
         if can_fill:
             amount = round(float(habit["amount"]), 2)
             amount_from_habit = True
-        else:
+        elif require_amount:
             raise SystemExit("Amount is required")
     if confidence is None:
         confidence = 1.0
@@ -1540,6 +1587,10 @@ def merge_overrides(proposal, args):
         merged["method"] = args.method
     if args.account is not None:
         merged["account"] = args.account
+    if args.related_transaction_id is not None:
+        merged["related_transaction_id"] = args.related_transaction_id
+    if args.relation is not None:
+        merged["relation"] = args.relation
     if getattr(args, "to_account", None):
         merged["to_account"] = args.to_account
     if args.tags:
@@ -1575,6 +1626,8 @@ def build_transaction_payload(
     to_account=None,
     to_account_id=None,
     tx_id=None,
+    related_transaction_id=None,
+    relation=None,
 ):
     if amount_value is None:
         raise SystemExit("Amount is required unless --text includes one")
@@ -1616,6 +1669,14 @@ def build_transaction_payload(
         tx["to_account"] = to_account
     if to_account_id:
         tx["to_account_id"] = to_account_id
+    if related_transaction_id:
+        tx["related_transaction_id"] = related_transaction_id
+    if relation:
+        if relation not in VALID_RELATIONS:
+            raise SystemExit(f"Relation must be one of: {', '.join(sorted(VALID_RELATIONS))}")
+        if not related_transaction_id:
+            raise SystemExit("--relation requires --related-id")
+        tx["relation"] = relation
     return tx
 
 
@@ -1639,6 +1700,8 @@ def payload_from_proposal(ledger, proposal, args, tx_id=None):
         account_id=filled.get("account_id"),
         to_account=filled.get("to_account"),
         to_account_id=filled.get("to_account_id"),
+        related_transaction_id=filled.get("related_transaction_id"),
+        relation=filled.get("relation"),
         tx_id=tx_id,
     )
 
@@ -1701,6 +1764,8 @@ def add_transaction(args):
                 "method": args.method,
                 "account": args.account,
                 "to_account": getattr(args, "to_account", None),
+                "related_transaction_id": getattr(args, "related_transaction_id", None),
+                "relation": getattr(args, "relation", None),
             }
         ]
     added = []
@@ -1724,7 +1789,7 @@ def add_transaction(args):
             raise SystemExit(2)
         ledger["transactions"].append(tx)
         known.append(tx)
-        if args.category and tx.get("merchant"):
+        if args.remember and args.category and tx.get("merchant"):
             learn_merchant_category(ledger, tx.get("merchant"), tx.get("category"))
         learn_habits_from_transaction(ledger, tx)
         added.append(tx)
@@ -2678,7 +2743,9 @@ def render_bill_pack(pack, currency="CNY"):
 
 def default_bill_html_path(ledger_path, month):
     path = Path(ledger_path)
-    return path.with_name(f"{path.stem}-bill-{month}.html")
+    target = path.parent / "reports" / f"bill-{month}.html"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 def bill_canvas_payload(pack):
@@ -2813,36 +2880,55 @@ def format_list_row(tx):
 
 def list_command(args):
     ledger = load_ledger(args.ledger, create=False)
-    rows, _period = filter_from_args(ledger["transactions"], args)
+    rows, period = filter_from_args(ledger["transactions"], args)
     rows.sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    total = len(rows)
     selected = rows[: args.limit]
+    # Silent truncation is how "that day has no transactions" mistakes happen:
+    # always report how many matched and whether this is all of them.
+    truncated = total > len(selected)
     if args.json:
-        print(json.dumps(selected, ensure_ascii=False, indent=2))
+        print(json.dumps({
+            "transactions": selected,
+            "count": len(selected),
+            "total": total,
+            "limit": args.limit,
+            "truncated": truncated,
+            "period": period,
+        }, ensure_ascii=False, indent=2))
         return
     for tx in selected:
         print(format_list_row(tx))
+    if truncated:
+        print(f"（仅显示最近 {len(selected)} 笔，匹配共 {total} 笔；加 --limit {total} 查看全部）")
 
 
 def find_command(args):
     ledger = load_ledger(args.ledger, create=False)
     if args.text:
+        # A lookup may know only the merchant, so do not demand an amount.
         proposal = parse_text_transaction(
             args.text,
             ledger=ledger,
             currency=args.currency or ledger.get("currency", "CNY"),
+            require_amount=False,
         )
+        has_amount = proposal.get("amount") is not None
+        has_date = bool(extract_date_token(args.text.strip()))
+        # Without an amount, the merchant is the only strong signal.
+        merchant_weight = 2 if has_amount else 3
         scored = []
         for tx in ledger["transactions"]:
             score = 0
             try:
-                if round(float(tx.get("amount", 0) or 0), 2) == round(float(proposal["amount"]), 2):
+                if has_amount and round(float(tx.get("amount", 0) or 0), 2) == round(float(proposal["amount"]), 2):
                     score += 2
             except (TypeError, ValueError):
                 pass
-            if tx_day(tx) == tx_day(proposal):
+            if has_date and tx_day(tx) == tx_day(proposal):
                 score += 2
             if normalized_text(tx.get("merchant")) and normalized_text(tx.get("merchant")) == normalized_text(proposal.get("merchant")):
-                score += 2
+                score += merchant_weight
             if tx.get("category") and tx.get("category") == proposal.get("category"):
                 score += 1
             if score >= 3:
@@ -2876,7 +2962,12 @@ def update_command(args):
         tx["currency"] = args.currency
     if args.category is not None:
         tx["category"] = args.category
-        learn_merchant_category(ledger, tx.get("merchant"), args.category)
+        if args.remember:
+            learn_merchant_category(ledger, tx.get("merchant"), args.category)
+    if args.related_transaction_id is not None:
+        tx["related_transaction_id"] = args.related_transaction_id
+    if args.relation is not None:
+        tx["relation"] = args.relation
     if args.merchant is not None:
         if args.merchant == "":
             tx.pop("merchant", None)
@@ -3020,6 +3111,14 @@ def doctor_report(ledger):
             add_issue(issues, "unknown_account", "Unknown to_account_id", tx, value=tx.get("to_account_id"))
         if tx.get("type") == "transfer" and not (tx.get("to_account_id") or tx.get("to_account")):
             add_issue(issues, "missing_transfer_dest", "Transfer is missing destination account", tx)
+        if tx.get("relation"):
+            if tx.get("relation") not in VALID_RELATIONS:
+                add_issue(issues, "invalid_relation", "Invalid transaction relation", tx, value=tx.get("relation"))
+            related_id = tx.get("related_transaction_id")
+            if not related_id:
+                add_issue(issues, "missing_related_transaction", "Relation is missing related transaction id", tx)
+            elif not any(row.get("id") == related_id for row in transactions if isinstance(row, dict)):
+                add_issue(issues, "unknown_related_transaction", "Related transaction was not found", tx, value=related_id)
         try:
             amount = float(tx.get("amount", 0))
             if amount <= 0:
@@ -3530,7 +3629,7 @@ def backup_command(args):
     if not src.exists():
         raise SystemExit(f"Ledger not found: {src}")
     stamp = local_today().strftime("%Y%m%d")
-    dest = Path(args.output) if args.output else src.with_name(f"{src.stem}-{stamp}{src.suffix or '.json'}")
+    dest = Path(args.output) if args.output else src.parent / "backups" / f"{src.stem}-{stamp}{src.suffix or '.json'}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dest)
     print(json.dumps({"ok": True, "ledger": str(src.resolve()), "backup": str(dest.resolve())}, ensure_ascii=False, indent=2))
@@ -3563,6 +3662,9 @@ def add_common_tx_flags(parser, *, require_type=False, source_default=None, incl
     parser.add_argument("--method", default=None, choices=sorted(VALID_METHODS))
     parser.add_argument("--account", default=None)
     parser.add_argument("--to-account", dest="to_account", default=None)
+    parser.add_argument("--related-id", dest="related_transaction_id", default=None)
+    parser.add_argument("--relation", choices=["refund", "reimbursement", "repayment", "split"], default=None)
+    parser.add_argument("--remember", action="store_true", help="Save an explicit merchant preference")
 
 
 def add_filter_flags(parser, *, limit=None, json_flag=False, compare=False):

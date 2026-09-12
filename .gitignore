@@ -1,8 +1,19 @@
-lazy-ledger.json
-lazy-ledger-report.html
-*-bill-[0-9][0-9][0-9][0-9]-[0-9][0-9].html
-wechat-bill-rows.tsv
-*-bill-rows.tsv
+# Runtime data — real ledgers, backups, and generated reports stay out of git
+data/
+lazy-ledger*.json
 *-memory.md
-dist/*
-scripts/__pycache__/*
+lazy-ledger-bill-*.html
+lazy-ledger-report.html
+lazy-ledger*.csv
+*-bill-rows.tsv
+*.tmp
+
+# Build output
+dist/
+
+# Caches
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+.workbuddy/

@@ -76,7 +76,7 @@ Account fields:
 - `account` / `account_id`: source account. Required in practice for new writes; old rows may omit them.
 - `to_account` / `to_account_id`: destination, used by `transfer`
 
-Also optional: `merchant`, `note`, `confidence` (0–1), `tags`, `attachment`, and `payment_channel`.
+Also optional: `merchant`, `note`, `confidence` (0–1), `tags`, `attachment`, `payment_channel`, `related_transaction_id`, and `relation` (`refund`, `reimbursement`, `repayment`, or `split`). Until field-level confidence is supported, record which fields were inferred or uncertain in `note` while keeping the numeric `confidence` backward compatible.
 
 `method` and `account` describe how balances move. `payment_channel` records an imported processor route without replacing the actual account. For example, a WeChat payment funded by a named credit card keeps that credit-card `account_id` and uses `payment_channel: "wechat"`.
 
@@ -153,7 +153,7 @@ Missing `accounts` on an old file is filled with the five defaults. Do not repla
 
 ## Habit memory
 
-`{ledger-stem}-memory.md` sits beside the ledger (for `./lazy-ledger.json` that is `./lazy-ledger-memory.md`). Markdown so the agent can Read it. Rewrite when missing, when `tx_count` lags by 10+, when older than 7 days, or on `habit memory` / `habit rebuild`. Do not rewrite on every single add unless those rules fire (the first add creates the file).
+The habit portrait is stored in the ledger instance's `memory/` directory (for `data/ledgers/default/ledger.json`, use `data/ledgers/default/memory/habit-memory.md`). Markdown so the agent can Read it. Rewrite when missing, when `tx_count` lags by 10+, when older than 7 days, or on `habit memory` / `habit rebuild`.
 
 ## Compatibility
 

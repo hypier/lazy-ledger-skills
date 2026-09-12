@@ -36,8 +36,7 @@ Preserve source text and attachment paths. Keep transaction time in `occurred_at
 3. Run the read-only audit:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_audit.py" \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" audit \
   --json
 ```
 
@@ -45,7 +44,7 @@ python3 "$LEDGER_SKILL_DIR/scripts/ledger_audit.py" \
 5. Show the user material classification or account assumptions. A screenshot still requires explicit table confirmation; an official statement import may proceed when the user's request already authorizes it and source validation is complete.
 6. Apply first to a temporary ledger copy. Verify expected additions, updates, balances, source-reference uniqueness, and rerun behavior.
 7. Create a real backup, recheck that the live ledger has not changed, then apply once to the real ledger.
-8. Run `ledger_audit.py`, `doctor --json`, the relevant `show --month ... --compare`, and `habit memory` after a large import. Verify `/api/ledger` only when the local service is running.
+8. Run `audit --json`, `doctor --json`, the relevant `show --month ... --compare`, and `habit memory` after a large import. Verify `/api/ledger` only when the local service is running.
 
 ## Duplicate Decisions
 

@@ -1,6 +1,6 @@
 # Record And Correct Transactions
 
-Read [bookkeeping-rules.md](bookkeeping-rules.md) for field inference and [habits.md](habits.md) when defaults or usual amounts matter.
+Read [bookkeeping-rules.md](bookkeeping-rules.md) for field inference and [habits.md](habits.md) when defaults or usual amounts matter. Let the agent resolve natural-language meaning before selecting the write command; do not treat the parser's first proposal as authoritative.
 
 ## Choose The Write Path
 
@@ -18,24 +18,24 @@ Read [bookkeeping-rules.md](bookkeeping-rules.md) for field inference and [habit
 ## Add Or Preview
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" add \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" add \
   --text "昨天微信 星巴克 38"
 ```
 
-Several lines or semicolon-separated items can be passed in one `--text` value. Prefer paid amount when the input also shows an original price.
+Several lines or semicolon-separated items can be passed in one `--text` value. Prefer paid amount when the input also shows an original price. For a sentence containing quantity and total, pass the understood total explicitly rather than relying on positional number parsing.
 
 Use `parse` when a proposal should be inspected without writing:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" parse \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" parse \
   --text "原价45 实付38 星巴克"
 ```
 
-Useful overrides include `--type`, `--category`, `--merchant`, `--method`, `--account`, `--to-account`, `--date`, `--occurred-at`, `--tags`, `--source`, `--confidence`, and `--attachment`.
+Useful overrides include `--type`, `--category`, `--merchant`, `--method`, `--account`, `--to-account`, `--date`, `--occurred-at`, `--tags`, `--source`, `--confidence`, and `--attachment`. Use `--related-id` and `--relation refund|reimbursement|repayment|split` for explicit links between rows. Use `--remember` only when the user asks to save a merchant rule.
 
 If `add` exits with `likely_duplicate`, show the candidate and ask whether both are real. Use `--allow-duplicate` only after confirmation.
+
+When correcting a just-recorded row, locate it with the conversation context or `find`, then update only the requested field. Do not turn that correction into a permanent merchant preference unless the user says to remember the rule.
 
 ## One Receipt Or Image
 
@@ -51,27 +51,26 @@ If `add` exits with `likely_duplicate`, show the candidate and ask whether both 
 Find the target first:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" find \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" find \
   --text "昨天星巴克"
 ```
+
+`find --text` is a lookup, so an amount is optional. Give whatever is known — merchant, date, or amount — and candidates are scored on the signals present.
 
 When one target is clear, keep its ID and update only requested fields:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" update \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" update \
   --id tx_20260707_ab12cd34 \
   --category 咖啡茶饮
 ```
 
-Use `--occurred-at` to add an exact time without replacing the transaction. A category update on a row with a merchant also remembers that merchant preference.
+Use `--occurred-at` to add an exact time without replacing the transaction. Add `--remember` when a category update should also save a merchant preference; ordinary corrections remain scoped to the row.
 
 If several rows match, list concise candidates and ask which one. Delete only after the target is unambiguous:
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" delete \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" delete \
   --id tx_20260707_ab12cd34 \
   --yes
 ```
@@ -81,12 +80,10 @@ python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" delete \
 Use specific accounts when known. A payment channel is not necessarily the balance-bearing account; see [reconcile-imports.md](reconcile-imports.md) for imported payment data.
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" account list \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" account list \
   --json
 
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" account add \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" account add \
   --name 招商银行储蓄卡 \
   --type bank \
   --opening 12000
@@ -97,8 +94,7 @@ Own-account movement and credit-card repayment are `transfer` rows with both sou
 ## Budgets
 
 ```bash
-python3 "$LEDGER_SKILL_DIR/scripts/ledger_tool.py" budget set \
-  --ledger ./lazy-ledger.json \
+"$LEDGER_SKILL_DIR/scripts/ledger" budget set \
   --month 2026-08 \
   --category 餐饮 \
   --amount 2000
