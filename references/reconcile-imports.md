@@ -41,7 +41,7 @@ Preserve source text and attachment paths. Keep transaction time in `occurred_at
 ```
 
 4. Build deterministic source references. Match each source row to at most one ledger row and each ledger row to at most one source row.
-5. Show the user material classification or account assumptions. A screenshot still requires explicit table confirmation; an official statement import may proceed when the user's request already authorizes it and source validation is complete.
+5. Run a semantic classification pass before import: consult the habit portrait and merchant preferences, normalize merchant/description text, and assign the most specific configured category. `其他` is allowed only when evidence is insufficient. Group only materially ambiguous type/account/category decisions for user confirmation. A screenshot still requires explicit table confirmation; an official statement import may proceed when the user's request already authorizes it and source validation is complete.
 6. Apply first to a temporary ledger copy. Verify expected additions, updates, balances, source-reference uniqueness, and rerun behavior.
 7. Create a real backup, recheck that the live ledger has not changed, then apply once to the real ledger.
 8. Run `audit --json`, `doctor --json`, the relevant `show --month ... --compare`, and `habit memory` after a large import. Verify `/api/ledger` only when the local service is running.

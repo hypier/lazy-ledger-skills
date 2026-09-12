@@ -11,11 +11,13 @@ lsof -nP -iTCP:8765 -sTCP:LISTEN
 curl -fsS http://127.0.0.1:8765/api/health
 ```
 
-If it is stopped or points at a different ledger, start the service in the background:
+If it is stopped or points at a different ledger, start the service:
 
 ```bash
-"$LEDGER_SKILL_DIR/scripts/ledger" serve
+"$LEDGER_SKILL_DIR/scripts/ledger" open
 ```
+
+`open` is shorthand for `serve --open`: it starts the localhost app on port 8765 (or the next free port) and opens the browser. Use `serve` without `--open` when you only need the URL printed.
 
 Use `--port` when 8765 belongs to another process. Bind only to `127.0.0.1`.
 

@@ -18,11 +18,15 @@
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_BIN="${LAZY_PYTHON:-python3}"
 if [ -n "${LAZY_LEDGER_FILE:-}" ]; then
   LEDGER_FILE="$LAZY_LEDGER_FILE"
 elif [ -n "${LAZY_LEDGER_HOME:-}" ]; then
   LEDGER_FILE="$LAZY_LEDGER_HOME/ledgers/default/ledger.json"
+elif [ "$PWD" = "$SCRIPT_DIR" ]; then
+  # Running ./ledger from scripts/ should not create a separate scripts/data ledger.
+  LEDGER_FILE="$SKILL_ROOT/data/ledgers/default/ledger.json"
 else
   LEDGER_FILE="$PWD/data/ledgers/default/ledger.json"
 fi
@@ -35,6 +39,7 @@ Commands are forwarded to the matching script:
   <any ledger_tool subcommand>   add parse update delete show summary bill list
                                  recent find prefer habit account budget doctor
                                  import-tsv export backup render serve init
+  open [options]                 serve --open (localhost UI + browser)
   audit [options]                ledger_audit.py (needs the ledger)
   shot <prepare|...> [options]   bill_screenshot.py (does not use the ledger)
   which                          print resolved skill dir, ledger, interpreter
@@ -75,6 +80,13 @@ case "$group" in
     echo "ledger:     $LEDGER_FILE"
     echo "python:     $PYTHON_BIN"
     exit 0
+    ;;
+  open)
+    target="$SCRIPT_DIR/ledger_tool.py"
+    forward_group=1
+    inject_ledger=1
+    group="serve"
+    rest=("--open" "${rest[@]}")
     ;;
   audit)
     target="$SCRIPT_DIR/ledger_audit.py"

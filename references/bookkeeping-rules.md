@@ -57,6 +57,10 @@ Common roots and cues:
 - 理财: insurance, investment, financing fees where the ledger taxonomy defines them.
 - 其他: evidence is insufficient; lower confidence.
 
+When several transactions occur within a short time window and share a merchant, counterparty, or description pattern, classify them as a group. If the group strongly points to one purpose, use that purpose for otherwise incomplete rows and record the inference in the note; ask only when the rows conflict or the choice changes income, expense, refund, or transfer semantics.
+
+For a genuinely ambiguous group, produce ranked candidate purposes with confidence and show the proposed choice to the user in one grouped confirmation. Apply the confirmed choice to the group together and preserve the evidence in each row's note.
+
 Use the most specific configured second-level category (for example `咖啡茶饮` under `餐饮`). Reports aggregate it into its parent. Do not create a new top-level category when an existing parent/child relationship expresses the meaning.
 
 ## Method, Account, And Channel

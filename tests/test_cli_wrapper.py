@@ -67,6 +67,17 @@ class WrapperTest(unittest.TestCase):
         result = run_wrapper("shot", "--help")
         self.assertIn("prepare", result.stdout)
 
+    def test_open_alias_forwards_to_serve_with_open_flag(self):
+        result = run_wrapper("open", "--help")
+        self.assertIn("serve", result.stdout)
+        self.assertIn("--open", result.stdout)
+
+    def test_wrapper_from_scripts_dir_uses_skill_root_data(self):
+        result = run_wrapper("which", cwd=str(ROOT / "scripts"))
+        ledger_line = next(line for line in result.stdout.splitlines() if line.startswith("ledger:"))
+        self.assertIn(str(ROOT / "data" / "ledgers" / "default" / "ledger.json"), ledger_line)
+        self.assertNotIn("/scripts/data/", ledger_line)
+
     def test_wrapper_resolves_ledger_from_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp, "named-ledger.json")

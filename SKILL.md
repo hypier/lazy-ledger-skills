@@ -1,6 +1,6 @@
 ---
 name: lazy-ledger
-description: Maintain a local JSON personal ledger. This skill should be used when recording or correcting transactions (记一笔, 记账, 记一下), reconciling WeChat/Alipay/bank/credit-card statements without duplicates (导入账单, 对账, 查重), managing accounts/categories/budgets (账户, 预算, 分类), summarizing or generating monthly bills (本月花了多少, 月账单, 报表), or opening the localhost ledger UI (打开账本).
+description: Maintain a local JSON personal ledger. Use when recording or correcting transactions, reconciling WeChat/Alipay/bank/credit-card statements without duplicates, managing accounts/categories/budgets, summarizing or generating monthly bills, or opening the localhost ledger UI.
 metadata:
   version: 1.1.0
 ---
@@ -18,7 +18,7 @@ Treat each message as an intent and evidence problem before choosing a command. 
 - A correction applies to the current target only unless the user explicitly asks to remember it. Treat a one-off category as temporary; save a merchant rule or amount habit only on explicit instruction or a clearly established stable pattern.
 - Adapt the response to the question: use concise confirmation for a write, an explanation for “why”, and a data-backed comparison for analysis. The CLI remains the source of arithmetic and persistence.
 - When uncertainty differs by field, keep the transaction-level `confidence` compatible and describe the uncertain fields in `note`; ask only about fields that change the financial meaning.
-- For “刚才那笔/上一笔” corrections, use the current turn's returned ID first. If several rows were just written, show candidates before updating; update only the named field.
+- For "that last transaction" or "the previous one" corrections, use the current turn's returned ID first. If several rows were just written, show candidates before updating; update only the named field.
 
 ## Proactive review loop
 
@@ -27,7 +27,9 @@ AI bookkeeping is also an ongoing conversation about data quality. After a write
 Analyze findings before involving the user. When source references, timing, amount, merchant, and transaction type make the intended result clear, apply a reversible field update or relation automatically and report it. Only surface findings where multiple reasonable interpretations remain, the repair changes financial meaning, or deletion/merging is proposed. Group unresolved findings that have the same repair type and evidence pattern into one confirmation question. Within that group, show each affected row and one proposed action. Handle groups sequentially: ask one confirmation question, wait for the answer, apply only that group, rerun the relevant check, and then present the next highest-priority group.
 
 - `doctor` detects structural and referential problems; `audit` detects duplicate and source-reference problems. Their results are evidence for AI analysis, not a requirement to ask the user about every row.
-- A low-confidence or unusual row is a review suggestion, not proof of an error. Preserve the original evidence and uncertainty until the user confirms.
+- A low-confidence or unusual row is a review suggestion, not proof of an error. For social/gift spending, when the habit portrait shows it is rare, check first whether the row belongs under groceries, snacks, or ordinary spending. Preserve the original evidence and uncertainty until the user confirms.
+- For consecutive transactions that are close in time and similar in merchant, payee, or description, treat them as a transaction group and infer a shared purpose. When there is no clear contrary evidence, classify by the group's highest-probability purpose and note "inferred from nearby similar transactions". Ask only when purposes conflict within the group or would change income/expense treatment.
+- For groups that remain ambiguous, rank candidate purposes by evidence with confidence (for example "groceries 70% / snacks 25% / social 5%"), show the group, candidates, and proposed choice in one confirmation; after confirmation, apply the fix uniformly and record the basis used.
 - If the user asks only for a total, do not derail the answer with every warning. Mention a concise material warning and offer the repair path when it could change the total.
 - Keep a review queue internally, but expose only its highest-priority unresolved item. A clean result or a user decline advances to the next item.
 - Before asking about an unlinked refund, search a nearby date window for the same merchant and amount, including normalized merchant names and source descriptions. Present reliable candidates first; ask only when no candidate or several materially different candidates remain.
@@ -52,16 +54,17 @@ These cover the majority of requests. Run them directly without loading a refere
 
 | Request | Command |
 |---|---|
-| Record one or several clear items | `ledger add --text "昨天微信 星巴克 38"` |
+| Record one or several clear items | `ledger add --text "yesterday wechat starbucks 38"` |
 | This month, versus last month | `ledger show --compare` |
 | Spending over a named period | `ledger show --range last-month\|this-quarter\|this-year --compare` |
-| Find a row before correcting it | `ledger find --text "昨天星巴克"` |
-| Correct one field by ID | `ledger update --id tx_20260707_ab12cd34 --category 咖啡茶饮` |
+| Find a row before correcting it | `ledger find --text "yesterday starbucks"` |
+| Correct one field by ID | `ledger update --id tx_20260707_ab12cd34 --category coffee-tea` |
 | Delete by ID | `ledger delete --id tx_20260707_ab12cd34 --yes` |
 | Accounts and balances | `ledger account list --json` |
 | Budget progress | `ledger budget list` |
 | Data health and duplicate check | `ledger audit --json` |
 | List rows, count rows, check a date | `ledger list --limit 500 --json` |
+| Open the localhost ledger UI | `ledger open` |
 
 All commands assume `LEDGER_SKILL_DIR` is set; prefix with `"$LEDGER_SKILL_DIR/scripts/"`. Pass `--ledger /path/to.json` to target a different file.
 
@@ -89,18 +92,19 @@ Read only the references needed for the current request.
 
 - Store positive `amount`; `type` determines direction. Own-account movement is `transfer` and is excluded from income/expense.
 - Keep the actual funding account separate from the payment channel. A WeChat payment funded by a named bank card belongs to that bank account with `payment_channel: wechat`.
-- Use specific bank and credit-card accounts when the source identifies them; do not collapse them into a generic `银行卡` account.
+- Use specific bank and credit-card accounts when the source identifies them; do not collapse them into a generic bank-card account.
 - Preserve authoritative source references and statement attachments. Never delete or merge rows only because date and amount match.
 - A full refund remains two rows: the original `expense` and a `refund`.
 - Transactions store the most specific second-level category; reports roll it into its parent.
 - For bulk imports, validate source totals, reconcile against the current ledger, test on a copy, back up, apply once, then verify IDs, balances, `doctor`, summaries, and idempotency where supported.
+- Before writing an imported row, perform a semantic classification pass using its merchant/description, account and payment channel, plus the current habit portrait and merchant preferences. Assign the most specific configured category; keep the catch-all category only when evidence is insufficient. Group only materially ambiguous type, account, or category decisions for user confirmation. Verify this pass on the temporary copy before applying the real import.
 
 ## Interaction Defaults
 
 - A clear single transaction is written immediately. Ask only when amount, type, or correction target is materially ambiguous.
-- A payment-history screenshot always requires a visible confirmation table before any write, even when the initial request says “导入”.
+- A payment-history screenshot always requires a visible confirmation table before any write, even when the initial request says "import".
 - Before recording, use the habit portrait only when current; never guess an amount outside its stable-amount section.
-- After a write, reply in Chinese with the affected rows, important assumptions, and the relevant period total. `add` already returns the affected month totals; reuse them instead of running a second summary command. Do not dump raw ledger JSON unless requested.
+- After a write, reply in the user's language with the affected rows, important assumptions, and the relevant period total. `add` already returns the affected month totals; reuse them instead of running a second summary command. Do not dump raw ledger JSON unless requested.
 
 ## Safety
 
