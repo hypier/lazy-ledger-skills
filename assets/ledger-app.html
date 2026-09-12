@@ -1623,7 +1623,7 @@
         if (!occurred.startsWith(`${selectedYear}-`)) continue;
         const monthIndex = Number(occurred.slice(5, 7)) - 1;
         if (monthIndex < 0 || monthIndex > 11) continue;
-        if (tx.type === "income" || tx.type === "expense") months[monthIndex][tx.type] += Number(tx.amount || 0);
+        if (!tx.excluded_from_totals && (tx.type === "income" || tx.type === "expense")) months[monthIndex][tx.type] += Number(tx.amount || 0);
       }
       const incomeTotal = months.reduce((sum, item) => sum + item.income, 0);
       const expenseTotal = months.reduce((sum, item) => sum + item.expense, 0);

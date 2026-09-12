@@ -466,8 +466,6 @@ def account_balances(ledger):
     for tx in ledger.get("transactions", []):
         if not isinstance(tx, dict):
             continue
-        if tx.get("excluded_from_totals"):
-            continue
         try:
             amount = float(tx.get("amount") or 0)
         except (TypeError, ValueError):

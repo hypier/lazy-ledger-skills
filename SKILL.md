@@ -90,7 +90,7 @@ Read only the references needed for the current request.
 
 ## Accounting Invariants
 
-- Store positive `amount`; `type` determines direction. Own-account movement is `transfer` and is excluded from income/expense.
+- Store positive `amount`; `type` determines direction. Own-account movement is `transfer` and is excluded from income/expense. A row marked `excluded_from_totals` is omitted from income/expense/net/budget reports while still affecting the real balance of its account.
 - Keep the actual funding account separate from the payment channel. A WeChat payment funded by a named bank card belongs to that bank account with `payment_channel: wechat`.
 - Use specific bank and credit-card accounts when the source identifies them; do not collapse them into a generic bank-card account.
 - Preserve authoritative source references and statement attachments. Never delete or merge rows only because date and amount match.
