@@ -1593,9 +1593,9 @@ def merge_overrides(proposal, args):
         merged["method"] = args.method
     if args.account is not None:
         merged["account"] = args.account
-    if args.related_transaction_id is not None:
+    if getattr(args, "related_transaction_id", None) is not None:
         merged["related_transaction_id"] = args.related_transaction_id
-    if args.relation is not None:
+    if getattr(args, "relation", None) is not None:
         merged["relation"] = args.relation
     if getattr(args, "to_account", None):
         merged["to_account"] = args.to_account
@@ -1800,7 +1800,7 @@ def add_transaction(args):
             raise SystemExit(2)
         ledger["transactions"].append(tx)
         known.append(tx)
-        if args.remember and args.category and tx.get("merchant"):
+        if getattr(args, "remember", False) and args.category and tx.get("merchant"):
             learn_merchant_category(ledger, tx.get("merchant"), tx.get("category"))
         learn_habits_from_transaction(ledger, tx)
         added.append(tx)
@@ -2977,13 +2977,19 @@ def update_command(args):
         tx["currency"] = args.currency
     if args.category is not None:
         tx["category"] = args.category
-        if args.remember:
+        if getattr(args, "remember", False):
             learn_merchant_category(ledger, tx.get("merchant"), args.category)
-    if args.related_transaction_id is not None:
+    if getattr(args, "related_transaction_id", None) is not None:
         tx["related_transaction_id"] = args.related_transaction_id
-    if args.relation is not None:
+    if getattr(args, "relation", None) is not None:
         tx["relation"] = args.relation
-    if args.exclude_from_totals:
+    excluded = getattr(args, "excluded_from_totals", None)
+    if excluded is not None:
+        if excluded:
+            tx["excluded_from_totals"] = True
+        else:
+            tx.pop("excluded_from_totals", None)
+    elif getattr(args, "exclude_from_totals", False):
         tx["excluded_from_totals"] = True
     if args.merchant is not None:
         if args.merchant == "":

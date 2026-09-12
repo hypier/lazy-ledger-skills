@@ -126,6 +126,8 @@
     .composer-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
     .field { display: grid; gap: 6px; }
     .field span { font-size: 12px; color: var(--muted); }
+    .check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); cursor: pointer; }
+    .check-row input { width: 18px; height: 18px; accent-color: var(--accent); }
     textarea, input, select {
       width: 100%;
       border: 1px solid var(--line);
@@ -957,6 +959,7 @@
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>日期时间</span><input id="editOccurredAt" type="datetime-local" required></label>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-tag"></use></svg>标签</span><input id="editTags" placeholder="例如：报销, 出差"></label>
       <label class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-pen"></use></svg>备注</span><input id="editNote" placeholder="备注"></label>
+      <div class="field"><span class="icon-label"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>统计</span><label class="check-row"><input id="editExcluded" type="checkbox"> 不入账（保留流水，但不计入收入、支出和净额）</label></div>
       <div class="dialog-actions">
         <button class="btn danger" type="button" id="deleteBtn"><svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>删除</button>
         <button class="btn" type="button" id="cancelBtn">取消</button>
@@ -1943,6 +1946,7 @@
       document.getElementById("editOccurredAt").value = toLocalDateTime(tx.occurred_at);
       document.getElementById("editTags").value = (tx.tags || []).join(", ");
       document.getElementById("editNote").value = tx.note || "";
+      document.getElementById("editExcluded").checked = Boolean(tx.excluded_from_totals);
       toggleTransferFields();
       dialog.showModal();
     }
@@ -2010,7 +2014,8 @@
           method: document.getElementById("editMethod").value,
           occurred_at: document.getElementById("editOccurredAt").value,
           tags: document.getElementById("editTags").value,
-          note: document.getElementById("editNote").value
+          note: document.getElementById("editNote").value,
+          excluded_from_totals: document.getElementById("editExcluded").checked
         }
       });
       dialog.close();

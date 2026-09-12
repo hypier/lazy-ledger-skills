@@ -97,6 +97,10 @@ def _add_args(ledger_path, body):
         method=body.get("method"),
         account=body.get("account"),
         to_account=body.get("to_account"),
+        related_transaction_id=body.get("related_transaction_id") or body.get("related_id"),
+        relation=body.get("relation"),
+        remember=bool(body.get("remember")),
+        exclude_from_totals=bool(body.get("exclude_from_totals")),
         id=body.get("id"),
         allow_duplicate=bool(body.get("allow_duplicate")),
     )
@@ -121,6 +125,11 @@ def _update_args(ledger_path, tx_id, body):
         method=body.get("method"),
         account=body.get("account"),
         to_account=body.get("to_account"),
+        related_transaction_id=body.get("related_transaction_id") or body.get("related_id"),
+        relation=body.get("relation"),
+        remember=bool(body.get("remember")),
+        exclude_from_totals=bool(body.get("exclude_from_totals")),
+        excluded_from_totals=body.get("excluded_from_totals"),
     )
 
 

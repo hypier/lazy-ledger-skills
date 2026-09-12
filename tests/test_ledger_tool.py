@@ -690,6 +690,24 @@ class DocumentStoreTest(unittest.TestCase):
                 DocumentStore(path).collection("transactions").get("tx_1")
 
 
+class ServerArgsTest(unittest.TestCase):
+    def test_add_and_update_args_include_cli_flags(self):
+        _scripts_on_path()
+        from ledger_server import _add_args, _update_args
+
+        update = _update_args("/tmp/ledger.json", "tx_1", {"category": "餐饮"})
+        self.assertFalse(update.remember)
+        self.assertIsNone(update.related_transaction_id)
+        self.assertIsNone(update.relation)
+        self.assertFalse(update.exclude_from_totals)
+
+        add = _add_args("/tmp/ledger.json", {"text": "星巴克 38"})
+        self.assertFalse(add.remember)
+        self.assertIsNone(add.related_transaction_id)
+        self.assertIsNone(add.relation)
+        self.assertFalse(add.exclude_from_totals)
+
+
 class LiveServerTest(unittest.TestCase):
     def test_serve_rejects_non_localhost(self):
         _scripts_on_path()
@@ -789,13 +807,22 @@ class LiveServerTest(unittest.TestCase):
 
                 patch_req = urllib.request.Request(
                     base + f"/api/transactions/{tx_id}",
-                    data=json.dumps({"amount": 40}).encode("utf-8"),
+                    data=json.dumps(
+                        {
+                            "amount": 40,
+                            "category": "下午茶",
+                            "type": "expense",
+                            "merchant": "星巴克",
+                            "excluded_from_totals": False,
+                        }
+                    ).encode("utf-8"),
                     method="PATCH",
                     headers={"Content-Type": "application/json"},
                 )
                 with urllib.request.urlopen(patch_req, timeout=5) as resp:
                     updated = json.loads(resp.read().decode("utf-8"))
                 self.assertEqual(updated["amount"], 40.0)
+                self.assertEqual(updated["category"], "下午茶")
 
                 delete_req = urllib.request.Request(
                     base + f"/api/transactions/{tx_id}",
