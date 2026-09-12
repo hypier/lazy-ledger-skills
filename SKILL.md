@@ -24,11 +24,12 @@ Treat each message as an intent and evidence problem before choosing a command. 
 
 AI bookkeeping is also an ongoing conversation about data quality. After a write, import, correction, or query that exposes relevant rows, look for actionable issues with `audit` or `doctor` and explain only findings that matter to the user's question. Typical findings include likely duplicates, missing accounts, implausible amounts or dates, low-confidence classifications, unmatched refunds, and expenses that look like transfers or reimbursements.
 
-For each finding, state the affected rows, why it was noticed, and the proposed repair in plain Chinese. Ask for confirmation before changing, merging, deleting, or relabeling an existing row. Apply a repair only after confirmation, then rerun the relevant check and report the result. Several independent safe field repairs may be grouped into one confirmation table; never bundle an ambiguous destructive action with them.
+For each finding, state one affected issue, why it was noticed, and one proposed repair in plain Chinese. Handle issues sequentially: ask one confirmation question, wait for the answer, apply only that repair, rerun the relevant check, and then present the next highest-priority issue. Never make the user choose among several repairs in one message or bundle multiple issues into one confirmation.
 
 - `doctor` detects structural and referential problems; `audit` detects duplicate and source-reference problems. Neither result is permission to mutate data.
 - A low-confidence or unusual row is a review suggestion, not proof of an error. Preserve the original evidence and uncertainty until the user confirms.
 - If the user asks only for a total, do not derail the answer with every warning. Mention a concise material warning and offer the repair path when it could change the total.
+- Keep a review queue internally, but expose only its highest-priority unresolved item. A clean result or a user decline advances to the next item.
 
 ## Runtime
 

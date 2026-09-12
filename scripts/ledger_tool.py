@@ -466,6 +466,8 @@ def account_balances(ledger):
     for tx in ledger.get("transactions", []):
         if not isinstance(tx, dict):
             continue
+        if tx.get("excluded_from_totals"):
+            continue
         try:
             amount = float(tx.get("amount") or 0)
         except (TypeError, ValueError):
@@ -1628,6 +1630,7 @@ def build_transaction_payload(
     tx_id=None,
     related_transaction_id=None,
     relation=None,
+    excluded_from_totals=False,
 ):
     if amount_value is None:
         raise SystemExit("Amount is required unless --text includes one")
@@ -1677,6 +1680,8 @@ def build_transaction_payload(
         if not related_transaction_id:
             raise SystemExit("--relation requires --related-id")
         tx["relation"] = relation
+    if excluded_from_totals:
+        tx["excluded_from_totals"] = True
     return tx
 
 
@@ -1702,6 +1707,7 @@ def payload_from_proposal(ledger, proposal, args, tx_id=None):
         to_account_id=filled.get("to_account_id"),
         related_transaction_id=filled.get("related_transaction_id"),
         relation=filled.get("relation"),
+        excluded_from_totals=bool(filled.get("excluded_from_totals")),
         tx_id=tx_id,
     )
 
@@ -1766,6 +1772,7 @@ def add_transaction(args):
                 "to_account": getattr(args, "to_account", None),
                 "related_transaction_id": getattr(args, "related_transaction_id", None),
                 "relation": getattr(args, "relation", None),
+                "excluded_from_totals": getattr(args, "exclude_from_totals", False),
             }
         ]
     added = []
@@ -2059,6 +2066,8 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
         tx_type = tx.get("type", "expense")
         amount = float(tx.get("amount", 0) or 0)
         type_counts[tx_type] += 1
+        if tx.get("excluded_from_totals"):
+            continue
         if tx_type in totals:
             totals[tx_type] += amount
         if tx_type == "income":
@@ -2968,6 +2977,8 @@ def update_command(args):
         tx["related_transaction_id"] = args.related_transaction_id
     if args.relation is not None:
         tx["relation"] = args.relation
+    if args.exclude_from_totals:
+        tx["excluded_from_totals"] = True
     if args.merchant is not None:
         if args.merchant == "":
             tx.pop("merchant", None)
@@ -3665,6 +3676,7 @@ def add_common_tx_flags(parser, *, require_type=False, source_default=None, incl
     parser.add_argument("--related-id", dest="related_transaction_id", default=None)
     parser.add_argument("--relation", choices=["refund", "reimbursement", "repayment", "split"], default=None)
     parser.add_argument("--remember", action="store_true", help="Save an explicit merchant preference")
+    parser.add_argument("--exclude-from-totals", action="store_true", help="Keep the row but exclude it from financial totals")
 
 
 def add_filter_flags(parser, *, limit=None, json_flag=False, compare=False):

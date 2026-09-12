@@ -15,16 +15,16 @@ Use `doctor` for missing fields, invalid types or amounts, unknown accounts, bro
 
 ## Discuss
 
-Present a compact table with the affected row, finding, evidence, and proposed action. Say what is known and what is uncertain. A duplicate candidate is not a confirmed duplicate; an unusual amount is not automatically an error. Keep source references and attachments visible in the explanation.
+Present one compact finding at a time with the affected row, finding, evidence, and one proposed action. Say what is known and what is uncertain. A duplicate candidate is not a confirmed duplicate; an unusual amount is not automatically an error. Keep source references and attachments visible in the explanation. Maintain the remaining findings as an internal queue.
 
 ## Confirm And Repair
 
-Wait for explicit confirmation before deleting or merging a transaction, changing its type, amount, account, or date, adding or changing a relation, or applying a repair to several rows. After confirmation, update by transaction ID, preserve unknown fields, and make the smallest requested change. Create a backup before a bulk repair or any deletion. Then rerun `doctor --json` or `audit --json` and give the user the repaired IDs and remaining issues.
+Ask exactly one confirmation question before deleting or merging a transaction, changing its type, amount, account, or date, or adding or changing a relation. After the answer, either apply that single repair or record that the user declined it. Update by transaction ID, preserve unknown fields, and make the smallest requested change. Create a backup before a deletion. Then rerun `doctor --json` or `audit --json`, report the result, and only then present the next issue.
 
 If no deterministic repair exists, leave the rows unchanged and ask one focused question. Do not hide the issue by changing it to `其他`, lowering the amount, or suppressing the warning.
 
 ## Timing
 
 - After a single clear add: check the new row and obvious duplicate candidates; keep the response concise when clean.
-- After an import or bulk edit: run the full checks and show all material findings before the next write.
+- After an import or bulk edit: run the full checks, then present the highest-priority finding before asking about another one.
 - During a totals query: answer the requested total first, then mention a warning only when it may affect that total or indicates data loss.
