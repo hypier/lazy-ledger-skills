@@ -4,7 +4,7 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from ledger_db import write_text_secure
+from ledger_core.storage.documents import write_text_secure
 from ledger_core.domain.model import now_iso, empty_ledger, ledger_preferences
 from ledger_core.domain.metrics import compact_candidate
 from ledger_core.domain.semantics import remaining_amount

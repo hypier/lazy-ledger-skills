@@ -7,7 +7,7 @@ import uuid
 from contextvars import ContextVar
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from ledger_db import ledger_lock
+from ledger_core.storage.documents import ledger_lock
 from ledger_core.domain.model import now_iso, default_currency, empty_ledger, ledger_preferences, ensure_accounts
 from ledger_core.domain.metrics import category_entries, DEFAULT_CATEGORY_PARENTS
 from ledger_core.domain.semantics import settled_amount, remaining_amount, settle

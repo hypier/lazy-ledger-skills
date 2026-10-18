@@ -245,6 +245,9 @@ class GenerativeUITest(unittest.TestCase):
                                 text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         spec = json.loads(result.stdout)
+        self.assertEqual(spec["version"], 2)
+        self.assertIn("schema", spec["library"])
+        self.assertNotIn("schema", spec)
         self.assertIn("Columns", spec["library"]["components"])
         self.assertIn("window.ledgerData", spec["html"]["data_global"])
 

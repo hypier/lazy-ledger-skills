@@ -4,7 +4,7 @@ import uuid
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
-from ledger_db import write_text_secure
+from ledger_core.storage.documents import write_text_secure
 from ledger_core.domain.model import now_iso, ledger_preferences
 from ledger_core.domain.metrics import account_balances
 from ledger_core.domain.semantics import counts_as

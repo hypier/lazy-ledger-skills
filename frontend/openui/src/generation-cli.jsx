@@ -11,7 +11,7 @@ if (process.argv.includes('--spec')) {
     'Use at most 256 component nodes, 16 nesting levels and 64 children per container. Tabs has one title per child, at most 12.',
     'Return OpenUI source without Markdown fences. Validation diagnostics can be used for correction.',
   ];
-  console.log(JSON.stringify({ version: 1, library: library.toSpec(), schema: library.toJSONSchema(), prompt: library.prompt({ additionalRules: rules }) }));
+  console.log(JSON.stringify({ version: 2, library: library.toSpec(), prompt: library.prompt({ additionalRules: rules }) }));
 } else {
   try {
     const input = JSON.parse(readFileSync(0, 'utf8'));

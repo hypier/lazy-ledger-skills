@@ -3,6 +3,7 @@ import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from ledger_core.domain.model import default_currency
+from ledger_core.domain.money import format_money
 from ledger_core.domain.metrics import account_balances, budget_progress, summarize, tx_day, month_key, compact_candidate, category_parent_map
 from ledger_core.domain.semantics import counts_as
 from ledger_core.services.findings import active_insights as build_findings
@@ -651,11 +652,6 @@ def build_insight_lines(data, currency="CNY"):
     if expense and weekend / expense >= 0.4:
         lines.append(f"周末支出占 {weekend / expense * 100:.0f}%。")
     return lines[:4]
-
-
-def format_money(amount, currency="CNY"):
-    symbol = "¥" if currency == "CNY" else f"{currency} "
-    return f"{symbol}{float(amount):,.2f}"
 
 
 def format_pct(value):

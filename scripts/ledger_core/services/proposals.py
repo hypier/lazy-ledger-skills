@@ -1,8 +1,6 @@
 """Version-bound, inspectable changes; only this service applies proposals."""
 import copy
-import json
 import uuid
-from pathlib import Path
 from ..domain.model import now_iso
 from ..domain.money import decimal_amount
 from ..domain.validation import validate

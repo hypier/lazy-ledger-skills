@@ -73,6 +73,7 @@ test('generated HTML stays inside an opaque sandbox and carries no write bridge'
 test('packaged generation spec comes from this exact component library', async () => {
   const bundled = JSON.parse(await readFile(new URL('../../../assets/openui/generation.json', import.meta.url)));
   assert.deepEqual(bundled.library, JSON.parse(JSON.stringify(library.toSpec())));
-  assert.deepEqual(bundled.schema, library.toJSONSchema());
+  assert.equal(bundled.version, 2);
+  assert.deepEqual(bundled.library.schema, library.toJSONSchema());
   assert.match(bundled.prompt, /Columns/);
 });

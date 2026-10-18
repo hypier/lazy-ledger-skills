@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime
 from collections import defaultdict
+from ledger_core.domain.money import format_money
 from ledger_core.domain.semantics import counts_as
 
 # Severity ordering used when the caller only wants the top few findings.
@@ -528,8 +529,3 @@ def build_findings(ledger, today=None, currency=None, limit=None, balances=None)
 def month_key(transaction):
     day = _day(transaction)
     return day[:7] if day else ""
-
-
-def format_money(amount, currency="CNY"):
-    symbol = "¥" if currency == "CNY" else f"{currency} "
-    return f"{symbol}{float(amount):,.2f}"

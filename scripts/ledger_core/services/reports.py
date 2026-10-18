@@ -2,7 +2,6 @@
 import html
 import json
 import uuid
-from pathlib import Path
 from ..domain.model import now_iso
 from ..domain.metrics import summarize, budget_progress, account_balances, category_parent_map
 from ..domain.semantics import counts_as

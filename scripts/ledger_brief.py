@@ -21,12 +21,6 @@ def _money(amount, currency):
     return format_money(amount or 0, currency)
 
 
-def _pct_change(current, previous):
-    if not previous:
-        return None
-    return (current - previous) / previous * 100.0
-
-
 def headline(period_data, ledger, currency, findings, open_items):
     """One or two sentences that state how things stand, and why.
 

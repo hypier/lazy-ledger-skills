@@ -22,3 +22,9 @@ def money_sum(values):
 
 def minor_units(value):
     return int(decimal_amount(value) * 100)
+
+
+def format_money(amount, currency="CNY"):
+    """Format display amounts consistently across reports and legacy callers."""
+    symbol = "¥" if currency == "CNY" else f"{currency} "
+    return f"{symbol}{float(amount):,.2f}"

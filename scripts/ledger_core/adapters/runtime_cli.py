@@ -1,13 +1,11 @@
 """CLI adapter for context, profile, migration and optional Git history."""
 import json
 import subprocess
-import uuid
 from pathlib import Path
 
 from ..services import profile, runtime, history
 from ..storage import repository
-from ..storage.documents import ledger_lock, write_text_secure
-from ..domain.model import SCHEMA_VERSION
+from ..storage.documents import ledger_lock
 
 
 def context(path, task):

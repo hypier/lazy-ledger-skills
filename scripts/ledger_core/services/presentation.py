@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from ledger_db import write_text_secure
+from ledger_core.storage.documents import write_text_secure
 from ledger_core.domain.model import ledger_preferences
 from ledger_core.domain.metrics import tx_day, month_key, category_parent_map
 from ledger_core.domain.semantics import counts_as

@@ -18,7 +18,7 @@ SWIFT_SRC = SCRIPT_DIR / "ocr_bill.swift"
 OCR_BIN = Path(os.environ.get("LAZY_LEDGER_OCR_BIN", "/tmp/lazy-ledger-ocr-bill"))
 sys.path.insert(0, str(SCRIPT_DIR))
 from ledger_core.services.interpretation import infer_category  # noqa: E402
-from ledger_db import write_text_secure  # noqa: E402
+from ledger_core.storage.documents import write_text_secure  # noqa: E402
 
 DATE_RE = re.compile(r"^(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})$")
 DATE_COMPACT_RE = re.compile(r"^(\d{1,2})月(\d{1,2})日(\d{1,2}):(\d{2})$")

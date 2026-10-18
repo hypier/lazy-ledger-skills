@@ -55,6 +55,8 @@ scripts/ledger history diff --commit COMMIT
 
 ## 开发验证
 
+内部存储调用直接依赖 `ledger_core.storage.documents`；`ledger_db.py` 和 `ledger_core.adapters.api` 保留供旧 Python 调用方使用。兼容导出即使没有内部调用也不作为死代码自动删除。金额展示统一使用 `ledger_core.domain.money.format_money`，原导入路径仍可用。OpenUI 生成规范已升级到 version 2，JSON schema 统一从 `library.schema` 读取。
+
 ```sh
 python3 -m unittest discover -s tests -v
 python3 scripts/package_skill.py --validate-only

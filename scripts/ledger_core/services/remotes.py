@@ -5,7 +5,6 @@ External creation is explicit; authentication stays with the host's gh/git tools
 import json
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
