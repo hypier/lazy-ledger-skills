@@ -38,11 +38,28 @@ def dispatch(args):
         elif args.command == "observations":
             result = observations.get(args.ledger, refresh=args.refresh)
         else:
-            report = reports.read_archive(args.ledger, args.id) if args.action == "read" else reports.build(args.ledger, start=args.start, end=args.end)
-            if getattr(args, "archive", False):
-                result = reports.archive(args.ledger, report, format=args.format)
+            layout = read(args.layout) if getattr(args, "layout", None) else None
+            if args.action == "read":
+                output = reports.render_archive(args.ledger, args.id, args.format)
+                report = None
             else:
-                print(reports.render(report, args.format), end="")
+                report = reports.from_import(read(args.input)) if args.action == "import-preview" else reports.build(args.ledger, start=args.start, end=args.end)
+            if getattr(args, "archive", False):
+                if args.output:
+                    raise ValueError("Use either --archive or --output")
+                result = reports.archive(args.ledger, report, format=args.format, layout=layout)
+            else:
+                if report is not None:
+                    output = reports.render(report, args.format, layout=layout)
+                if args.output:
+                    from ..storage.documents import write_text_secure
+                    target = Path(args.output)
+                    if target.exists():
+                        raise ValueError("Output already exists; choose a new artifact path")
+                    write_text_secure(target, output)
+                    print(json.dumps({"artifact": str(target.resolve())}, ensure_ascii=False))
+                else:
+                    print(output, end="")
                 return
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except (ValueError, OSError, KeyError, TypeError) as exc:
@@ -82,8 +99,17 @@ def add_commands(sub):
     p = leaf(group, "build", "Build a versioned report from core metrics")
     p.add_argument("--start", required=True)
     p.add_argument("--end", required=True)
-    p.add_argument("--format", choices=["markdown", "json", "html"], default="markdown")
+    p.add_argument("--format", choices=["markdown", "json", "html", "openui", "view-json"], default="markdown")
+    p.add_argument("--layout", help="Validated JSON component/ref composition for OpenUI")
+    p.add_argument("--output", help="Write to a new artifact file")
+    p.add_argument("--archive", action="store_true")
+    p = leaf(group, "import-preview", "View a saved import plan without committing it")
+    p.add_argument("--input", required=True)
+    p.add_argument("--format", choices=["markdown", "json", "html", "openui", "view-json"], default="markdown")
+    p.add_argument("--layout")
+    p.add_argument("--output")
     p.add_argument("--archive", action="store_true")
     p = leaf(group, "read", "Render an immutable archived data snapshot")
     p.add_argument("--id", required=True)
-    p.add_argument("--format", choices=["markdown", "json", "html"], default="markdown")
+    p.add_argument("--format", choices=["markdown", "json", "html", "openui", "view-json"], default="markdown")
+    p.add_argument("--output", help="Write to a new artifact file")

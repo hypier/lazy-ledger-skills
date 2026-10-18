@@ -1,0 +1,19 @@
+{
+  "name": "lazy-ledger-openui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@openuidev/react-lang": "1.0.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.11",
+    "@playwright/test": "1.56.1"
+  }
+}

@@ -31,6 +31,13 @@ self-contained, read-only page without a template or server. It contains no
 client-side financial calculations. Chinese long text wraps on narrow screens.
 Choose rich host visualizations only when they improve understanding.
 
+`--format openui` adds an offline interactive snapshot; `--format view-json`
+returns only its minimal display data. Choose and order registered components
+using `--layout`, or let the core select a default based on data and density.
+For layout rules, import previews and archive behavior, read
+[generative-ui.md](generative-ui.md). These components replace fixed-page design,
+not the shared financial calculations. The renderer exposes no write actions.
+
 `--archive` saves a unique report directory with data, the rendered result and
 a renderer/digest manifest. The data includes source transaction IDs and rows,
 ledger/profile/runtime tokens, coverage, profile snapshot and metric version.

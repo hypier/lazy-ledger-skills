@@ -1,7 +1,8 @@
 # Optional HTML output and compatibility HTTP API
 
 No fixed HTML assets ship in 3.0. The three old interactive pages have been
-removed. Recording, correction, analysis and reports work without a browser.
+removed. Version 3.1 adds optional OpenUI component assets, with no fixed HTML
+pages. Recording, correction, analysis and reports work without a browser.
 Use [present.md](present.md) to choose an output that helps the current task.
 
 `report build --start YYYY-MM-DD --end YYYY-MM-DD --format html` renders the
@@ -9,6 +10,11 @@ same verified report package as Markdown/JSON. `--archive` saves the artifact,
 source snapshot and renderer version. The page is read-only, responsive, fully
 escaped and contains no JavaScript or client-side financial calculations.
 Account balances are the current snapshot's balances, not period-end balances.
+
+`--format openui` is a separate interactive output backed by locally bundled
+OpenUI/React. It embeds its minimal data, renderer and static fallback in one
+HTML file; see [generative-ui.md](generative-ui.md). The compatibility server
+continues to serve static reports; OpenUI snapshots need no server or HTTP API.
 
 Compatibility entry points:
 

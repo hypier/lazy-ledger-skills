@@ -53,8 +53,29 @@ def check(report):
         raise ValueError("Report snapshot failed its integrity check")
 
 
-def render(report, format="markdown"):
+def from_import(plan):
+    from .generative_ui import import_data
+    data = import_data(plan)
+    report = {"version": 1, "kind": "import", "id": "report_" + uuid.uuid4().hex,
+              "generated_at": plan["generated_at"], "context": plan["context"],
+              "currency": plan["currency"], "period": {"label": "账单导入预览"},
+              "import": data}
+    report["digest"] = repository.fingerprint(report)
+    return report
+
+
+def render(report, format="markdown", *, layout=None):
     check(report)
+    if layout is not None and format not in {"openui", "view-json"}:
+        raise ValueError("--layout requires openui or view-json format")
+    if format in {"openui", "view-json"} or report.get("kind") == "import" and format in {"markdown", "html"}:
+        from . import generative_ui as ui
+        view = ui.project(report, layout)
+        if format == "openui":
+            return ui.document(view)
+        if format == "view-json":
+            return json.dumps(view, ensure_ascii=False, indent=2) + "\n"
+        return ui.fallback(view) if format == "markdown" else html_document(ui.fallback(view))
     if format == "json":
         return json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if format not in {"markdown", "html"}:
@@ -104,16 +125,32 @@ def html_document(markdown):
     return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>账务报告</title><style>body{max-width:72ch;margin:2rem auto;padding:1rem;font:16px/1.7 system-ui;color:#22332b;background:#fafbf8;overflow-wrap:anywhere}h1{font-size:1.6rem}h2{font-size:1.2rem;margin-top:2rem}main{padding:1rem}a{color:#245f49}</style><main>' + ''.join(content) + '</main></html>'
 
 
-def archive(path, report, *, format="markdown"):
+def archive(path, report, *, format="markdown", layout=None):
     check(report)
-    output = render(report, format)
+    output = render(report, format, layout=layout)
     target = runtime_dir(path) / "reports" / report["id"]
     target.mkdir(parents=True, exist_ok=False)
     atomic_write_json(target / "data.json", report)
-    extension = {"markdown": "md", "json": "json", "html": "html"}[format]
+    extension = {"markdown": "md", "json": "json", "html": "html", "openui": "html", "view-json": "json"}[format]
     artifact = target / ("report." + extension)
     write_text_secure(artifact, output)
-    atomic_write_json(target / "manifest.json", {"version": 1, "report_id": report["id"], "data_digest": report["digest"], "renderer": "core-report-v1", "format": format})
+    manifest = {"version": 1, "report_id": report["id"], "data_digest": report["digest"], "renderer": "core-report-v1", "format": format}
+    if format in {"openui", "view-json"}:
+        from . import generative_ui as ui
+        import hashlib
+        view = ui.project(report, layout)
+        atomic_write_json(target / "view.json", view)
+        atomic_write_json(target / "layout.json", view["layout"])
+        write_text_secure(target / "view.openui", view["lang"])
+        write_text_secure(target / "fallback.md", ui.fallback(view))
+        manifest.update(renderer=view["renderer"], layout_version=1,
+                        files={name: hashlib.sha256((target / name).read_bytes()).hexdigest()
+                               for name in (artifact.name, "view.json", "layout.json", "view.openui", "fallback.md")})
+        try:
+            manifest["build"] = ui.asset_bytes()[0]
+        except (OSError, ValueError, KeyError):
+            manifest["build"] = None
+    atomic_write_json(target / "manifest.json", manifest)
     return {"report_id": report["id"], "data": str(target / "data.json"), "artifact": str(artifact)}
 
 
@@ -124,3 +161,22 @@ def read_archive(path, report_id):
     report = read_json(runtime_dir(path) / "reports" / report_id / "data.json")
     check(report)
     return report
+
+
+def render_archive(path, report_id, format="markdown"):
+    """Replay saved rich output byte-for-byte, including its original renderer."""
+    report = read_archive(path, report_id)
+    target = runtime_dir(path) / "reports" / report_id
+    manifest = read_json(target / "manifest.json")
+    if manifest.get("format") in {"openui", "view-json"} and format in {"openui", "view-json", "markdown"}:
+        import hashlib
+        filename = {"openui": "report.html", "view-json": "view.json", "markdown": "fallback.md"}[format]
+        if format != "openui" or manifest["format"] == "openui":
+            content = (target / filename).read_bytes()
+            if manifest.get("data_digest") != report["digest"] or hashlib.sha256(content).hexdigest() != manifest.get("files", {}).get(filename):
+                raise ValueError("Archived presentation failed its integrity check")
+            return content.decode("utf-8")
+        # A view-json archive has no frozen HTML bundle; use its frozen layout.
+        view = json.loads(render_archive(path, report_id, "view-json"))
+        return render(report, format, layout=view["layout"])
+    return render(report, format)

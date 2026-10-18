@@ -12,6 +12,8 @@ Usage:
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
 import re
 import sys
 import zipfile
@@ -130,10 +132,26 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
     required = {"scripts/ledger_core/domain/model.py", "scripts/ledger_core/domain/metrics.py",
                 "scripts/ledger_core/storage/repository.py", "scripts/ledger_core/services/profile.py",
                 "scripts/ledger_core/adapters/runtime_cli.py", "scripts/ledger_core/services/reports.py", "scripts/ledger_core/services/remotes.py",
-                "scripts/ledger_core/adapters/api.py"}
+                "scripts/ledger_core/adapters/api.py", "scripts/ledger_core/services/generative_ui.py",
+                "assets/openui/catalog.json", "assets/openui/renderer.js", "assets/openui/renderer.css",
+                "assets/openui/build.json", "assets/openui/THIRD_PARTY_LICENSES.txt"}
     missing_packaged = sorted(required - set(included))
     if missing_packaged:
         raise ValidationError("Required runtime files filtered from package: " + ", ".join(missing_packaged))
+
+    # Built assets travel with the Python-only distribution. Prevent a stale
+    # bundle/catalog combination from silently shipping a fallback-only viewer.
+    try:
+        asset_root = skill_dir / "assets/openui"
+        manifest = json.loads((asset_root / "build.json").read_text())
+        catalog = json.loads((asset_root / "catalog.json").read_text())
+        if manifest["renderer"] != catalog["renderer"]:
+            raise ValueError("renderer versions differ")
+        for filename in ("renderer.js", "renderer.css", "catalog.json"):
+            if hashlib.sha256((asset_root / filename).read_bytes()).hexdigest() != manifest["sha256"][filename]:
+                raise ValueError("stale " + filename)
+    except (OSError, ValueError, KeyError) as exc:
+        raise ValidationError("OpenUI assets need rebuilding: " + str(exc)) from exc
 
     # Guard against accidentally shipping a real ledger.
     leaked = [rel for rel in included if re.search(r"^lazy-ledger.*\.json$", rel)]

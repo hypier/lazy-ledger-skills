@@ -29,4 +29,6 @@ htmlcov/
 .DS_Store
 .venv/
 .workbuddy/
+node_modules/
+frontend/openui/test-results/
 

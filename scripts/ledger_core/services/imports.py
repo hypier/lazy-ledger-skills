@@ -208,7 +208,12 @@ def prepare(path, filename, *, provider=None, account=None, expected_count=None,
         actual = money_sum(item["candidate"]["amount"] for item in source["rows"] if item["candidate"]["type"] == kind and item["state"] != "excluded")
         if decimal_amount(expected) != decimal_amount(actual):
             mismatches.append({"kind": kind, "expected": expected, "actual": actual})
-    report = {"source": {k: v for k, v in source.items() if k != "rows"}, "count": count, "source_total": total,
+    from ..domain.model import now_iso
+    from .generative_ui import transaction
+    report = {"preview_version": 1, "context": proposals.context_token(ledger), "currency": ledger["currency"],
+              "generated_at": now_iso(),
+              "preview_rows": [{"line": r["line"], **transaction(r["candidate"])} for r in source["rows"]],
+              "source": {k: v for k, v in source.items() if k != "rows"}, "count": count, "source_total": total,
               "dispositions": dispositions, "review": review, "mismatches": mismatches,
               "ready": not source["errors"] and not review and not mismatches}
     if report["ready"]:

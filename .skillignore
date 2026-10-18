@@ -38,3 +38,5 @@ lazy-ledger*.csv
 README.md
 tests/
 product-design-audit/
+frontend/
+node_modules/

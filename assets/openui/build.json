@@ -1,0 +1,20 @@
+{
+  "renderer": "ledger-openui-v1",
+  "dependencies": {
+    "@openuidev/devtools": "0.3.0",
+    "@openuidev/lang-core": "1.0.1",
+    "@openuidev/observability": "0.0.4",
+    "@openuidev/react-lang": "1.0.1",
+    "ci-info": "4.4.0",
+    "lucide-react": "0.575.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "scheduler": "0.27.0",
+    "zod": "4.1.12"
+  },
+  "sha256": {
+    "renderer.js": "3253f2347a06c3c9fd287e87a61453fdadbdec16b35eae6532d35ea0e40f1fee",
+    "renderer.css": "b3cbfff9e691ba17b9553fd07b79685c212b52feb0a9b39f437f07b11fada27e",
+    "catalog.json": "8feaec3a1322ebbc6aba09cd91d7280385bd20c2eef337110d5738d2068e1e18"
+  }
+}

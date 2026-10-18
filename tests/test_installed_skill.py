@@ -19,7 +19,7 @@ class InstalledSkillTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             archive, included = package(ROOT, folder / "dist")
-            self.assertFalse(any(item.startswith("assets/") for item in included))
+            self.assertTrue(all(not item.startswith("assets/") or item.startswith("assets/openui/") for item in included))
             self.assertFalse(any("-runtime/" in item or item.startswith("tests/") for item in included))
             with zipfile.ZipFile(archive) as bundle:
                 bundle.extractall(folder / "installed")
@@ -37,6 +37,10 @@ class InstalledSkillTest(unittest.TestCase):
             report = folder / "snapshot.html"
             run("bill", "render", "--month", "2026-10", "--output", str(report))
             self.assertIn("<main>", report.read_text())
+            rich = folder / "interactive.html"
+            run("report", "build", "--start", "2026-10-01", "--end", "2026-10-31", "--format", "openui", "--output", str(rich))
+            self.assertIn("ledger-view", rich.read_text())
+            self.assertNotIn("交互资源不可用", rich.read_text())
             run("record", "--text", "咖啡12", "--date", "2026-10-02")
             rows = folder / "rows.tsv"
             rows.write_text("occurred_at\ttype\tamount\tcategory\tmerchant\n2026-10-03\texpense\t5\t交通\t公交\n")

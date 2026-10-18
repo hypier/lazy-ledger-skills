@@ -13,12 +13,15 @@ from ..domain.model import SCHEMA_VERSION
 def context(path, task):
     ledger = repository.load(path, create=False)
     from ..services.observations import get
+    from ..services.generative_ui import capabilities as presentation_capabilities
     observations = get(path)
     return {"ledger_id": ledger.get("ledger_id"), "revision": ledger["revision"],
             "schema_version": ledger["schema_version"], "task": task,
             "profile": ledger.profile, "profile_path": str(profile.profile_path(path).resolve()),
             "profile_present": ledger.profile_token is not None, "profile_token": ledger.profile_token,
-            "capabilities": {**ledger.runtime, "extensions": [
+            "capabilities": {**ledger.runtime,
+                "presentation": {**ledger.runtime.get("presentation", {}), "openui": presentation_capabilities()},
+                "extensions": [
                 {**{k:v for k,v in item.items() if k != "bundle"},
                  "permissions": item["bundle"]["permissions"], "core_schema": item["bundle"]["core_schema"]}
                 for item in ledger.runtime["extensions"]]}, "runtime_token": ledger.runtime_token,

@@ -1,4 +1,4 @@
-# Lazy Ledger 3.0
+# Lazy Ledger 3.1
 
 以智能管家为主的本地记账 skill。用户提供事实和目标，管家负责记账、导入对账、预算、分析、复核与报告；专业角色按任务加载，普通记账不需要启动多个 agent。
 
@@ -14,6 +14,7 @@
 - 可选 Git：建账时询问，不启用/仅本地/私有远程三种模式；私有 GitHub 建仓与核验、手动或已授权的写后同步、离线重试、三方合并、同来源身份统一、冲突计划、历史差异与新设备恢复。
 - 主动复核：写后维护发现事项，支持待补充、忽略、暂缓、解决和按新证据重开；通知回执去重。
 - 按需展示：三个固定 HTML 模板已移除。对话优先；Markdown、JSON、可选只读 HTML 共用报告数据，归档保存不可变快照。旧展示入口已转向新报告服务。
+- OpenUI 展示：按问题组合指标、分类/每日支出、预算、明细和导入复核组件；本地离线 HTML、搜索分页、文本降级和原样归档重放。模型选择组件，核心提供金额。无需配置模型 API、Gateway 或运行前端服务。
 
 ## 使用
 
@@ -24,9 +25,12 @@ scripts/ledger context --task record
 scripts/ledger record --text "午饭28" --operation-id unique-request-id
 scripts/ledger show --range this-month
 scripts/ledger report build --start 2026-10-01 --end 2026-10-31 --archive
+scripts/ledger report build --start 2026-10-01 --end 2026-10-31 --format openui --archive
 ```
 
 账本使用 `<文件名主体>-runtime/` 隔离画像、能力、报告和本机设置；建议放在 skill 安装目录之外。未决定 Git 模式时照常记账，不初始化历史或上传。
+
+OpenUI 仅用于只读展示。`--layout` 可指定组件排列，`--format view-json` 导出最小展示数据；`report import-preview --input PLAN --format openui` 查看导入计划。使用和归档约定见 [生成式展示](references/generative-ui.md)。
 
 ```sh
 scripts/ledger history configure --mode local
@@ -57,4 +61,14 @@ python3 scripts/package_skill.py --validate-only
 python3 scripts/package_skill.py /tmp/ledger-package
 ```
 
-全量 219 项测试通过，无跳过。测试使用临时合成账本和本地 Git 远程，包含独立解压安装运行。HTTP 测试需本机监听权限；扩展测试需要 macOS 的实际隔离能力。标准 skill 元数据另使用 `skill-creator/scripts/quick_validate.py` 校验。
+测试使用临时合成账本和本地 Git 远程，包含独立解压安装运行。HTTP 测试需本机监听权限；扩展测试需要 macOS 的实际隔离能力。标准 skill 元数据另使用 `skill-creator/scripts/quick_validate.py` 校验。
+
+前端源码在 `frontend/openui/`，固定依赖与锁文件独立管理；构建结果在 `assets/openui/`，随 skill 分发。使用者不需要 npm。开发时在该目录运行：
+
+```sh
+OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm ci --ignore-scripts
+npm run build
+npm test
+```
+
+浏览器测试使用隔离的无头 Chrome 和合成账本，检查金额、只读交互、注入防护、无网络请求、移动布局和错误降级。构建时更新资源摘要及第三方许可证；修改组件契约需同步更新 catalog 的 renderer 版本。不要直接修改打包 JS。

@@ -5,6 +5,12 @@ schema and semantics versions, profile and capability tokens, coverage, extensio
 summaries and local Git status. Reload after relevant changes. Context does not
 load converter source into every task; `schema show` exposes the full manifest.
 
+`capabilities.presentation.openui` is discovered from the installed component
+catalog, including versions, data refs and read-only status. It is overlaid in
+context without changing the ledger's portable runtime file or token. Reload
+context after a skill update. These built-in frontend components are maintained
+separately from user Python converters; see [generative-ui.md](generative-ui.md).
+
 `family.json` owns `family-runtime/`. The authoritative portable bundle is the
 ledger, `user-profile.md` and `runtime.json`. A write-ahead `pending.json` lets the
 next core reader complete an interrupted write under the ledger lock. Never

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "renderer": "ledger-openui-v1",
+  "layout_version": 1,
+  "report_versions": [1],
+  "read_only": true,
+  "components": {
+    "Metric": {"refs": ["totals.income", "totals.expense", "totals.refund", "totals.net"], "kinds": ["report"]},
+    "Breakdown": {"refs": ["by_category", "by_day"], "kinds": ["report"]},
+    "Budget": {"refs": ["budgets"], "kinds": ["report"]},
+    "Transactions": {"refs": ["transactions"], "kinds": ["report"]},
+    "ImportSummary": {"refs": ["import_summary"], "kinds": ["import"]},
+    "ImportRows": {"refs": ["import_rows"], "kinds": ["import"]},
+    "Issues": {"refs": ["import_issues"], "kinds": ["import"]}
+  }
+}
