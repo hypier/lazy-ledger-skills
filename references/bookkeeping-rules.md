@@ -25,7 +25,7 @@ Keep a fully refunded purchase as one `expense` plus one `refund`.
 
 ## Date And Time
 
-- No date: today at local noon.
+- No date: current local time.
 - Keep exact source time when visible.
 - Support `今天`, `昨天`, `前天`, recent weekday phrases, and explicit month/day forms.
 - For a month/day without year, use the current year unless that would place it implausibly far in the future.

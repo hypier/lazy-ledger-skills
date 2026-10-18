@@ -1203,6 +1203,7 @@
     function dailyTotals(rows) {
       const totals = { expense: 0, income: 0, refund: 0, transfer: 0 };
       for (const tx of rows) {
+        if (tx.excluded_from_totals) continue;
         const type = tx.type || "expense";
         if (totals[type] !== undefined) totals[type] += Number(tx.amount || 0);
       }
@@ -1433,6 +1434,7 @@
       const rows = filteredRows();
       const totals = { expense: 0, income: 0, refund: 0 };
       for (const tx of rows) {
+        if (tx.excluded_from_totals) continue;
         if (totals[tx.type] !== undefined) totals[tx.type] += Number(tx.amount || 0);
       }
       const daySpan = bounds.start && bounds.end
@@ -1518,7 +1520,7 @@
       document.getElementById("budgetLabel").textContent = month || "选择月份";
       const budgets = (LEDGER.budgets || []).filter((item) => !month || !item.month || item.month === month);
       document.getElementById("budgetRows").innerHTML = budgets.length ? budgets.map((item) => {
-        const spent = rows.filter((tx) => tx.type === "expense" && (!item.category || tx.category === item.category || categoryParent(tx.category) === item.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+        const spent = rows.filter((tx) => !tx.excluded_from_totals && tx.type === "expense" && (!item.category || tx.category === item.category || categoryParent(tx.category) === item.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
         const left = Number(item.amount) - spent;
         const category = item.category || "本月总额";
         return `<div class="row"><div class="row-main"><span class="row-icon">${icon("tag")}</span><div class="row-copy"><strong>${escapeHtml(category)}</strong><div class="meta">限额 ${money(item.amount)}</div></div></div><div class="amount ${left < 0 ? "expense" : ""}">${left < 0 ? "超支 " : "剩余 "}${money(Math.abs(left))}</div><button class="btn" data-del-budget="${escapeHtml(item.id)}" type="button" aria-label="删除 ${escapeHtml(category)} 预算" title="删除预算">${icon("trash")}</button></div>`;

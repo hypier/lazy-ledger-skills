@@ -6,19 +6,29 @@ dist/
 .git/
 __pycache__/
 *.pyc
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 .DS_Store
 .venv/
 .workbuddy/
 
 # Runtime data — a ledger, backup, or report must never enter the package
 data/
+backups/
+reports/
+memory/
 lazy-ledger*.json
 *-memory.md
 lazy-ledger-bill-*.html
+*-bill-*.html
 lazy-ledger-report.html
 lazy-ledger*.csv
 *-bill-rows.tsv
 *.tmp
+*.lock
 
 # Repository-only files (useful in git, useless at runtime)
 .skillignore

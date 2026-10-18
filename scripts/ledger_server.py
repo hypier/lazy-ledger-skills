@@ -22,20 +22,28 @@ def _tool():
     return ledger_tool
 
 
-def _store(path):
-    from ledger_db import DocumentStore
-
-    return DocumentStore(path, create=True)
+MAX_BODY_BYTES = 5_000_000
 
 
 def _read_json(handler):
-    length = int(handler.headers.get("Content-Length") or 0)
+    content_type = (handler.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+    if content_type and content_type != "application/json":
+        raise ValueError("unsupported_content_type")
+    try:
+        length = int(handler.headers.get("Content-Length") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid_content_length") from exc
     if length <= 0:
         return {}
+    if length > MAX_BODY_BYTES:
+        raise ValueError("request_too_large")
     raw = handler.rfile.read(length)
     if not raw:
         return {}
-    return json.loads(raw.decode("utf-8"))
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise ValueError("invalid_json") from exc
 
 
 def _send(handler, status, payload=None, body=None, content_type="application/json; charset=utf-8"):
@@ -44,6 +52,8 @@ def _send(handler, status, payload=None, body=None, content_type="application/js
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Referrer-Policy", "no-referrer")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -100,7 +110,8 @@ def _add_args(ledger_path, body):
         related_transaction_id=body.get("related_transaction_id") or body.get("related_id"),
         relation=body.get("relation"),
         remember=bool(body.get("remember")),
-        exclude_from_totals=bool(body.get("exclude_from_totals")),
+        exclude_from_totals=bool(body.get("exclude_from_totals") or body.get("excluded_from_totals")),
+        include_in_totals=bool(body.get("include_in_totals")),
         id=body.get("id"),
         allow_duplicate=bool(body.get("allow_duplicate")),
     )
@@ -128,7 +139,10 @@ def _update_args(ledger_path, tx_id, body):
         related_transaction_id=body.get("related_transaction_id") or body.get("related_id"),
         relation=body.get("relation"),
         remember=bool(body.get("remember")),
-        exclude_from_totals=bool(body.get("exclude_from_totals")),
+        exclude_from_totals=bool(body.get("exclude_from_totals"))
+        or ("excluded_from_totals" in body and bool(body.get("excluded_from_totals"))),
+        include_in_totals=bool(body.get("include_in_totals"))
+        or ("excluded_from_totals" in body and not bool(body.get("excluded_from_totals"))),
         excluded_from_totals=body.get("excluded_from_totals"),
     )
 
@@ -140,6 +154,19 @@ def make_handler(ledger_path):
         def log_message(self, format, *args):
             sys.stderr.write("%s - %s\n" % (self.address_string(), format % args))
 
+        def _mutation_allowed(self):
+            host = urlparse("//" + (self.headers.get("Host") or "")).hostname
+            if host not in {"127.0.0.1", "localhost", "::1"}:
+                return False
+            origin = self.headers.get("Origin")
+            if origin:
+                parsed = urlparse(origin)
+                if parsed.scheme not in {"http", "https"} or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+                    return False
+            if self.headers.get("Sec-Fetch-Site") == "cross-site":
+                return False
+            return True
+
         def do_GET(self):
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
@@ -150,9 +177,12 @@ def make_handler(ledger_path):
                 return
             if path == "/bill" or path.startswith("/bill/"):
                 month = None if path == "/bill" else path.rsplit("/", 1)[-1]
-                if month and not tool.BILL_MONTH_RE.match(month):
-                    _send(self, 404, {"error": "not_found"})
-                    return
+                if month:
+                    try:
+                        tool.validate_month(month)
+                    except SystemExit:
+                        _send(self, 404, {"error": "not_found"})
+                        return
                 ledger = tool.load_ledger(ledger_path, create=True)
                 _pack, html_path = tool.render_bill_html(ledger, ledger_path, month)
                 _send(self, 200, body=html_path.read_bytes(), content_type="text/html; charset=utf-8")
@@ -191,17 +221,25 @@ def make_handler(ledger_path):
                 return
             if path == "/api/bill":
                 ledger = tool.load_ledger(ledger_path, create=True)
-                _send(self, 200, tool.build_bill_pack(ledger, query.get("month")))
+                try:
+                    payload = tool.build_bill_pack(ledger, query.get("month"))
+                except SystemExit as exc:
+                    _send(self, 400, {"error": exc.code or "invalid_month"})
+                    return
+                _send(self, 200, payload)
                 return
             _send(self, 404, {"error": "not_found"})
 
         def do_POST(self):
+            if not self._mutation_allowed():
+                _send(self, 403, {"error": "forbidden_origin"})
+                return
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
             tool = _tool()
             try:
                 body = _read_json(self)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError):
                 _send(self, 400, {"error": "invalid_json"})
                 return
             if path == "/api/parse":
@@ -282,12 +320,15 @@ def make_handler(ledger_path):
             _send(self, 404, {"error": "not_found"})
 
         def do_PATCH(self):
+            if not self._mutation_allowed():
+                _send(self, 403, {"error": "forbidden_origin"})
+                return
             parsed = urlparse(self.path)
             parts = [part for part in parsed.path.split("/") if part]
             tool = _tool()
             try:
                 body = _read_json(self)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError):
                 _send(self, 400, {"error": "invalid_json"})
                 return
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "transactions":
@@ -340,6 +381,9 @@ def make_handler(ledger_path):
             _send(self, 404, {"error": "not_found"})
 
         def do_DELETE(self):
+            if not self._mutation_allowed():
+                _send(self, 403, {"error": "forbidden_origin"})
+                return
             parsed = urlparse(self.path)
             parts = [part for part in parsed.path.split("/") if part]
             tool = _tool()
@@ -382,8 +426,11 @@ def run_server(ledger_path, host="127.0.0.1", port=8765, open_browser=False, blo
             last_error = exc
     if server is None:
         raise OSError(last_error or f"No free port near {port}")
-    url = f"http://127.0.0.1:{chosen}/"
-    print(json.dumps({"url": url, "ledger": str(Path(ledger_path).resolve())}, ensure_ascii=False))
+    display_host = host if host not in {"localhost", "::1"} else host
+    if ":" in display_host and not display_host.startswith("["):
+        display_host = f"[{display_host}]"
+    url = f"http://{display_host}:{chosen}/"
+    print(json.dumps({"url": url, "ledger": str(Path(ledger_path).resolve())}, ensure_ascii=False), flush=True)
     if open_browser:
         webbrowser.open(url)
     if not block:

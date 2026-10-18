@@ -104,4 +104,4 @@ Omit `--month` to create a reusable monthly template. A month-specific budget ov
 
 ## After A Write
 
-Reply in Chinese with the date, type, category, merchant, amount, account, and changed/new IDs. Mention only consequential inference, then give the affected month's expense total and matching budget remainder when present.
+Reply in the user's language with the date, type, category, merchant, amount, account, and changed/new IDs. Mention only consequential inference, then give the affected month's expense total and matching budget remainder when present.

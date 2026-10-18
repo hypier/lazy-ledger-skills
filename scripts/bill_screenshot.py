@@ -17,10 +17,11 @@ SWIFT_SRC = SCRIPT_DIR / "ocr_bill.swift"
 OCR_BIN = Path(os.environ.get("LAZY_LEDGER_OCR_BIN", "/tmp/lazy-ledger-ocr-bill"))
 sys.path.insert(0, str(SCRIPT_DIR))
 from ledger_tool import infer_category  # noqa: E402
+from ledger_db import write_text_secure  # noqa: E402
 
 DATE_RE = re.compile(r"^(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})$")
 DATE_COMPACT_RE = re.compile(r"^(\d{1,2})月(\d{1,2})日(\d{1,2}):(\d{2})$")
-AMOUNT_RE = re.compile(r"^([+-])\s*(\d+\.\d{2})$")
+AMOUNT_RE = re.compile(r"^([+-])\s*[¥￥]?\s*(\d+(?:\.\d{1,2})?)$")
 HEADER_MONTH_RE = re.compile(r"(\d{4})年(\d{1,2})月")
 HEADER_TOTALS_RE = re.compile(r"支出\s*¥?\s*([0-9,]+(?:\.\d+)?)\s*收入\s*¥?\s*([0-9,]+(?:\.\d+)?)")
 TIMESTAMP_RE = re.compile(r"(20\d{6}\d{6})")
@@ -63,6 +64,7 @@ TSV_FIELDS = (
     "confidence",
     "method",
     "account",
+    "to_account",
 )
 
 
@@ -169,6 +171,10 @@ def parse_date(text, year):
     day = int(match.group(2))
     hour = int(match.group(3))
     minute = match.group(4)
+    try:
+        datetime(year, month, day, hour, int(minute))
+    except ValueError:
+        return None
     return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute}"
 
 
@@ -215,7 +221,7 @@ def bucket_items(items):
             if text in {"已全额退款", "对方已退还", "对方已收钱"}:
                 statuses.append({**item, "text": text})
             continue
-        if text.startswith("2026年") or text.startswith("2025年") or text.startswith("2024年"):
+        if re.match(r"20\d{2}年", text):
             continue
         if text.startswith("支出") or "收入¥" in text.replace(" ", ""):
             continue
@@ -223,7 +229,7 @@ def bucket_items(items):
         if amount and item.get("x", 0) > 0.70:
             amounts.append({**item, "sign": amount[0], "amount": amount[1]})
             continue
-        dated = parse_date(text, 2026)
+        dated = parse_date(text, datetime.now().year)
         if dated and item.get("x", 0) < 0.55:
             dates.append({**item, "date_raw": text})
             continue
@@ -312,18 +318,18 @@ def infer_screenshot_category(merchant, tx_type):
     return infer_category(text, tx_type=tx_type)
 
 
-def classify_row(row):
+def classify_row(row, *, account="微信零钱", method="wechat", bill_label="微信账单截图"):
     merchant = row["merchant"]
     sign = row["sign"]
     status = row.get("status") or ""
     truncated = bool(TRUNC_RE.search(merchant))
-    note_bits = ["微信账单截图"]
+    note_bits = [bill_label]
     if truncated:
         note_bits.append("商户名被截断")
     if status:
         note_bits.append(status)
     if sign == "+":
-        if "退款" in merchant or "退还" in status:
+        if "退款" in merchant or "退还" in status or "退款" in status:
             tx_type = "refund"
             merchant_out = re.sub(r"-退款$", "", merchant)
         else:
@@ -351,8 +357,9 @@ def classify_row(row):
         "note": "；".join(note_bits),
         "source": "image",
         "confidence": f"{confidence:.2f}",
-        "method": "wechat",
-        "account": "微信零钱",
+        "method": method,
+        "account": account,
+        "to_account": "银行卡" if tx_type == "transfer" and "提现" in merchant else "",
         "sign": sign,
         "status": status or "",
         "display_time": row["occurred_at"],
@@ -387,11 +394,11 @@ def write_tsv(path, rows):
     lines = ["\t".join(TSV_FIELDS)]
     for row in rows:
         lines.append("\t".join(str(row.get(field) or "") for field in TSV_FIELDS))
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text_secure(path, "\n".join(lines) + "\n")
     return path.resolve()
 
 
-def prepare(image, output=None, json_out=False):
+def prepare(image, output=None, json_out=False, *, account="微信零钱", method="wechat", bill_label="微信账单截图"):
     info = find_original_image(image)
     ocr = run_ocr(info["path"])
     items = ocr.get("items") or []
@@ -407,7 +414,17 @@ def prepare(image, output=None, json_out=False):
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         raise SystemExit(2)
     header, raw_rows = pair_rows(items, datetime.now().year)
-    classified = [classify_row(row) for row in raw_rows]
+    classified = []
+    for row in raw_rows:
+        item = classify_row(row, account=account, method=method, bill_label=bill_label)
+        if item["type"] == "refund":
+            original = dict(item)
+            original["type"] = "expense"
+            original["sign"] = "-"
+            original["confidence"] = "0.60"
+            original["note"] = f"{bill_label}；全额退款对应的原支出（由退款行反推）"
+            classified.append(original)
+        classified.append(item)
     if not classified:
         raise SystemExit("No complete bill rows (merchant + date + amount) were recognized.")
     tsv_path = Path(output) if output else Path.cwd() / "wechat-bill-rows.tsv"
@@ -443,7 +460,19 @@ def build_parser():
     p_prepare.add_argument("--image", required=True)
     p_prepare.add_argument("--output", default=None, help="TSV path; default ./wechat-bill-rows.tsv")
     p_prepare.add_argument("--json", action="store_true")
-    p_prepare.set_defaults(func=lambda args: prepare(args.image, args.output, args.json))
+    p_prepare.add_argument("--account", default="微信零钱", help="Funding account for recognized rows")
+    p_prepare.add_argument("--method", default="wechat", help="Payment method for recognized rows")
+    p_prepare.add_argument("--bill-label", default="微信账单截图", help="Note label for the source screenshot")
+    p_prepare.set_defaults(
+        func=lambda args: prepare(
+            args.image,
+            args.output,
+            args.json,
+            account=args.account,
+            method=args.method,
+            bill_label=args.bill_label,
+        )
+    )
     return parser
 
 

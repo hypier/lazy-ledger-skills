@@ -11,7 +11,7 @@ Use this workflow for a long WeChat/bank bill screenshot or any image containing
   --json
 ```
 
-The JSON includes `markdown`, parsed `rows`, the TSV path, page-header monthly totals, and whether a wider original replaced the supplied image.
+The JSON includes `markdown`, parsed `rows`, the TSV path, page-header monthly totals, and whether a wider original replaced the supplied image. For an Alipay or bank screenshot, pass `--account 支付宝 --method alipay --bill-label 支付宝账单` (or the matching account/method) so rows are not all filed under WeChat.
 
 If it exits with `ocr_too_sparse`, ask for the album/Finder original. Do not guess from a thumbnail.
 

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import csv
+import functools
+import hashlib
 import io
 import json
+import math
 import re
 import shutil
 import sys
@@ -12,7 +15,14 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from ledger_db import STORE_KIND, STORE_VERSION, atomic_write_json, read_json
+from ledger_db import (
+    STORE_KIND,
+    STORE_VERSION,
+    atomic_write_json,
+    ledger_lock,
+    read_json,
+    write_text_secure,
+)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -205,6 +215,92 @@ def default_currency(currency=None):
     return currency or "CNY"
 
 
+def safe_amount(value, default=0.0):
+    """Convert a stored amount without letting one corrupt row crash a report."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return default
+    if amount != amount or amount in (float("inf"), float("-inf")):
+        return default
+    return amount
+
+
+def tx_sort_key(tx):
+    return str(tx.get("occurred_at") or "") if isinstance(tx, dict) else ""
+
+
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "是"}
+
+
+def mutating(func):
+    """Hold the ledger lock across a command's read-modify-write cycle."""
+
+    @functools.wraps(func)
+    def wrapper(args):
+        ledger_path = getattr(args, "ledger", None)
+        if not ledger_path:
+            return func(args)
+        with ledger_lock(ledger_path):
+            return func(args)
+
+    return wrapper
+
+
+def validate_month(value, *, required=False):
+    if value in (None, ""):
+        if required:
+            raise SystemExit("--month must be YYYY-MM")
+        return None
+    value = str(value).strip()
+    if not BILL_MONTH_RE.fullmatch(value):
+        raise SystemExit(f"Unsupported month format: {value}. Use YYYY-MM.")
+    year, month = (int(part) for part in value.split("-"))
+    if year < 1900 or not 1 <= month <= 12:
+        raise SystemExit(f"Unsupported month: {value}. Use a real YYYY-MM.")
+    return value
+
+
+def validate_day(value, *, label="date"):
+    if not value:
+        return None
+    text = str(value).strip()[:10]
+    try:
+        date.fromisoformat(text)
+    except ValueError as exc:
+        raise SystemExit(f"Unsupported {label}: {value}. Use YYYY-MM-DD.") from exc
+    return text
+
+
+def known_category_names(ledger=None):
+    names = set(CATEGORY_KEYWORDS)
+    names.update(DEFAULT_CATEGORY_PARENTS)
+    names.update(DEFAULT_CATEGORY_PARENTS.values())
+    names.update({"其他", "转账", "收入"})
+    if ledger:
+        for item in category_entries(ledger):
+            names.add(item["name"])
+            if item.get("parent"):
+                names.add(item["parent"])
+    return names
+
+
+def validate_category(ledger, category):
+    if not category:
+        return category
+    if category not in known_category_names(ledger):
+        raise SystemExit(
+            f"Unknown category: {category}. "
+            "Run `ledger category list` or add it first with `ledger category set`."
+        )
+    return category
+
+
 def local_today():
     return datetime.now().astimezone()
 
@@ -367,7 +463,7 @@ def find_account(ledger, value):
     needle = str(value).strip()
     accounts = ensure_accounts(ledger or {})
     for account in accounts:
-        if account.get("id") == needle or account.get("name") == needle:
+        if isinstance(account, dict) and (account.get("id") == needle or account.get("name") == needle):
             return account
     account_type = ACCOUNT_ALIASES.get(needle) or (needle if needle in VALID_ACCOUNT_TYPES else None)
     if not account_type:
@@ -403,6 +499,10 @@ def infer_transfer_route(text):
     return None
 
 
+def account_names(ledger):
+    return ", ".join(account.get("name") or account.get("id") for account in visible_accounts(ledger)) or "(no accounts)"
+
+
 def apply_account_fields(proposal, ledger):
     route = infer_transfer_route(proposal.get("note") or "")
     if route:
@@ -410,22 +510,31 @@ def apply_account_fields(proposal, ledger):
         proposal["type"] = "transfer"
         if proposal.get("category") in (None, "其他"):
             proposal["category"] = "转账"
-        source = find_account(ledger, source_name) or default_account(ledger)
+        source = find_account(ledger, source_name) if source_name else default_account(ledger)
+        if source_name and not source:
+            raise SystemExit(f"Unknown transfer source account: {source_name}. Available: {account_names(ledger)}")
         dest = find_account(ledger, dest_name)
+        if not dest:
+            raise SystemExit(f"Unknown transfer destination account: {dest_name}. Available: {account_names(ledger)}")
         if source:
             proposal["account_id"] = source["id"]
             proposal["account"] = source["name"]
             proposal["method"] = proposal.get("method") or ACCOUNT_TYPE_TO_METHOD.get(source.get("type"))
-        if dest:
-            proposal["to_account_id"] = dest["id"]
-            proposal["to_account"] = dest["name"]
+        proposal["to_account_id"] = dest["id"]
+        proposal["to_account"] = dest["name"]
         return proposal
-    account = find_account(ledger, proposal.get("account_id") or proposal.get("account"))
+    explicit = proposal.get("account_id") or proposal.get("account")
+    account = find_account(ledger, explicit)
+    if explicit and not account:
+        raise SystemExit(f"Unknown account: {explicit}. Available: {account_names(ledger)}")
     if not account and proposal.get("method"):
         account = account_for_method(ledger, proposal.get("method"))
-    if not account:
+    if not account and not explicit:
         account = default_account(ledger) if proposal.get("type") != "transfer" else None
-    dest = find_account(ledger, proposal.get("to_account_id") or proposal.get("to_account"))
+    explicit_dest = proposal.get("to_account_id") or proposal.get("to_account")
+    dest = find_account(ledger, explicit_dest)
+    if explicit_dest and not dest:
+        raise SystemExit(f"Unknown destination account: {explicit_dest}. Available: {account_names(ledger)}")
     if account:
         proposal["account_id"] = account["id"]
         proposal["account"] = account["name"]
@@ -441,9 +550,12 @@ def account_balances(ledger):
     accounts = [account for account in ensure_accounts(ledger) if isinstance(account, dict)]
     state = {}
     for account in accounts:
-        opening = float(account.get("opening_balance") or 0)
-        state[account["id"]] = {
-            "id": account.get("id"),
+        account_id = account.get("id")
+        if not isinstance(account_id, str) or not account_id:
+            continue
+        opening = safe_amount(account.get("opening_balance"))
+        state[account_id] = {
+            "id": account_id,
             "name": account.get("name"),
             "type": account.get("type"),
             "archived": bool(account.get("archived")),
@@ -452,27 +564,34 @@ def account_balances(ledger):
             "inflow": 0.0,
             "outflow": 0.0,
         }
-    name_to_id = {account.get("name"): account.get("id") for account in accounts}
+    name_to_id = {
+        account.get("name"): account.get("id")
+        for account in accounts
+        if isinstance(account.get("name"), str)
+        and isinstance(account.get("id"), str)
+        and account.get("id") in state
+    }
 
     def resolve_id(tx, key_id, key_name):
         value = tx.get(key_id)
-        if value and value in state:
+        if isinstance(value, str) and value in state:
             return value
         name = tx.get(key_name)
-        if name and name in name_to_id and name_to_id[name] in state:
+        if isinstance(name, str) and name in name_to_id:
             return name_to_id[name]
         return None
 
     for tx in ledger.get("transactions", []):
-        if not isinstance(tx, dict):
+        if not isinstance(tx, dict) or tx.get("excluded_from_totals"):
             continue
-        try:
-            amount = float(tx.get("amount") or 0)
-        except (TypeError, ValueError):
+        amount = safe_amount(tx.get("amount"))
+        if amount <= 0:
             continue
         source_id = resolve_id(tx, "account_id", "account")
         dest_id = resolve_id(tx, "to_account_id", "to_account")
         tx_type = tx.get("type")
+        if not isinstance(tx_type, str):
+            continue
         if tx_type == "expense" and source_id:
             state[source_id]["balance"] -= amount
             state[source_id]["outflow"] += amount
@@ -500,7 +619,13 @@ def account_balances(ledger):
 def budgets_for_month(ledger, month):
     if not month:
         return []
-    items = [budget for budget in ledger.get("budgets", []) if isinstance(budget, dict)]
+    items = [
+        budget
+        for budget in ledger.get("budgets", [])
+        if isinstance(budget, dict)
+        and isinstance(budget.get("category") or "", str)
+        and isinstance(budget.get("month") or "", str)
+    ]
     specific = [budget for budget in items if budget.get("month") == month]
     templates = [budget for budget in items if not budget.get("month")]
     used = {(budget.get("category") or "") for budget in specific}
@@ -523,21 +648,29 @@ def budget_progress(ledger, transactions, period=None):
     by_category = defaultdict(float)
     category_parents = category_parent_map(ledger)
     for tx in transactions:
-        if tx.get("type") != "expense":
+        if not isinstance(tx, dict) or tx.get("excluded_from_totals") or tx.get("type") != "expense":
             continue
-        amount = float(tx.get("amount") or 0)
+        amount = safe_amount(tx.get("amount"))
         expense_total += amount
-        category = tx.get("category") or "其他"
+        category = tx.get("category")
+        if not isinstance(category, str) or not category:
+            category = "其他"
         by_category[category] += amount
         if category_parents.get(category):
             by_category[category_parents[category]] += amount
     rows = []
     for budget in budgets:
+        if not isinstance(budget, dict):
+            continue
         try:
             limit = float(budget.get("amount") or 0)
         except (TypeError, ValueError):
             continue
+        if not math.isfinite(limit):
+            continue
         category = budget.get("category") or None
+        if category is not None and not isinstance(category, str):
+            continue
         spent = by_category[category] if category else expense_total
         remaining = round(limit - spent, 2)
         rows.append(
@@ -592,7 +725,16 @@ def load_ledger(path, currency="CNY", create=True):
         if not create:
             raise SystemExit(f"Ledger not found: {ledger_path}")
         return empty_ledger(currency)
-    return normalize_ledger(read_json(ledger_path), currency)
+    try:
+        data = read_json(ledger_path)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise SystemExit(
+            f"Ledger is not valid JSON: {ledger_path}\n"
+            "Fix it manually or restore a backup before writing. Do not overwrite it."
+        ) from exc
+    except OSError as exc:
+        raise SystemExit(f"Could not read ledger {ledger_path}: {exc}") from exc
+    return normalize_ledger(data, currency)
 
 
 def save_ledger(path, ledger):
@@ -600,7 +742,10 @@ def save_ledger(path, ledger):
     ledger["store"] = STORE_KIND
     ledger["store_version"] = STORE_VERSION
     ledger["updated_at"] = now_iso()
-    atomic_write_json(ledger_path, ledger)
+    # Commands normally hold this lock for the whole read-modify-write cycle;
+    # ledger_lock() is re-entrant, so direct save_ledger() calls are safe too.
+    with ledger_lock(ledger_path):
+        atomic_write_json(ledger_path, ledger)
 
 
 def make_id(occurred_at):
@@ -637,9 +782,13 @@ def load_optional_ledger(path, currency="CNY"):
 def validate_confidence(value):
     if value is None:
         return None
-    if value < 0 or value > 1:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Confidence must be numeric: {value}") from exc
+    if not math.isfinite(confidence) or confidence < 0 or confidence > 1:
         raise SystemExit("Confidence must be between 0 and 1")
-    return value
+    return confidence
 
 
 def apply_aliases_to_text(ledger, text):
@@ -933,10 +1082,14 @@ def refresh_usage_profile(ledger, *, force=False, summary=None):
     return True
 
 
+def ledger_stem(ledger_path):
+    """Stable document stem: ledger.json -> ledger, lazy-ledger.json -> lazy-ledger."""
+    return Path(ledger_path).stem or "ledger"
+
+
 def habit_memory_path(ledger_path):
     path = Path(ledger_path)
-    target = path.parent / "memory" / "habit-memory.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target = path.parent / f"{ledger_stem(path)}-memory.md"
     return target
 
 
@@ -1052,7 +1205,7 @@ def write_habit_memory(ledger_path, ledger, *, force=False, summary=None):
     if not force and not habit_memory_is_stale(path, ledger):
         return path, False
     profile = ledger_preferences(ledger).get("usage_profile") or build_usage_profile(ledger)
-    path.write_text(render_habit_memory(ledger, profile), encoding="utf-8")
+    write_text_secure(path, render_habit_memory(ledger, profile))
     return path, True
 
 
@@ -1513,11 +1666,14 @@ def parse_text_transactions(text, ledger=None, currency="CNY", source="text"):
 
 
 def tx_day(tx):
-    return (tx.get("occurred_at") or "")[:10]
+    if not isinstance(tx, dict):
+        return ""
+    value = tx.get("occurred_at")
+    return value[:10] if isinstance(value, str) else ""
 
 
 def month_key(iso_value):
-    return (iso_value or "")[:7]
+    return iso_value[:7] if isinstance(iso_value, str) else ""
 
 
 def normalized_text(value):
@@ -1525,6 +1681,8 @@ def normalized_text(value):
 
 
 def compact_candidate(tx):
+    if not isinstance(tx, dict):
+        tx = {}
     return {
         "id": tx.get("id"),
         "type": tx.get("type"),
@@ -1543,11 +1701,15 @@ def compact_candidate(tx):
 
 def likely_duplicate_candidates(transactions, tx):
     candidates = []
+    if not isinstance(tx, dict):
+        return candidates
     tx_external_id = normalized_text(tx.get("wechat_transaction_id"))
-    tx_amount = round(float(tx.get("amount", 0) or 0), 2)
+    tx_amount = round(safe_amount(tx.get("amount")), 2)
     tx_merchant = normalized_text(tx.get("merchant"))
     tx_note = normalized_text(tx.get("note"))
     for existing in transactions:
+        if not isinstance(existing, dict):
+            continue
         existing_external_id = normalized_text(existing.get("wechat_transaction_id"))
         # Distinct authoritative statement references are separate source rows,
         # even when date, amount, and merchant happen to match.
@@ -1561,10 +1723,7 @@ def likely_duplicate_candidates(transactions, tx):
             continue
         if tx.get("type") and existing.get("type") and tx.get("type") != existing.get("type"):
             continue
-        try:
-            existing_amount = round(float(existing.get("amount", 0) or 0), 2)
-        except (TypeError, ValueError):
-            continue
+        existing_amount = round(safe_amount(existing.get("amount")), 2)
         if existing_amount != tx_amount:
             continue
         if tx_day(existing) != tx_day(tx):
@@ -1609,6 +1768,10 @@ def merge_overrides(proposal, args):
         merged["source"] = args.source
     if args.confidence is not None:
         merged["confidence"] = args.confidence
+    if getattr(args, "exclude_from_totals", False):
+        merged["excluded_from_totals"] = True
+    if getattr(args, "include_in_totals", False):
+        merged.pop("excluded_from_totals", None)
     return merged
 
 
@@ -1638,21 +1801,39 @@ def build_transaction_payload(
 ):
     if amount_value is None:
         raise SystemExit("Amount is required unless --text includes one")
-    amount = float(amount_value)
-    if amount <= 0:
-        raise SystemExit("Amount must be positive")
+    try:
+        amount = float(amount_value)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Amount must be numeric: {amount_value}") from exc
+    if not math.isfinite(amount) or amount <= 0:
+        raise SystemExit("Amount must be a finite positive number")
     if tx_type not in VALID_TYPES:
         raise SystemExit(f"Type must be one of: {', '.join(sorted(VALID_TYPES))}")
+    if source not in VALID_SOURCES:
+        raise SystemExit(f"Source must be one of: {', '.join(sorted(VALID_SOURCES))}")
     if method and method not in VALID_METHODS:
         raise SystemExit(f"Method must be one of: {', '.join(sorted(VALID_METHODS))}")
-    validate_confidence(confidence)
+    if tx_type == "transfer" and not (account or account_id):
+        raise SystemExit("A transfer needs both source and destination accounts (--account)")
+    if tx_type == "transfer" and not (to_account or to_account_id):
+        raise SystemExit("A transfer needs both source and destination accounts (--to-account)")
+    tx_currency = default_currency(currency or ledger.get("currency"))
+    ledger_currency = default_currency(ledger.get("currency"))
+    if tx_currency != ledger_currency:
+        raise SystemExit(
+            f"Ledger currency is {ledger_currency}; per-transaction currency {tx_currency} is not supported. "
+            "Convert the amount or create a ledger in that currency."
+        )
+    confidence = validate_confidence(confidence)
+    category = category or ("收入" if tx_type == "income" else "转账" if tx_type == "transfer" else "其他")
+    validate_category(ledger, category)
     ts = now_iso()
     tx = {
         "id": tx_id or make_id(occurred_at),
         "type": tx_type,
         "amount": round(amount, 2),
-        "currency": default_currency(currency or ledger.get("currency")),
-        "category": category or ("收入" if tx_type == "income" else "其他"),
+        "currency": tx_currency,
+        "category": category,
         "occurred_at": occurred_at,
         "source": source,
         "confidence": 1.0 if confidence is None else confidence,
@@ -1717,7 +1898,11 @@ def payload_from_proposal(ledger, proposal, args, tx_id=None):
 
 
 def month_snapshot(ledger, month):
-    rows = [tx for tx in ledger.get("transactions", []) if month_key(tx.get("occurred_at")) == month]
+    rows = [
+        tx
+        for tx in ledger.get("transactions", [])
+        if isinstance(tx, dict) and month_key(tx.get("occurred_at")) == month
+    ]
     period = {"label": month, "start": f"{month}-01" if month else None, "end": None, "month": month}
     data = summarize(rows, period=period, category_parents=category_parent_map(ledger))
     data["budgets"] = budget_progress(ledger, rows, period)
@@ -1730,6 +1915,7 @@ def month_snapshot(ledger, month):
     }
 
 
+@mutating
 def add_transaction(args):
     ledger = load_ledger(args.ledger, args.currency)
     seed_habits_if_needed(ledger)
@@ -1754,6 +1940,8 @@ def add_transaction(args):
                 getattr(args, "to_account", None),
                 args.date,
                 args.occurred_at,
+                getattr(args, "exclude_from_totals", False),
+                getattr(args, "include_in_totals", False),
             ]
         ):
             proposals = [merge_overrides(item, args) for item in proposals]
@@ -1783,6 +1971,8 @@ def add_transaction(args):
     known = list(ledger["transactions"])
     for index, proposal in enumerate(proposals):
         tx = payload_from_proposal(ledger, proposal, args, tx_id=args.id if index == 0 else None)
+        if any(isinstance(row, dict) and row.get("id") == tx["id"] for row in ledger["transactions"]):
+            raise SystemExit(f"Transaction id already exists: {tx['id']}")
         duplicates = likely_duplicate_candidates(known, tx)
         if duplicates and not args.allow_duplicate:
             print(
@@ -1800,11 +1990,13 @@ def add_transaction(args):
             raise SystemExit(2)
         ledger["transactions"].append(tx)
         known.append(tx)
-        if getattr(args, "remember", False) and args.category and tx.get("merchant"):
+        if getattr(args, "remember", False):
+            if not tx.get("merchant"):
+                raise SystemExit("--remember needs a transaction with a merchant")
             learn_merchant_category(ledger, tx.get("merchant"), tx.get("category"))
         learn_habits_from_transaction(ledger, tx)
         added.append(tx)
-    ledger["transactions"].sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    ledger["transactions"].sort(key=tx_sort_key, reverse=True)
     refresh_usage_profile(ledger, force=True)
     save_ledger(args.ledger, ledger)
     write_habit_memory(args.ledger, ledger, force=False)
@@ -1841,10 +2033,13 @@ def quarter_index(month):
 def resolve_period(month=None, range_name=None, start=None, end=None, now=None):
     today = (now or local_today()).date()
     if start:
-        start = start[:10]
+        start = validate_day(start, label="start date")
     if end:
-        end = end[:10]
+        end = validate_day(end, label="end date")
+    if start and end and start > end:
+        raise SystemExit(f"Start date {start} is after end date {end}")
     if month:
+        month = validate_month(month)
         year, mon = int(month[:4]), int(month[5:7])
         last = last_day_of_month(year, mon)
         return {
@@ -1983,22 +2178,31 @@ def filter_transactions(
     rows = []
     q = (query or "").lower()
     for tx in transactions:
+        if not isinstance(tx, dict):
+            continue
         day = tx_day(tx)
         if month and month_key(tx.get("occurred_at")) != month:
             continue
-        if start and day and day < start:
+        if start and (not day or day < start):
             continue
-        if end and day and day > end:
+        if end and (not day or day > end):
             continue
         if tx_type and tx.get("type") != tx_type:
             continue
         tx_category = tx.get("category")
-        if category and tx_category != category and (category_parents or {}).get(tx_category) != category:
-            continue
+        if category:
+            if not isinstance(tx_category, str):
+                continue
+            if tx_category != category and (category_parents or {}).get(tx_category) != category:
+                continue
         if method and tx.get("method") != method:
             continue
         if account:
-            haystack = {tx.get("account_id"), tx.get("account"), tx.get("to_account_id"), tx.get("to_account")}
+            haystack = {
+                value
+                for value in (tx.get("account_id"), tx.get("account"), tx.get("to_account_id"), tx.get("to_account"))
+                if isinstance(value, str)
+            }
             if account not in haystack:
                 continue
         if q:
@@ -2037,15 +2241,21 @@ def filter_from_args(transactions, args, category_parents=None):
 def period_day_count(period, transactions):
     start, end = period.get("start"), period.get("end")
     if start and end:
-        start_d = datetime.strptime(start, "%Y-%m-%d").date()
-        end_d = datetime.strptime(end, "%Y-%m-%d").date()
-        return max((end_d - start_d).days + 1, 1)
-    days = [tx_day(tx) for tx in transactions if tx_day(tx)]
+        try:
+            start_d = datetime.strptime(start, "%Y-%m-%d").date()
+            end_d = datetime.strptime(end, "%Y-%m-%d").date()
+            return max((end_d - start_d).days + 1, 1)
+        except ValueError:
+            return 1
+    days = [tx_day(tx) for tx in transactions if isinstance(tx, dict) and tx_day(tx)]
     if not days:
         return 1
-    start_d = datetime.strptime(min(days), "%Y-%m-%d").date()
-    end_d = datetime.strptime(max(days), "%Y-%m-%d").date()
-    return max((end_d - start_d).days + 1, 1)
+    try:
+        start_d = datetime.strptime(min(days), "%Y-%m-%d").date()
+        end_d = datetime.strptime(max(days), "%Y-%m-%d").date()
+        return max((end_d - start_d).days + 1, 1)
+    except ValueError:
+        return 1
 
 
 def pct_change(new, old):
@@ -2066,20 +2276,38 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
     expenses = []
     type_counts = Counter()
     needs_review = []
+    excluded_count = 0
+    invalid_count = 0
     for tx in transactions:
-        tx_type = tx.get("type", "expense")
-        amount = float(tx.get("amount", 0) or 0)
-        type_counts[tx_type] += 1
-        if tx.get("excluded_from_totals"):
+        if not isinstance(tx, dict):
+            invalid_count += 1
             continue
+        if tx.get("excluded_from_totals"):
+            excluded_count += 1
+            continue
+        tx_type = tx.get("type", "expense")
+        if not isinstance(tx_type, str) or not tx_type:
+            invalid_count += 1
+            continue
+        amount = safe_amount(tx.get("amount"))
+        type_counts[tx_type] += 1
         if tx_type in totals:
             totals[tx_type] += amount
+        merchant_value = tx.get("merchant")
+        if not isinstance(merchant_value, str) or not merchant_value:
+            merchant_value = "未填商户"
+        method_value = tx.get("method")
+        if not isinstance(method_value, str) or not method_value:
+            method_value = "未填渠道"
+        category_value = tx.get("category")
+        if not isinstance(category_value, str) or not category_value:
+            category_value = "其他"
         if tx_type == "income":
-            by_income_merchant[tx.get("merchant") or "未填来源"] += amount
+            by_income_merchant[merchant_value if merchant_value != "未填商户" else "未填来源"] += amount
         if tx_type == "expense":
-            category = (category_parents or {}).get(tx.get("category"), tx.get("category") or "其他")
-            merchant = tx.get("merchant") or "未填商户"
-            method = tx.get("method") or "未填渠道"
+            category = (category_parents or {}).get(category_value, category_value)
+            merchant = merchant_value
+            method = method_value
             day = tx_day(tx)
             by_category[category] += amount
             by_merchant[merchant] += amount
@@ -2100,20 +2328,20 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             low_confidence = confidence is not None and float(confidence) < 0.85
         except (TypeError, ValueError):
             low_confidence = True
-        if low_confidence or (tx.get("category") == "其他"):
+        if low_confidence or (category_value == "其他"):
             needs_review.append(compact_candidate(tx))
     totals = {key: round(value, 2) for key, value in totals.items()}
     totals["net"] = round(totals["income"] + totals["refund"] - totals["expense"], 2)
-    days = period_day_count(period or {}, transactions)
+    days = period_day_count(period or {}, [tx for tx in transactions if isinstance(tx, dict) and not tx.get("excluded_from_totals")])
     daily_average = round(totals["expense"] / days, 2) if days else 0.0
     outliers = []
     if expenses:
         median = sorted(expenses)[len(expenses) // 2]
         threshold = max(median * 3, 200)
         for tx in transactions:
-            if tx.get("type") != "expense":
+            if not isinstance(tx, dict) or tx.get("excluded_from_totals") or tx.get("type") != "expense":
                 continue
-            amount = float(tx.get("amount", 0) or 0)
+            amount = safe_amount(tx.get("amount"))
             if amount >= threshold:
                 item = compact_candidate(tx)
                 item["reason"] = f"偏大支出（阈值 {threshold:.2f}）"
@@ -2141,7 +2369,9 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             "weekday": round(sum(by_weekday.get(index, 0.0) for index in range(5)), 2),
             "weekend": round(by_weekday.get(5, 0.0) + by_weekday.get(6, 0.0), 2),
         },
-        "count": len(transactions),
+        "count": sum(type_counts.values()),
+        "excluded_count": excluded_count,
+        "invalid_count": invalid_count,
         "income_count": type_counts["income"],
         "refund_count": type_counts["refund"],
         "daily_average": daily_average,
@@ -2165,6 +2395,8 @@ def tx_tags(tx):
     tags = tx.get("tags") or []
     if isinstance(tags, str):
         return {part.strip() for part in tags.split(",") if part.strip()}
+    if not isinstance(tags, (list, tuple, set)):
+        return set()
     return {str(item).strip() for item in tags if str(item).strip()}
 
 
@@ -2174,7 +2406,7 @@ def detect_recurring(transactions, today=None, lookback_months=8):
     cutoff = f"{cutoff_year:04d}-{cutoff_month:02d}-01"
     groups = defaultdict(list)
     for tx in transactions:
-        if tx.get("type") != "expense":
+        if not isinstance(tx, dict) or tx.get("excluded_from_totals") or tx.get("type") != "expense":
             continue
         day = tx_day(tx)
         if not day or day < cutoff:
@@ -2183,11 +2415,13 @@ def detect_recurring(transactions, today=None, lookback_months=8):
         if merchant:
             key = ("merchant", merchant)
         else:
-            try:
-                amount_key = round(float(tx.get("amount") or 0))
-            except (TypeError, ValueError):
+            amount_key = round(safe_amount(tx.get("amount")))
+            if amount_key <= 0:
                 continue
-            key = ("category", tx.get("category") or "其他", amount_key)
+            category = tx.get("category")
+            if not isinstance(category, str) or not category:
+                category = "其他"
+            key = ("category", category, amount_key)
         groups[key].append(tx)
 
     current_month = today.strftime("%Y-%m")
@@ -2208,7 +2442,7 @@ def detect_recurring(transactions, today=None, lookback_months=8):
         months = sorted({value.strftime("%Y-%m") for value, _tx in dated})
         if len(months) < 3:
             continue
-        amounts = [float(tx.get("amount") or 0) for _day, tx in dated]
+        amounts = [safe_amount(tx.get("amount")) for _day, tx in dated]
         median_amount = sorted(amounts)[len(amounts) // 2]
         if median_amount <= 0:
             continue
@@ -2253,10 +2487,14 @@ def detect_recurring(transactions, today=None, lookback_months=8):
 
 
 def unmatched_refunds(transactions, period_rows):
-    expenses = [tx for tx in transactions if tx.get("type") == "expense"]
+    expenses = [
+        tx
+        for tx in transactions
+        if isinstance(tx, dict) and not tx.get("excluded_from_totals") and tx.get("type") == "expense"
+    ]
     rows = []
     for refund in period_rows:
-        if refund.get("type") != "refund":
+        if not isinstance(refund, dict) or refund.get("excluded_from_totals") or refund.get("type") != "refund":
             continue
         if refund.get("related_transaction_id"):
             continue
@@ -2279,10 +2517,7 @@ def unmatched_refunds(transactions, period_rows):
                 continue
             if expense_date > refund_date or (refund_date - expense_date).days > 90:
                 continue
-            try:
-                expense_amount = float(expense.get("amount") or 0)
-            except (TypeError, ValueError):
-                continue
+            expense_amount = safe_amount(expense.get("amount"))
             amount_ok = abs(expense_amount - refund_amount) < 0.01 or (
                 expense_amount and abs(expense_amount - refund_amount) / expense_amount < 0.05
             )
@@ -2304,7 +2539,7 @@ def unmatched_refunds(transactions, period_rows):
 def pending_reimbursements(transactions):
     rows = []
     for tx in transactions:
-        if tx.get("type") != "expense":
+        if not isinstance(tx, dict) or tx.get("excluded_from_totals") or tx.get("type") != "expense":
             continue
         tags = tx_tags(tx)
         if tags & REIMBURSED_TAGS:
@@ -2323,11 +2558,11 @@ def month_trend(transactions, end_date=None, months=6):
         keys.append(f"{item_year:04d}-{item_month:02d}")
     totals = {key: 0.0 for key in keys}
     for tx in transactions:
-        if tx.get("type") != "expense":
+        if not isinstance(tx, dict) or tx.get("excluded_from_totals") or tx.get("type") != "expense":
             continue
         key = month_key(tx.get("occurred_at"))
         if key in totals:
-            totals[key] += float(tx.get("amount") or 0)
+            totals[key] += safe_amount(tx.get("amount"))
     return [{"month": key, "expense": round(totals[key], 2)} for key in keys]
 
 
@@ -2600,7 +2835,7 @@ def show_command(args):
         return
     text = render_show(data, ledger.get("currency", "CNY")).rstrip()
     if data["count"] == 0 and default_range == "this-month":
-        months = [month_key(tx.get("occurred_at")) for tx in ledger.get("transactions", []) if month_key(tx.get("occurred_at"))]
+        months = [month_key(tx.get("occurred_at")) for tx in ledger.get("transactions", []) if isinstance(tx, dict) and month_key(tx.get("occurred_at"))]
         if months:
             text += f"\n最近有记录的月份是 {max(months)}。"
     print(text)
@@ -2610,14 +2845,14 @@ def available_months(ledger):
     months = {
         month_key(tx.get("occurred_at"))
         for tx in ledger.get("transactions") or []
-        if month_key(tx.get("occurred_at"))
+        if isinstance(tx, dict) and month_key(tx.get("occurred_at"))
     }
     return sorted(months, reverse=True)
 
 
 def default_bill_month(ledger, month=None):
     if month:
-        return month[:7]
+        return validate_month(month)
     today = local_today().strftime("%Y-%m")
     months = available_months(ledger)
     if today in months or not months:
@@ -2653,15 +2888,22 @@ def build_bill_pack(ledger, month=None):
     weekly_expense = defaultdict(float)
     weekly_counts = defaultdict(int)
     for transaction in ledger.get("transactions") or []:
+        if not isinstance(transaction, dict) or transaction.get("excluded_from_totals"):
+            continue
         if month_key(transaction.get("occurred_at")) != month or transaction.get("type") != "expense":
             continue
-        category = transaction.get("category") or "其他"
+        category = transaction.get("category")
+        if not isinstance(category, str) or not category:
+            category = "其他"
         category_counts[category_parents.get(category, category)] += 1
         day = tx_day(transaction)
         if not day:
             continue
-        day_number = int(day[-2:])
-        amount = float(transaction.get("amount") or 0)
+        try:
+            day_number = int(day[-2:])
+        except (TypeError, ValueError):
+            continue
+        amount = safe_amount(transaction.get("amount"))
         daily_expense[day_number] += amount
         week_index = (day_number - 1) // 7
         weekly_expense[week_index] += amount
@@ -2758,7 +3000,7 @@ def render_bill_pack(pack, currency="CNY"):
 
 def default_bill_html_path(ledger_path, month):
     path = Path(ledger_path)
-    target = path.parent / "reports" / f"bill-{month}.html"
+    target = path.parent / f"{ledger_stem(path)}-bill-{month}.html"
     target.parent.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -2790,8 +3032,7 @@ def write_bill_html(pack, output_path, template_path=None):
     payload = json.dumps(bill_canvas_payload(pack), ensure_ascii=False).replace("</", "<\\/")
     html = html.replace("__BILL_DATA__", payload)
     output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(html, encoding="utf-8")
+    write_text_secure(output, html)
     return output.resolve()
 
 
@@ -2836,16 +3077,22 @@ def bill_list_command(args):
         print(f"{item['month']} | {item.get('title') or '月度账单'} | {mark}")
 
 
+@mutating
 def bill_save_command(args):
     ledger = load_ledger(args.ledger, create=True)
     month = default_bill_month(ledger, args.month)
     body = (args.body or "").strip()
     if not body:
         raise SystemExit("Bill body is required")
+    if len(body) > 20000:
+        raise SystemExit("Bill body is too long (maximum 20000 characters)")
+    title = (args.title or "").strip()
+    if len(title) > 200:
+        raise SystemExit("Bill title is too long (maximum 200 characters)")
     existing = find_bill(ledger, month)
     ts = now_iso()
     if existing:
-        existing["title"] = args.title or existing.get("title") or f"{month} 月度账单"
+        existing["title"] = title or existing.get("title") or f"{month} 月度账单"
         existing["body"] = body
         existing["updated_at"] = ts
         bill = existing
@@ -2853,7 +3100,7 @@ def bill_save_command(args):
         bill = {
             "id": f"bill_{month.replace('-', '')}",
             "month": month,
-            "title": args.title or f"{month} 月度账单",
+            "title": title or f"{month} 月度账单",
             "body": body,
             "created_at": ts,
             "updated_at": ts,
@@ -2886,7 +3133,7 @@ def format_list_row(tx):
     dest = f"→{tx.get('to_account')}" if tx.get("to_account") else ""
     method = METHOD_LABELS.get(tx.get("method"), tx.get("method") or "-")
     note = tx.get("note") or ""
-    amount = float(tx.get("amount", 0) or 0)
+    amount = safe_amount(tx.get("amount"))
     return (
         f"{tx.get('id')} | {date} | {tx.get('type')} | {tx.get('category')} | "
         f"{amount:.2f} | {merchant} | {account}{dest} | {method} | {note}"
@@ -2896,7 +3143,7 @@ def format_list_row(tx):
 def list_command(args):
     ledger = load_ledger(args.ledger, create=False)
     rows, period = filter_from_args(ledger["transactions"], args)
-    rows.sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    rows.sort(key=tx_sort_key, reverse=True)
     total = len(rows)
     selected = rows[: args.limit]
     # Silent truncation is how "that day has no transactions" mistakes happen:
@@ -2934,12 +3181,11 @@ def find_command(args):
         merchant_weight = 2 if has_amount else 3
         scored = []
         for tx in ledger["transactions"]:
+            if not isinstance(tx, dict):
+                continue
             score = 0
-            try:
-                if has_amount and round(float(tx.get("amount", 0) or 0), 2) == round(float(proposal["amount"]), 2):
-                    score += 2
-            except (TypeError, ValueError):
-                pass
+            if has_amount and round(safe_amount(tx.get("amount")), 2) == round(float(proposal["amount"]), 2):
+                score += 2
             if has_date and tx_day(tx) == tx_day(proposal):
                 score += 2
             if normalized_text(tx.get("merchant")) and normalized_text(tx.get("merchant")) == normalized_text(proposal.get("merchant")):
@@ -2958,39 +3204,54 @@ def find_command(args):
 
 def find_transaction(ledger, tx_id):
     for index, tx in enumerate(ledger["transactions"]):
-        if tx.get("id") == tx_id:
+        if isinstance(tx, dict) and tx.get("id") == tx_id:
             return index, tx
     raise SystemExit(f"Transaction not found: {tx_id}")
 
 
+@mutating
 def update_command(args):
     ledger = load_ledger(args.ledger, create=False)
     _, tx = find_transaction(ledger, args.id)
     if args.amount is not None:
-        amount = float(args.amount)
-        if amount <= 0:
-            raise SystemExit("Amount must be positive")
+        try:
+            amount = float(args.amount)
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(f"Amount must be numeric: {args.amount}") from exc
+        if not math.isfinite(amount) or amount <= 0:
+            raise SystemExit("Amount must be a finite positive number")
         tx["amount"] = round(amount, 2)
     if args.type is not None:
+        if args.type not in VALID_TYPES:
+            raise SystemExit(f"Type must be one of: {', '.join(sorted(VALID_TYPES))}")
         tx["type"] = args.type
     if args.currency is not None:
-        tx["currency"] = args.currency
+        ledger_currency = default_currency(ledger.get("currency"))
+        if default_currency(args.currency) != ledger_currency:
+            raise SystemExit(
+                f"Ledger currency is {ledger_currency}; per-transaction currency {args.currency} is not supported."
+            )
+        tx["currency"] = ledger_currency
     if args.category is not None:
-        tx["category"] = args.category
-        if getattr(args, "remember", False):
-            learn_merchant_category(ledger, tx.get("merchant"), args.category)
+        if args.category == "":
+            tx["category"] = "其他"
+        else:
+            validate_category(ledger, args.category)
+            tx["category"] = args.category
+    if getattr(args, "remember", False):
+        if not tx.get("merchant"):
+            raise SystemExit("--remember needs a transaction with a merchant")
+        learn_merchant_category(ledger, tx.get("merchant"), tx.get("category"))
     if getattr(args, "related_transaction_id", None) is not None:
         tx["related_transaction_id"] = args.related_transaction_id
     if getattr(args, "relation", None) is not None:
         tx["relation"] = args.relation
-    excluded = getattr(args, "excluded_from_totals", None)
+    excluded = True if getattr(args, "exclude_from_totals", False) else False if getattr(args, "include_in_totals", False) else None
     if excluded is not None:
         if excluded:
             tx["excluded_from_totals"] = True
         else:
             tx.pop("excluded_from_totals", None)
-    elif getattr(args, "exclude_from_totals", False):
-        tx["excluded_from_totals"] = True
     if args.merchant is not None:
         if args.merchant == "":
             tx.pop("merchant", None)
@@ -3006,8 +3267,7 @@ def update_command(args):
     if args.source is not None:
         tx["source"] = args.source
     if args.confidence is not None:
-        validate_confidence(args.confidence)
-        tx["confidence"] = args.confidence
+        tx["confidence"] = validate_confidence(args.confidence)
     if args.tags is not None:
         tx["tags"] = coerce_tags(args.tags)
     if args.attachment is not None:
@@ -3018,6 +3278,8 @@ def update_command(args):
     if args.method is not None:
         if args.method == "":
             tx.pop("method", None)
+        elif args.method not in VALID_METHODS:
+            raise SystemExit(f"Method must be one of: {', '.join(sorted(VALID_METHODS))}")
         else:
             tx["method"] = args.method
     if args.account is not None:
@@ -3026,26 +3288,28 @@ def update_command(args):
             tx.pop("account_id", None)
         else:
             resolved = find_account(ledger, args.account)
-            if resolved:
-                tx["account"] = resolved["name"]
-                tx["account_id"] = resolved["id"]
-            else:
-                tx["account"] = args.account
-                tx.pop("account_id", None)
+            if not resolved:
+                raise SystemExit(f"Unknown account: {args.account}. Available: {account_names(ledger)}")
+            tx["account"] = resolved["name"]
+            tx["account_id"] = resolved["id"]
     if getattr(args, "to_account", None) is not None:
         if args.to_account == "":
             tx.pop("to_account", None)
             tx.pop("to_account_id", None)
         else:
             resolved = find_account(ledger, args.to_account)
-            if resolved:
-                tx["to_account"] = resolved["name"]
-                tx["to_account_id"] = resolved["id"]
-            else:
-                tx["to_account"] = args.to_account
-                tx.pop("to_account_id", None)
+            if not resolved:
+                raise SystemExit(
+                    f"Unknown destination account: {args.to_account}. Available: {account_names(ledger)}"
+                )
+            tx["to_account"] = resolved["name"]
+            tx["to_account_id"] = resolved["id"]
+    if tx.get("type") == "transfer" and not (tx.get("account") or tx.get("account_id")):
+        raise SystemExit("A transfer needs a source account (--account)")
+    if tx.get("type") == "transfer" and not (tx.get("to_account") or tx.get("to_account_id")):
+        raise SystemExit("A transfer needs a destination account (--to-account)")
     tx["updated_at"] = now_iso()
-    ledger["transactions"].sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    ledger["transactions"].sort(key=tx_sort_key, reverse=True)
     learn_habits_from_transaction(ledger, tx)
     refresh_usage_profile(ledger, force=True)
     save_ledger(args.ledger, ledger)
@@ -3053,28 +3317,47 @@ def update_command(args):
     print(json.dumps(tx, ensure_ascii=False, indent=2))
 
 
+@mutating
 def delete_command(args):
     ledger = load_ledger(args.ledger, create=False)
     index, tx = find_transaction(ledger, args.id)
     if not args.yes:
         date = (tx.get("occurred_at") or "")[:10]
-        print(f"Refusing to delete without --yes: {tx.get('id')} {date} {tx.get('category')} {tx.get('amount')}")
-        return
+        print(f"Refusing to delete without --yes: {tx.get('id')} {date} {tx.get('category')} {tx.get('amount')}", file=sys.stderr)
+        raise SystemExit(2)
     removed = ledger["transactions"].pop(index)
     save_ledger(args.ledger, ledger)
     print(json.dumps(removed, ensure_ascii=False, indent=2))
+
+
+VIEWER_PRIVATE_FIELDS = (
+    "attachment",
+    "wechat_transaction_id",
+    "credit_statement_ref",
+    "bank_statement_ref",
+)
+
+
+def viewer_ledger_data(ledger):
+    # A static report may be shared. Keep the visual data, but do not embed
+    # local attachment paths or authoritative statement references.
+    data = json.loads(json.dumps(ledger, ensure_ascii=False))
+    for tx in data.get("transactions") or []:
+        if isinstance(tx, dict):
+            for field in VIEWER_PRIVATE_FIELDS:
+                tx.pop(field, None)
+    return data
 
 
 def render_command(args):
     ledger = load_ledger(args.ledger, create=False)
     template_path = Path(args.template) if args.template else DEFAULT_TEMPLATE
     html = template_path.read_text(encoding="utf-8")
-    payload = json.dumps(ledger, ensure_ascii=False)
+    payload = json.dumps(viewer_ledger_data(ledger), ensure_ascii=False)
     payload = payload.replace("</", "<\\/")
     html = html.replace("__LEDGER_DATA__", payload)
     output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(html, encoding="utf-8")
+    write_text_secure(output, html)
     print(str(output.resolve()))
 
 
@@ -3117,23 +3400,40 @@ def add_issue(issues, code, message, tx=None, **extra):
 def doctor_report(ledger):
     issues = []
     transactions = ledger.get("transactions", [])
+    seen_ids = {}
     for index, tx in enumerate(transactions):
         if not isinstance(tx, dict):
             add_issue(issues, "invalid_transaction", "Transaction must be an object", index=index)
             continue
+        tx_id = tx.get("id")
+        if not isinstance(tx_id, str) or not tx_id:
+            add_issue(issues, "invalid_id", "Transaction id must be a non-empty string", tx, value=tx_id)
+        elif tx_id in seen_ids:
+            add_issue(issues, "duplicate_id", "Duplicate transaction id", tx, value=tx_id, first_index=seen_ids[tx_id])
+        else:
+            seen_ids[tx_id] = index
         for field in sorted(REQUIRED_TX_FIELDS):
             if field not in tx:
                 add_issue(issues, "missing_field", f"Missing required field: {field}", tx, field=field)
-        if tx.get("type") not in VALID_TYPES:
-            add_issue(issues, "invalid_type", "Invalid transaction type", tx, value=tx.get("type"))
-        if tx.get("method") not in (None, "") and tx.get("method") not in VALID_METHODS:
-            add_issue(issues, "invalid_method", "Invalid payment method", tx, value=tx.get("method"))
+        tx_type = tx.get("type")
+        if not isinstance(tx_type, str) or tx_type not in VALID_TYPES:
+            add_issue(issues, "invalid_type", "Invalid transaction type", tx, value=tx_type)
+        tx_category = tx.get("category")
+        if tx_category and (not isinstance(tx_category, str) or tx_category not in known_category_names(ledger)):
+            add_issue(issues, "unknown_category", "Unknown category", tx, value=tx_category)
+        tx_method = tx.get("method")
+        if tx_method not in (None, "") and (not isinstance(tx_method, str) or tx_method not in VALID_METHODS):
+            add_issue(issues, "invalid_method", "Invalid payment method", tx, value=tx_method)
         if tx.get("account_id") and not find_account(ledger, tx.get("account_id")):
             add_issue(issues, "unknown_account", "Unknown account_id", tx, value=tx.get("account_id"))
         if tx.get("to_account_id") and not find_account(ledger, tx.get("to_account_id")):
             add_issue(issues, "unknown_account", "Unknown to_account_id", tx, value=tx.get("to_account_id"))
-        if tx.get("type") == "transfer" and not (tx.get("to_account_id") or tx.get("to_account")):
+        if tx_type == "transfer" and not (tx.get("account_id") or tx.get("account")):
+            add_issue(issues, "missing_transfer_source", "Transfer is missing source account", tx)
+        if tx_type == "transfer" and not (tx.get("to_account_id") or tx.get("to_account")):
             add_issue(issues, "missing_transfer_dest", "Transfer is missing destination account", tx)
+        if "excluded_from_totals" in tx and not isinstance(tx.get("excluded_from_totals"), bool):
+            add_issue(issues, "invalid_exclusion", "excluded_from_totals must be true or false", tx, value=tx.get("excluded_from_totals"))
         if tx.get("relation"):
             if tx.get("relation") not in VALID_RELATIONS:
                 add_issue(issues, "invalid_relation", "Invalid transaction relation", tx, value=tx.get("relation"))
@@ -3144,7 +3444,9 @@ def doctor_report(ledger):
                 add_issue(issues, "unknown_related_transaction", "Related transaction was not found", tx, value=related_id)
         try:
             amount = float(tx.get("amount", 0))
-            if amount <= 0:
+            if not math.isfinite(amount):
+                add_issue(issues, "invalid_amount", "Amount must be finite", tx, value=tx.get("amount"))
+            elif amount <= 0:
                 add_issue(issues, "invalid_amount", "Amount must be positive", tx, value=tx.get("amount"))
         except (TypeError, ValueError):
             add_issue(issues, "invalid_amount", "Amount must be numeric", tx, value=tx.get("amount"))
@@ -3152,7 +3454,7 @@ def doctor_report(ledger):
         if confidence is not None:
             try:
                 confidence_value = float(confidence)
-                if confidence_value < 0 or confidence_value > 1:
+                if not math.isfinite(confidence_value) or confidence_value < 0 or confidence_value > 1:
                     add_issue(issues, "invalid_confidence", "Confidence must be between 0 and 1", tx, value=confidence)
             except (TypeError, ValueError):
                 add_issue(issues, "invalid_confidence", "Confidence must be numeric", tx, value=confidence)
@@ -3168,8 +3470,78 @@ def doctor_report(ledger):
                 tx,
                 duplicate_id=duplicate.get("id"),
             )
+    account_ids = set()
+    account_names = set()
+    for index, account in enumerate(ledger.get("accounts", []) or []):
+        if not isinstance(account, dict):
+            add_issue(issues, "invalid_account", "Account must be an object", index=index)
+            continue
+        account_id = account.get("id")
+        if not isinstance(account_id, str) or not account_id:
+            add_issue(issues, "invalid_account", "Account id must be a non-empty string", index=index, value=account_id)
+        elif account_id in account_ids:
+            add_issue(issues, "duplicate_account_id", "Duplicate account id", value=account_id)
+        else:
+            account_ids.add(account_id)
+        account_name = account.get("name")
+        if not isinstance(account_name, str) or not account_name:
+            add_issue(issues, "invalid_account", "Account name must be a non-empty string", index=index, value=account_name)
+        elif account_name in account_names:
+            add_issue(issues, "duplicate_account_name", "Duplicate account name", value=account_name)
+        else:
+            account_names.add(account_name)
+        if account.get("type") not in VALID_ACCOUNT_TYPES:
+            add_issue(issues, "invalid_account", "Invalid account type", value=account.get("type"))
+    budget_ids = set()
+    budget_keys = set()
+    for index, budget in enumerate(ledger.get("budgets", []) or []):
+        if not isinstance(budget, dict):
+            add_issue(issues, "invalid_budget", "Budget must be an object", index=index)
+            continue
+        budget_id = budget.get("id")
+        if not isinstance(budget_id, str) or not budget_id:
+            add_issue(issues, "invalid_budget", "Budget id must be a non-empty string", index=index, value=budget_id)
+        elif budget_id in budget_ids:
+            add_issue(issues, "duplicate_budget_id", "Duplicate budget id", value=budget_id)
+        else:
+            budget_ids.add(budget_id)
+        budget_category = budget.get("category")
+        if budget_category and not isinstance(budget_category, str):
+            add_issue(issues, "invalid_budget", "Budget category must be a string", index=index, value=budget_category)
+        elif budget_category and (not isinstance(budget_category, str) or budget_category not in known_category_names(ledger)):
+            add_issue(issues, "unknown_category", "Unknown budget category", value=budget_category)
+        budget_month = budget.get("month")
+        if budget_month and not isinstance(budget_month, str):
+            add_issue(issues, "invalid_budget_month", "Budget month must be YYYY-MM", value=budget_month)
+        key = (budget_month if isinstance(budget_month, str) else None, budget_category if isinstance(budget_category, str) else None)
+        if key in budget_keys:
+            add_issue(issues, "duplicate_budget", "Duplicate budget month/category", value=f"{key[0] or 'any'}/{key[1] or 'all'}")
+        else:
+            budget_keys.add(key)
+        try:
+            limit = float(budget.get("amount") or 0)
+            if not math.isfinite(limit) or limit <= 0:
+                add_issue(issues, "invalid_budget_amount", "Budget amount must be finite and positive", value=budget.get("amount"))
+        except (TypeError, ValueError):
+            add_issue(issues, "invalid_budget_amount", "Budget amount must be numeric", value=budget.get("amount"))
+    bill_months = set()
+    for index, bill in enumerate(ledger.get("bills", []) or []):
+        if not isinstance(bill, dict):
+            add_issue(issues, "invalid_bill", "Bill must be an object", index=index)
+            continue
+        month = bill.get("month")
+        if not isinstance(month, str) or not month:
+            add_issue(issues, "invalid_bill_month", "Bill month must be YYYY-MM", value=month)
+        else:
+            try:
+                validate_month(month)
+            except SystemExit:
+                add_issue(issues, "invalid_bill_month", "Bill month must be YYYY-MM", value=month)
+            if month in bill_months:
+                add_issue(issues, "duplicate_bill", "Duplicate bill month", value=month)
+            else:
+                bill_months.add(month)
     return {"ok": not issues, "issue_count": len(issues), "issues": issues}
-
 
 def doctor_command(args):
     ledger = load_ledger(args.ledger, create=False)
@@ -3183,6 +3555,7 @@ def doctor_command(args):
         print(f"- {issue['code']} | {tx_id} | {issue['message']}")
 
 
+@mutating
 def import_tsv_command(args):
     ledger = load_ledger(args.ledger, args.currency)
     input_path = Path(args.input)
@@ -3201,26 +3574,53 @@ def import_tsv_command(args):
             if not occurred_at:
                 raise SystemExit(f"Missing occurred_at on line {line_number}")
             confidence_value = row.get("confidence")
-            confidence = float(confidence_value) if confidence_value not in (None, "") else 1.0
+            try:
+                confidence = float(confidence_value) if confidence_value not in (None, "") else 1.0
+            except (TypeError, ValueError) as exc:
+                raise SystemExit(f"Invalid confidence on line {line_number}: {confidence_value}") from exc
+            proposal = {
+                "amount": amount_value,
+                "type": row.get("type") or "expense",
+                "currency": row.get("currency") or args.currency,
+                "category": row.get("category"),
+                "occurred_at": parse_when(occurred_at),
+                "source": row.get("source") or "import",
+                "confidence": confidence,
+                "tags": row.get("tags"),
+                "merchant": row.get("merchant"),
+                "note": row.get("note"),
+                "method": row.get("method") or None,
+                "account": row.get("account") or None,
+                "to_account": row.get("to_account") or None,
+                "related_transaction_id": row.get("related_transaction_id") or None,
+                "relation": row.get("relation") or None,
+            }
+            apply_account_fields(proposal, ledger)
             tx = build_transaction_payload(
                 ledger,
-                amount_value=amount_value,
-                tx_type=row.get("type") or "expense",
-                currency=row.get("currency") or args.currency,
-                category=row.get("category"),
-                occurred_at=parse_when(occurred_at),
-                source=row.get("source") or "import",
-                confidence=confidence,
-                tags=row.get("tags"),
-                merchant=row.get("merchant"),
-                note=row.get("note"),
+                amount_value=proposal["amount"],
+                tx_type=proposal["type"],
+                currency=proposal.get("currency"),
+                category=proposal.get("category"),
+                occurred_at=proposal["occurred_at"],
+                source=proposal["source"],
+                confidence=proposal.get("confidence"),
+                tags=proposal.get("tags"),
+                merchant=proposal.get("merchant"),
+                note=proposal.get("note"),
                 attachment=row.get("attachment"),
-                method=row.get("method") or None,
-                account=row.get("account") or None,
-                to_account=row.get("to_account") or None,
+                method=proposal.get("method"),
+                account=proposal.get("account"),
+                account_id=proposal.get("account_id"),
+                to_account=proposal.get("to_account"),
+                to_account_id=proposal.get("to_account_id"),
+                related_transaction_id=proposal.get("related_transaction_id"),
+                relation=proposal.get("relation"),
+                excluded_from_totals=parse_bool(row.get("excluded_from_totals")),
                 tx_id=row.get("id"),
             )
-            apply_account_fields(tx, ledger)
+            if any(isinstance(existing, dict) and existing.get("id") == tx["id"] for existing in ledger["transactions"]):
+                raise SystemExit(f"Duplicate transaction id on line {line_number}: {tx['id']}")
             duplicates = likely_duplicate_candidates(ledger["transactions"], tx)
             if duplicates and not args.allow_duplicate:
                 print(
@@ -3239,7 +3639,7 @@ def import_tsv_command(args):
                 raise SystemExit(2)
             ledger["transactions"].append(tx)
             added_ids.append(tx["id"])
-    ledger["transactions"].sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+    ledger["transactions"].sort(key=tx_sort_key, reverse=True)
     save_ledger(args.ledger, ledger)
     print(json.dumps({"input": str(input_path), "added": len(added_ids), "ids": added_ids}, ensure_ascii=False, indent=2))
 
@@ -3277,12 +3677,13 @@ def export_command(args):
         payload = buffer.getvalue()
     if args.output:
         output = Path(args.output)
-        output.write_text(payload, encoding="utf-8")
+        write_text_secure(output, payload)
         print(str(output.resolve()))
         return
     sys.stdout.write(payload if payload.endswith("\n") else payload + "\n")
 
 
+@mutating
 def prefer_command(args):
     ledger = load_ledger(args.ledger, create=True)
     prefs = ledger_preferences(ledger)
@@ -3321,6 +3722,21 @@ def category_entries(ledger):
     return entries
 
 
+def category_list_command(args):
+    ledger = load_ledger(args.ledger, create=False)
+    entries = category_entries(ledger)
+    if args.json:
+        print(json.dumps({"categories": entries}, ensure_ascii=False, indent=2))
+        return
+    if not entries:
+        print("还没有自定义分类；内置分类可直接使用。")
+        return
+    for item in entries:
+        parent = f" -> {item['parent']}" if item.get("parent") else ""
+        icon = f"{item['icon']} " if item.get("icon") else ""
+        print(f"{icon}{item['name']}{parent}")
+
+
 def category_parent_map(ledger):
     parents = dict(DEFAULT_CATEGORY_PARENTS)
     for item in category_entries(ledger):
@@ -3331,6 +3747,7 @@ def category_parent_map(ledger):
     return parents
 
 
+@mutating
 def category_set_command(args):
     ledger = load_ledger(args.ledger, create=True)
     old_name = str(getattr(args, "old_name", "") or "").strip()
@@ -3376,13 +3793,13 @@ def category_set_command(args):
             elif item["parent"] == old_name:
                 item["parent"] = name
         for tx in ledger.get("transactions") or []:
-            if tx.get("category") == old_name:
+            if isinstance(tx, dict) and tx.get("category") == old_name:
                 tx["category"] = name
         for budget in ledger.get("budgets") or []:
-            if budget.get("category") == old_name:
+            if isinstance(budget, dict) and budget.get("category") == old_name:
                 budget["category"] = name
         for habit in ledger.get("habits") or []:
-            if habit.get("category") == old_name:
+            if isinstance(habit, dict) and habit.get("category") == old_name:
                 habit["category"] = name
         prefs = ledger_preferences(ledger)
         prefs["merchant_categories"] = {
@@ -3400,6 +3817,7 @@ def category_set_command(args):
     print(json.dumps({"category": payload}, ensure_ascii=False, indent=2))
 
 
+@mutating
 def habit_list_command(args):
     ledger = load_ledger(args.ledger, create=True)
     seed_habits_if_needed(ledger)
@@ -3415,6 +3833,7 @@ def habit_list_command(args):
     print("流水还少。按字面记，账户用默认，缺金额就问。")
 
 
+@mutating
 def habit_profile_command(args):
     ledger = load_ledger(args.ledger, create=True)
     seed_habits_if_needed(ledger)
@@ -3429,6 +3848,7 @@ def habit_profile_command(args):
     print((payload.get("profile") or {}).get("summary") or "")
 
 
+@mutating
 def habit_memory_command(args):
     ledger = load_ledger(args.ledger, create=True)
     seed_habits_if_needed(ledger)
@@ -3450,6 +3870,7 @@ def habit_memory_command(args):
     )
 
 
+@mutating
 def habit_set_command(args):
     ledger = load_ledger(args.ledger, create=True)
     seed_habits_if_needed(ledger)
@@ -3490,6 +3911,7 @@ def habit_set_command(args):
     print(json.dumps(habit, ensure_ascii=False, indent=2))
 
 
+@mutating
 def habit_delete_command(args):
     ledger = load_ledger(args.ledger, create=False)
     remaining = []
@@ -3509,6 +3931,7 @@ def habit_delete_command(args):
     print(json.dumps(removed, ensure_ascii=False, indent=2))
 
 
+@mutating
 def habit_rebuild_command(args):
     ledger = load_ledger(args.ledger, create=True)
     rebuild_learned_habits(ledger)
@@ -3534,22 +3957,33 @@ def account_list_command(args):
         print(f"{item['id']} | {item['name']} | {item['type']} | {item['balance']:.2f}{mark}")
 
 
+@mutating
 def account_add_command(args):
     ledger = load_ledger(args.ledger, create=True)
     if args.type not in VALID_ACCOUNT_TYPES:
         raise SystemExit(f"Type must be one of: {', '.join(sorted(VALID_ACCOUNT_TYPES))}")
-    opening = float(args.opening or 0)
+    name = (args.name or "").strip()
+    if not name:
+        raise SystemExit("Account name is required")
+    try:
+        opening = float(args.opening or 0)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Opening balance must be numeric: {args.opening}") from exc
+    if not math.isfinite(opening):
+        raise SystemExit("Opening balance must be a finite number")
     account = {
         "id": args.id or f"acc_{uuid.uuid4().hex[:8]}",
-        "name": args.name,
+        "name": name,
         "type": args.type,
         "currency": ledger.get("currency") or "CNY",
         "opening_balance": round(opening, 2),
         "archived": False,
         "created_at": now_iso(),
     }
-    if any(existing.get("id") == account["id"] for existing in ensure_accounts(ledger)):
+    if any(isinstance(existing, dict) and existing.get("id") == account["id"] for existing in ensure_accounts(ledger)):
         raise SystemExit(f"Account already exists: {account['id']}")
+    if any(existing.get("name") == name for existing in ensure_accounts(ledger) if isinstance(existing, dict)):
+        raise SystemExit(f"Account name already exists: {name}")
     ledger["accounts"].append(account)
     if args.default:
         ledger_preferences(ledger)["default_account_id"] = account["id"]
@@ -3557,19 +3991,34 @@ def account_add_command(args):
     print(json.dumps(account, ensure_ascii=False, indent=2))
 
 
+@mutating
 def account_update_command(args):
     ledger = load_ledger(args.ledger, create=False)
     account = find_account(ledger, args.id)
     if not account:
         raise SystemExit(f"Account not found: {args.id}")
     if args.name:
-        account["name"] = args.name
+        name = args.name.strip()
+        if not name:
+            raise SystemExit("Account name cannot be empty")
+        if any(
+            isinstance(existing, dict) and existing.get("name") == name and existing.get("id") != account["id"]
+            for existing in ensure_accounts(ledger)
+        ):
+            raise SystemExit(f"Account name already exists: {name}")
+        account["name"] = name
     if args.type:
         if args.type not in VALID_ACCOUNT_TYPES:
             raise SystemExit(f"Type must be one of: {', '.join(sorted(VALID_ACCOUNT_TYPES))}")
         account["type"] = args.type
     if args.opening is not None:
-        account["opening_balance"] = round(float(args.opening), 2)
+        try:
+            opening = float(args.opening)
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(f"Opening balance must be numeric: {args.opening}") from exc
+        if not math.isfinite(opening):
+            raise SystemExit("Opening balance must be a finite number")
+        account["opening_balance"] = round(opening, 2)
     if args.archive:
         account["archived"] = True
     if args.unarchive:
@@ -3599,15 +4048,21 @@ def budget_list_command(args):
         )
 
 
+@mutating
 def budget_set_command(args):
     ledger = load_ledger(args.ledger, create=True)
-    amount = round(float(args.amount), 2)
-    if amount <= 0:
-        raise SystemExit("Budget amount must be positive")
-    month = args.month
-    category = args.category or None
+    try:
+        amount = round(float(args.amount), 2)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Budget amount must be numeric: {args.amount}") from exc
+    if not math.isfinite(amount) or amount <= 0:
+        raise SystemExit("Budget amount must be a finite positive number")
+    month = validate_month(args.month)
+    category = validate_category(ledger, args.category or None) or None
     found = None
     for budget in ledger.setdefault("budgets", []):
+        if not isinstance(budget, dict):
+            continue
         if budget.get("month") == month and (budget.get("category") or None) == category:
             found = budget
             break
@@ -3617,9 +4072,14 @@ def budget_set_command(args):
         found["updated_at"] = ts
         budget = found
     else:
-        slug = f"{month or 'any'}_{category or 'all'}"
+        slug = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff-]+", "_", f"{month or 'any'}_{category or 'all'}").strip("_")
+        base_id = f"bud_{slug or 'budget'}"
+        used_ids = {item.get("id") for item in ledger.get("budgets", []) if isinstance(item, dict)}
+        budget_id = base_id
+        if budget_id in used_ids:
+            budget_id = f"{base_id}_{hashlib.sha1(base_id.encode('utf-8')).hexdigest()[:6]}"
         budget = {
-            "id": f"bud_{re.sub(r'[^a-zA-Z0-9]+', '_', slug)}",
+            "id": budget_id,
             "month": month,
             "category": category,
             "amount": amount,
@@ -3631,12 +4091,16 @@ def budget_set_command(args):
     print(json.dumps(budget, ensure_ascii=False, indent=2))
 
 
+@mutating
 def budget_delete_command(args):
     ledger = load_ledger(args.ledger, create=False)
     remaining = []
     removed = None
     for budget in ledger.get("budgets", []):
-        if budget.get("id") == args.id:
+        if not isinstance(budget, dict):
+            remaining.append(budget)
+            continue
+        if removed is None and budget.get("id") == args.id:
             removed = budget
         else:
             remaining.append(budget)
@@ -3645,24 +4109,49 @@ def budget_delete_command(args):
     ledger["budgets"] = remaining
     save_ledger(args.ledger, ledger)
     print(json.dumps(removed, ensure_ascii=False, indent=2))
+    if any(isinstance(item, dict) and item.get("id") == args.id for item in remaining):
+        print("Warning: another budget still has the same id; run `ledger doctor`.", file=sys.stderr)
 
 
 def backup_command(args):
     src = Path(args.ledger)
-    if not src.exists():
+    if not src.is_file():
         raise SystemExit(f"Ledger not found: {src}")
-    stamp = local_today().strftime("%Y%m%d")
-    dest = Path(args.output) if args.output else src.parent / "backups" / f"{src.stem}-{stamp}{src.suffix or '.json'}"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dest)
+    try:
+        text = src.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(f"Could not read ledger {src}: {exc}") from exc
+    if args.output:
+        dest = Path(args.output)
+        if dest.exists() and not getattr(args, "force", False):
+            raise SystemExit(f"Backup already exists: {dest}. Pass --force to overwrite it.")
+    else:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        dest = src.parent / "backups" / f"{src.stem}-{stamp}{src.suffix or '.json'}"
+        counter = 1
+        while dest.exists():
+            dest = dest.with_name(f"{src.stem}-{stamp}-{counter}{src.suffix or '.json'}")
+            counter += 1
+    write_text_secure(dest, text)
     print(json.dumps({"ok": True, "ledger": str(src.resolve()), "backup": str(dest.resolve())}, ensure_ascii=False, indent=2))
 
 
+@mutating
 def init_command(args):
     path = Path(args.ledger)
     if path.exists() and not args.force:
         print(f"Ledger already exists: {path}")
         return
+    if path.exists():
+        backup = path.parent / "backups" / f"{path.stem}-preinit-{datetime.now().strftime('%Y%m%d-%H%M%S')}{path.suffix or '.json'}"
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        counter = 1
+        while backup.exists():
+            backup = backup.with_name(f"{path.stem}-preinit-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{counter}{path.suffix or '.json'}")
+            counter += 1
+        shutil.copy2(path, backup)
+        os.chmod(backup, 0o600)
+        print(f"Backed up existing ledger to {backup}")
     save_ledger(path, empty_ledger(args.currency))
     print(str(path.resolve()))
 
@@ -3689,6 +4178,7 @@ def add_common_tx_flags(parser, *, require_type=False, source_default=None, incl
     parser.add_argument("--relation", choices=["refund", "reimbursement", "repayment", "split"], default=None)
     parser.add_argument("--remember", action="store_true", help="Save an explicit merchant preference")
     parser.add_argument("--exclude-from-totals", action="store_true", help="Keep the row but exclude it from financial totals")
+    parser.add_argument("--include-in-totals", action="store_true", help="Override a learned exclusion and count the row in totals")
 
 
 def add_filter_flags(parser, *, limit=None, json_flag=False, compare=False):
@@ -3799,6 +4289,20 @@ def build_parser():
     p_prefer.add_argument("--alias", default=None)
     p_prefer.set_defaults(func=prefer_command)
 
+    p_category = sub.add_parser("category", help="List or define categories")
+    cat = p_category.add_subparsers(dest="category_command", required=True)
+    p_cat_list = cat.add_parser("list", help="List custom categories")
+    p_cat_list.add_argument("--ledger", required=True)
+    p_cat_list.add_argument("--json", action="store_true")
+    p_cat_list.set_defaults(func=category_list_command)
+    p_cat_set = cat.add_parser("set", help="Create, rename, or reparent a category")
+    p_cat_set.add_argument("--ledger", required=True)
+    p_cat_set.add_argument("--name", required=True)
+    p_cat_set.add_argument("--old-name", dest="old_name", default=None)
+    p_cat_set.add_argument("--icon", default=None)
+    p_cat_set.add_argument("--parent", default=None)
+    p_cat_set.set_defaults(func=category_set_command)
+
     p_habit = sub.add_parser("habit", help="Summarize usage habits from the ledger")
     hab = p_habit.add_subparsers(dest="habit_command", required=True)
     p_hab_list = hab.add_parser("list", help="Show the usage portrait used when recording")
@@ -3901,6 +4405,7 @@ def build_parser():
     p_backup = sub.add_parser("backup", help="Copy the ledger JSON to a timestamped backup")
     p_backup.add_argument("--ledger", required=True)
     p_backup.add_argument("--output", default=None)
+    p_backup.add_argument("--force", action="store_true", help="Overwrite an explicit --output file")
     p_backup.set_defaults(func=backup_command)
 
     p_render = sub.add_parser("render", help="Generate a self-contained HTML dashboard")

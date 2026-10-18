@@ -2,7 +2,7 @@
 name: lazy-ledger
 description: Maintain a local JSON personal ledger. Use when recording or correcting transactions, reconciling WeChat/Alipay/bank/credit-card statements without duplicates, managing accounts/categories/budgets, summarizing or generating monthly bills, or opening the localhost ledger UI.
 metadata:
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Lazy Ledger
@@ -24,7 +24,7 @@ Treat each message as an intent and evidence problem before choosing a command. 
 
 AI bookkeeping is also an ongoing conversation about data quality. After a write, import, correction, or query that exposes relevant rows, look for actionable issues with `audit` or `doctor` and explain only findings that matter to the user's question. Typical findings include likely duplicates, missing accounts, implausible amounts or dates, low-confidence classifications, unmatched refunds, and expenses that look like transfers or reimbursements.
 
-Analyze findings before involving the user. When source references, timing, amount, merchant, and transaction type make the intended result clear, apply a reversible field update or relation automatically and report it. Only surface findings where multiple reasonable interpretations remain, the repair changes financial meaning, or deletion/merging is proposed. Group unresolved findings that have the same repair type and evidence pattern into one confirmation question. Within that group, show each affected row and one proposed action. Handle groups sequentially: ask one confirmation question, wait for the answer, apply only that group, rerun the relevant check, and then present the next highest-priority group.
+Analyze findings before involving the user. When source references, timing, amount, merchant, and transaction type make the intended result clear, apply a reversible field update automatically and report it — but only when the change does not alter the transaction type, amount, account, date, or relations. Ask before those financial-meaning changes. Always surface findings where multiple reasonable interpretations remain, the repair changes financial meaning, or deletion/merging is proposed. Group unresolved findings that have the same repair type and evidence pattern into one confirmation question. Within that group, show each affected row and one proposed action. Handle groups sequentially: ask one confirmation question, wait for the answer, apply only that group, rerun the relevant check, and then present the next highest-priority group.
 
 - `doctor` detects structural and referential problems; `audit` detects duplicate and source-reference problems. Their results are evidence for AI analysis, not a requirement to ask the user about every row.
 - A low-confidence or unusual row is a review suggestion, not proof of an error. For social/gift spending, when the habit portrait shows it is rare, check first whether the row belongs under groceries, snacks, or ordinary spending. Preserve the original evidence and uncertainty until the user confirms.
@@ -40,8 +40,9 @@ Analyze findings before involving the user. When source references, timing, amou
 - Direct scripts, when the wrapper is unavailable: `scripts/ledger_tool.py`, `scripts/bill_screenshot.py`, `scripts/ledger_audit.py`.
 - Screenshot OCR: `scripts/bill_screenshot.py` (also reachable as `ledger shot`).
 - Cross-source audit: `scripts/ledger_audit.py` (also reachable as `ledger audit`).
-- Ledger: `LAZY_LEDGER_FILE` if set; otherwise `$LAZY_LEDGER_HOME/ledgers/default/ledger.json` when set; otherwise `./data/ledgers/default/ledger.json`. Runtime data belongs in `data/`, never in the skill root. Each ledger instance has separate `backups/`, `reports/`, and `memory/` directories.
+- Ledger: `LAZY_LEDGER_FILE` if set; otherwise `$LAZY_LEDGER_HOME/ledgers/default/ledger.json` when set; otherwise `./data/ledgers/default/ledger.json`. Runtime data belongs in `data/`, never in the skill root. Each ledger instance has a separate `backups/` directory; generated habit memory and bill HTML sit beside the ledger and are named after the ledger stem, so different ledgers cannot collide.
 - Habit portrait: `{ledger-stem}-memory.md` beside the ledger.
+- Monthly bill HTML: `{ledger-stem}-bill-YYYY-MM.html` beside the ledger.
 - Local app: `127.0.0.1` only, normally port `8765`.
 
 Set `LEDGER_SKILL_DIR` to the absolute directory containing this `SKILL.md` before running reference commands. Do not assume the user's working directory is the installed skill directory.
@@ -54,11 +55,11 @@ These cover the majority of requests. Run them directly without loading a refere
 
 | Request | Command |
 |---|---|
-| Record one or several clear items | `ledger add --text "yesterday wechat starbucks 38"` |
+| Record one or several clear items | `ledger add --text "昨天微信星巴克 38"` |
 | This month, versus last month | `ledger show --compare` |
 | Spending over a named period | `ledger show --range last-month\|this-quarter\|this-year --compare` |
-| Find a row before correcting it | `ledger find --text "yesterday starbucks"` |
-| Correct one field by ID | `ledger update --id tx_20260707_ab12cd34 --category coffee-tea` |
+| Find a row before correcting it | `ledger find --text "昨天 星巴克"` |
+| Correct one field by ID | `ledger update --id tx_20260707_ab12cd34 --category 咖啡茶饮` |
 | Delete by ID | `ledger delete --id tx_20260707_ab12cd34 --yes` |
 | Accounts and balances | `ledger account list --json` |
 | Budget progress | `ledger budget list` |

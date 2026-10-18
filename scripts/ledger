@@ -10,7 +10,7 @@
 #   ledger shot prepare --image ./bill.jpg --output ./rows.tsv --json
 #
 # Environment:
-#   LAZY_LEDGER_FILE  ledger JSON path (default: ./lazy-ledger.json)
+#   LAZY_LEDGER_FILE  ledger JSON path (default: ./data/ledgers/default/ledger.json)
 #   LAZY_PYTHON       interpreter (default: python3)
 #
 # Every subcommand not listed below is forwarded verbatim to ledger_tool.py, so
@@ -45,7 +45,7 @@ Commands are forwarded to the matching script:
   which                          print resolved skill dir, ledger, interpreter
 
 Environment:
-  LAZY_LEDGER_FILE   ledger JSON path (default: ./data/lazy-ledger.json)
+  LAZY_LEDGER_FILE   ledger JSON path (default: ./data/ledgers/default/ledger.json)
   LAZY_LEDGER_HOME   data root; default ledger is ledgers/default/ledger.json
   LAZY_PYTHON        interpreter (default: python3)
 EOF
@@ -76,7 +76,7 @@ case "$group" in
     exit 0
     ;;
   which)
-    echo "skill_dir:  $SCRIPT_DIR"
+    echo "skill_dir:  $SKILL_ROOT"
     echo "ledger:     $LEDGER_FILE"
     echo "python:     $PYTHON_BIN"
     exit 0

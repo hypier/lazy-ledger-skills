@@ -724,6 +724,7 @@
       const pad = (first.getDay() + 6) % 7;
       const byDay = {};
       for (const tx of rows) {
+        if (tx.excluded_from_totals) continue;
         if ((tx.type || "expense") !== "expense") continue;
         if (monthOf(tx) !== monthStamp) continue;
         const day = formatDate(tx.occurred_at);
@@ -790,6 +791,7 @@
       let expenseTotal = 0;
       const byCategory = {};
       for (const tx of rows) {
+        if (tx.excluded_from_totals) continue;
         if ((tx.type || "expense") !== "expense") continue;
         const amount = Number(tx.amount || 0);
         expenseTotal += amount;
@@ -823,6 +825,7 @@
       const review = [];
 
       for (const tx of rows) {
+        if (tx.excluded_from_totals) continue;
         const type = tx.type || "expense";
         const amount = Number(tx.amount || 0);
         if (Object.prototype.hasOwnProperty.call(totals, type)) totals[type] += amount;
@@ -838,6 +841,7 @@
         }
       }
       for (const tx of previousRows) {
+        if (tx.excluded_from_totals) continue;
         const type = tx.type || "expense";
         const amount = Number(tx.amount || 0);
         if (Object.prototype.hasOwnProperty.call(prevTotals, type)) prevTotals[type] += amount;

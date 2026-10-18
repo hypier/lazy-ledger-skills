@@ -1,6 +1,6 @@
 # Reconcile Multi-Source Imports
 
-Use this workflow for official WeChat/Alipay exports, bank statements, credit-card statements, or any request to check duplicates across sources. For long screenshots, first follow [image-batch-import.md](image-batch-import.md).
+Use this workflow for official WeChat/Alipay exports, bank statements, credit-card statements, or any request to check duplicates across sources. For long screenshots, use [image-batch-import.md](image-batch-import.md) to produce the reviewed rows, then apply the matching model below.
 
 ## Authority Model
 

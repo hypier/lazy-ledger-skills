@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import tempfile
 import threading
 from contextlib import contextmanager
 from pathlib import Path
 
 
-COLLECTIONS = ("transactions", "accounts", "budgets", "categories", "habits")
+COLLECTIONS = ("transactions", "accounts", "budgets", "categories", "habits", "bills")
 STORE_KIND = "lazy-ledger-docs"
 STORE_VERSION = 1
 
@@ -24,6 +26,7 @@ except ImportError:  # Windows
 
 _PATH_LOCKS = {}
 _PATH_LOCKS_GUARD = threading.Lock()
+_HELD_LOCKS = threading.local()
 
 
 def _path_lock(path):
@@ -39,6 +42,8 @@ def _path_lock(path):
 @contextmanager
 def _flock(handle, exclusive=True):
     if fcntl is None:
+        # No cross-process primitive on this platform; the in-process lock in
+        # ledger_lock() still serializes threads.
         yield
         return
     flag = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
@@ -49,25 +54,84 @@ def _flock(handle, exclusive=True):
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def atomic_write_json(path, data):
+def _lock_key(path):
+    return str(Path(path).resolve())
+
+
+def _held_paths():
+    paths = getattr(_HELD_LOCKS, "paths", None)
+    if paths is None:
+        paths = set()
+        _HELD_LOCKS.paths = paths
+    return paths
+
+
+def ledger_lock_held(path):
+    return _lock_key(path) in _held_paths()
+
+
+@contextmanager
+def ledger_lock(path):
+    """Serialize a complete read-modify-write for one ledger across processes.
+
+    A dedicated lock file is used because the ledger itself is replaced on
+    every write. The lock is re-entrant for the current thread so a command can
+    call save_ledger() while already holding the command-wide lock.
+    """
+    key = _lock_key(path)
+    held = _held_paths()
+    if key in held:
+        yield
+        return
     ledger_path = Path(path)
-    ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-    tmp = ledger_path.with_suffix(ledger_path.suffix + ".tmp")
-    with _path_lock(ledger_path):
-        with tmp.open("w", encoding="utf-8") as handle:
+    lock_path = ledger_path.with_name(ledger_path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _path_lock(lock_path):
+        with lock_path.open("a+", encoding="utf-8") as handle:
             with _flock(handle, exclusive=True):
-                handle.write(payload)
-                handle.flush()
-        tmp.replace(ledger_path)
+                held.add(key)
+                try:
+                    yield
+                finally:
+                    held.discard(key)
+
+
+def _atomic_write(path, text):
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=str(target.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # Personal financial data is owner-only by default.
+        os.chmod(tmp_name, 0o600)
+        os.replace(tmp_name, target)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def atomic_write_json(path, data):
+    payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    _atomic_write(path, payload)
+
+
+def write_text_secure(path, text):
+    """Write a UTF-8 text file with owner-only permissions, atomically."""
+    _atomic_write(path, text)
 
 
 def read_json(path):
     ledger_path = Path(path)
-    with _path_lock(ledger_path):
-        with ledger_path.open("r", encoding="utf-8") as handle:
-            with _flock(handle, exclusive=False):
-                return json.load(handle)
+    # Writes replace the file atomically, so readers see either the old or the
+    # new complete document without holding the write-side lock.
+    with ledger_path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 class DocumentNotFound(KeyError):

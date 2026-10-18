@@ -1,12 +1,17 @@
 # Runtime data — real ledgers, backups, and generated reports stay out of git
 data/
+backups/
+reports/
+memory/
 lazy-ledger*.json
 *-memory.md
 lazy-ledger-bill-*.html
+*-bill-*.html
 lazy-ledger-report.html
 lazy-ledger*.csv
 *-bill-rows.tsv
 *.tmp
+*.lock
 
 # Build output
 dist/
@@ -14,6 +19,11 @@ dist/
 # Caches
 __pycache__/
 *.pyc
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 .DS_Store
 .venv/
 .workbuddy/

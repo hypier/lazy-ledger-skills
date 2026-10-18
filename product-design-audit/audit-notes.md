@@ -2,6 +2,8 @@
 
 Date: 2026-07-08
 
+> Historical snapshot. Many findings below were fixed in the October 2026 hardening pass; treat this file as evidence of the earlier state, not as current behavior.
+
 ## Audit Scope
 
 This audit reviews Lazy Ledger as a Codex bookkeeping skill, not as a full standalone app. The assessed experience is:

@@ -82,7 +82,10 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
             raise ValidationError(f"SKILL.md frontmatter is missing required field: {key}")
 
     name = meta["name"].strip()
-    if name != skill_dir.name:
+    # A checkout directory may carry a repo suffix (this repository is
+    # `lazy-ledger-skills` while the installable skill is `lazy-ledger`).
+    # The packaged archive always uses the frontmatter name.
+    if name != skill_dir.name and not skill_dir.name.startswith(name + "-"):
         raise ValidationError(f"frontmatter name '{name}' does not match directory '{skill_dir.name}'")
     if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name):
         raise ValidationError(f"name '{name}' must be lowercase hyphen-separated")

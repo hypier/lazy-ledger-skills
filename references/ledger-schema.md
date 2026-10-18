@@ -1,6 +1,6 @@
 # Ledger Schema
 
-Use this schema for `lazy-ledger.json`. Unknown fields must be preserved.
+Use this schema for the ledger JSON (`data/ledgers/default/ledger.json` by default). Unknown fields must be preserved.
 
 ## Root
 
@@ -21,7 +21,7 @@ Use this schema for `lazy-ledger.json`. Unknown fields must be preserved.
     {"id": "bud_any_all", "month": null, "category": null, "amount": 8000}
   ],
   "preferences": {
-    "merchant_categories": { "星巴克": "咖啡" },
+    "merchant_categories": { "星巴克": "咖啡茶饮" },
     "merchant_aliases": { "sbk": "星巴克" },
     "default_account_id": "acc_wechat",
     "usage_profile": {
@@ -46,7 +46,7 @@ The file is a JSON document database, not SQL. Collections are `transactions`, `
   "type": "expense",
   "amount": 38.0,
   "currency": "CNY",
-  "category": "咖啡",
+  "category": "咖啡茶饮",
   "merchant": "星巴克",
   "method": "wechat",
   "account": "微信零钱",
@@ -149,11 +149,11 @@ Missing `accounts` on an old file is filled with the five defaults. Do not repla
 }
 ```
 
-`phrase` is a short user saying (`午饭`, `地铁`, `喜茶`), not a payment-processor legal name. `source` is `learned` or `manual`. `amount` is the usual price when it is stable. Habits are internal signals for parse/add. The agent-facing portrait is `lazy-ledger-memory.md` next to the ledger, refreshed periodically (`habit memory`). `preferences.usage_profile` is the structured cache used to generate that file.
+`phrase` is a short user saying (`午饭`, `地铁`, `喜茶`), not a payment-processor legal name. `source` is `learned` or `manual`. `amount` is the usual price when it is stable. Habits are internal signals for parse/add. The agent-facing portrait is `{ledger-stem}-memory.md` next to the ledger, refreshed periodically (`habit memory`). `preferences.usage_profile` is the structured cache used to generate that file.
 
 ## Habit memory
 
-The habit portrait is stored in the ledger instance's `memory/` directory (for `data/ledgers/default/ledger.json`, use `data/ledgers/default/memory/habit-memory.md`). Markdown so the agent can Read it. Rewrite when missing, when `tx_count` lags by 10+, when older than 7 days, or on `habit memory` / `habit rebuild`.
+The habit portrait is stored beside the ledger as `{ledger-stem}-memory.md` (for `data/ledgers/default/ledger.json`, use `data/ledgers/default/ledger-memory.md`). Markdown so the agent can Read it. Rewrite when missing, when `tx_count` lags by 10+, when older than 7 days, or on `habit memory` / `habit rebuild`.
 
 ## Compatibility
 
