@@ -257,6 +257,7 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
     by_category = defaultdict(Decimal)
     by_merchant = defaultdict(Decimal)
     by_income_merchant = defaultdict(Decimal)
+    by_income_day = defaultdict(Decimal)
     by_day = defaultdict(Decimal)
     by_method = defaultdict(Decimal)
     by_month = defaultdict(Decimal)
@@ -301,6 +302,7 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             category_value = "其他"
         if tx_type == "income":
             by_income_merchant[merchant_value if merchant_value != "未填商户" else "未填来源"] += amount
+            by_income_day[tx_day(tx) or "未知"] += amount
         if tx_type == "expense":
             category = (category_parents or {}).get(category_value, category_value)
             merchant = merchant_value
@@ -353,6 +355,7 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             for key, value in sorted(by_income_merchant.items(), key=lambda item: item[1], reverse=True)
         },
         "by_day": dict(sorted(by_day.items())),
+        "by_income_day": dict(sorted(by_income_day.items())),
         "by_method": dict(sorted(by_method.items(), key=lambda item: item[1], reverse=True)),
         "top_merchants": [
             {"merchant": name, "amount": round(amount, 2)}

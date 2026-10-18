@@ -7,12 +7,16 @@ import json
 from pathlib import Path
 
 from ..domain.money import decimal_amount
+from ..domain.metrics import summarize
+from ..domain.semantics import counts_as
 
 ASSETS = Path(__file__).resolve().parents[3] / "assets" / "openui"
 LABELS = {"totals.income": "已记录收入", "totals.expense": "已记录支出",
           "totals.refund": "已记录退款", "totals.net": "已记录净额",
           "by_category": "支出分类", "by_day": "每日已记录支出",
-          "budgets": "预算执行", "transactions": "交易依据"}
+          "by_income_merchant": "收入来源", "by_income_day": "每日已记录收入",
+          "budgets": "预算执行", "transactions": "交易依据",
+          "income_transactions": "收入明细", "expense_transactions": "支出明细"}
 
 
 def catalog():
@@ -80,6 +84,8 @@ def default_layout(report):
             pairs.append(("Breakdown", "by_category"))
         if len(report["metrics"]["by_day"]) > 1:
             pairs.append(("Breakdown", "by_day"))
+        if report["metrics"].get("by_income_merchant"):
+            pairs.extend([("Breakdown", "by_income_merchant"), ("Breakdown", "by_income_day")])
         if report["metrics"]["budgets"]:
             pairs.append(("Budget", "budgets"))
         if report.get("presentation", {}).get("density") != "compact":
@@ -134,21 +140,28 @@ def project(report, layout=None, *, refs=None):
             if evidence is None:
                 evidence = list(dict.fromkeys(i for ids in report["evidence"].values() for i in ids))
             datasets[ref] = {"label": LABELS[ref], "value": money(report["metrics"]["totals"][key]), "evidence": evidence}
-        elif ref in {"by_category", "by_day"}:
-            datasets[ref] = {"label": LABELS[ref], "rows": [{"label": k, "amount": money(v)} for k, v in report["metrics"][ref].items()]}
+        elif ref in {"by_category", "by_day", "by_income_merchant", "by_income_day"}:
+            values = report["metrics"].get(ref)
+            if values is None:
+                # Older snapshots lack the income timeline. Derive it only from
+                # their frozen rows, never from the current ledger.
+                values = summarize(report["transactions"], period=report["period"])[ref]
+            datasets[ref] = {"label": LABELS[ref], "rows": [{"label": k, "amount": money(v)} for k, v in values.items()]}
         elif ref == "budgets":
             datasets[ref] = [{**{k: r.get(k) for k in ("id", "month", "category", "pct", "over")},
                               **{k: money(r[k]) for k in ("limit", "spent", "remaining")}}
                              for r in report["metrics"][ref]]
-        elif ref == "transactions":
-            datasets[ref] = [transaction(r) for r in report["transactions"]]
+        elif ref in {"transactions", "income_transactions", "expense_transactions"}:
+            kind_filter = ref.split("_")[0]
+            datasets[ref] = [transaction(r) for r in report["transactions"]
+                             if ref == "transactions" or counts_as(r, kind_filter)]
     if kind == "import":
         coverage = {"ready_at_prepare": report["import"]["import_summary"]["ready"],
                     "notice": "导入计划快照，尚未执行；可提交状态仅代表准备时，提交前仍需检查版本与待复核项。"}
     else:
         coverage = {key: report["coverage"][key] for key in ("recorded_rows", "unassigned_rows", "complete")}
         coverage["unknown_openings"] = len(report["coverage"]["unknown_openings"])
-        coverage["notice"] = "仅包含已记录数据，不代表全部实际收支。图表与预算使用所选期间内的支出，缺少记录的日期不代表零支出。"
+        coverage["notice"] = "仅包含已记录数据，不代表全部实际收支。图表按所选期间及收支类型展示，预算仅统计支出；缺少记录的日期不代表零收支。"
     result = {"version": 1, "renderer": catalog()["renderer"], "kind": kind, "snapshot_id": report["id"],
               "snapshot_digest": report["digest"], "generated_at": report["generated_at"],
               "revision": report["context"]["revision"], "currency": report["currency"],

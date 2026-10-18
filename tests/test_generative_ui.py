@@ -42,6 +42,33 @@ class GenerativeUITest(unittest.TestCase):
             self.assertNotIn(private, ui.document(view))
         self.assertFalse(view["coverage"]["complete"])
 
+    def test_income_charts_and_details_share_accounting_rules_and_frozen_rows(self):
+        ledger = repository.load(self.path)
+        ledger["transactions"].extend([
+            {"id": "salary", "type": "income", "amount": 100.10, "merchant": "公司", "occurred_at": "2026-10-01", "currency": "CNY"},
+            {"id": "bonus", "type": "income", "amount": 50.20, "merchant": "项目", "occurred_at": "2026-10-03", "currency": "CNY"},
+            {"id": "excluded", "type": "income", "amount": 999, "occurred_at": "2026-10-01", "excluded_from_totals": True},
+            {"id": "repayment", "type": "income", "amount": 500, "occurred_at": "2026-10-02", "relation": "repayment"},
+            {"id": "refund", "type": "refund", "amount": 9, "occurred_at": "2026-10-02"},
+            {"id": "outside", "type": "income", "amount": 9999, "occurred_at": "2026-09-30"},
+        ])
+        report = reports.from_ledger(ledger, start="2026-10-01", end="2026-10-31")
+        refs = ["totals.income", "by_income_merchant", "by_income_day", "income_transactions", "expense_transactions"]
+        view = ui.project(report, refs=refs)
+        self.assertEqual(view["datasets"]["totals.income"]["value"], "150.30")
+        self.assertEqual(view["datasets"]["by_income_day"]["rows"], [
+            {"label": "2026-10-01", "amount": "100.10"}, {"label": "2026-10-03", "amount": "50.20"}])
+        self.assertEqual(view["datasets"]["by_income_merchant"]["rows"], [
+            {"label": "公司", "amount": "100.10"}, {"label": "项目", "amount": "50.20"}])
+        self.assertEqual([r["id"] for r in view["datasets"]["income_transactions"]], ["salary", "bonus"])
+        self.assertEqual(len(view["datasets"]["expense_transactions"]), 2)
+        # Pre-upgrade archives contain all source rows but lack the new timeline.
+        del report["metrics"]["by_income_day"]
+        report["digest"] = repository.fingerprint({k: v for k, v in report.items() if k != "digest"})
+        before = copy.deepcopy(report)
+        self.assertEqual(ui.project(report, refs=refs)["datasets"], view["datasets"])
+        self.assertEqual(report, before)
+
     def test_custom_composition_only_includes_requested_datasets(self):
         layout = {"version": 1, "blocks": [{"component": "Metric", "ref": "totals.expense"}]}
         view = ui.project(self.report, layout)

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "renderer": "ledger-openui-v3",
+  "renderer": "ledger-openui-v4",
   "layout_version": 1,
   "report_versions": [
     1
@@ -16,7 +16,10 @@
     "nested-layouts",
     "generated-html",
     "generation-spec",
-    "validated-live-preview"
+    "validated-live-preview",
+    "income-charts",
+    "transaction-type-filter",
+    "income-expense-details"
   ],
   "components": {
     "Metric": {
@@ -33,7 +36,9 @@
     "Breakdown": {
       "refs": [
         "by_category",
-        "by_day"
+        "by_day",
+        "by_income_merchant",
+        "by_income_day"
       ],
       "kinds": [
         "report"
@@ -49,7 +54,9 @@
     },
     "Transactions": {
       "refs": [
-        "transactions"
+        "transactions",
+        "income_transactions",
+        "expense_transactions"
       ],
       "kinds": [
         "report"

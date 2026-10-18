@@ -26,6 +26,8 @@ function MetricCard({ dataRef }) {
 function BreakdownCard({ dataRef }) {
   const [data, view] = useData(dataRef);
   const [mode, setMode] = useState('chart');
+  const income = dataRef.startsWith('by_income_');
+  const cashFlow = income ? '收入' : '支出';
   const max = Math.max(1, ...data.rows.map(row => Number(row.amount)));
   return <section className="card wide" data-component="Breakdown" data-series={dataRef}>
     <div className="chart-heading"><h2><Icon name="chart" />{data.label}</h2>
@@ -35,12 +37,12 @@ function BreakdownCard({ dataRef }) {
       </div>
     </div>
     <p className="muted">{view.period.label} · 金额（{view.currency}）</p>
-    {data.rows.length ? mode === 'chart' ? (dataRef === 'by_category' ?
-      <RingChart rows={data.rows} currency={view.currency} /> :
-      <DayChart rows={data.rows} currency={view.currency} period={view.period} />) : <ul className="bars">{data.rows.map(row => <li key={row.label}>
+    {data.rows.length ? mode === 'chart' ? (!dataRef.endsWith('_day') ?
+      <RingChart rows={data.rows} currency={view.currency} label={data.label} /> :
+      <DayChart rows={data.rows} currency={view.currency} period={view.period} cashFlow={cashFlow} />) : <ul className="bars">{data.rows.map(row => <li key={row.label}>
       <span>{row.label}</span><div className="bar-track" aria-hidden="true"><div style={{ width: `${Number(row.amount) / max * 100}%` }} /></div>
       <strong>{row.amount}</strong>
-    </li>)}</ul> : <div className="empty-chart"><Icon name="empty" /><p>本期间没有已记录支出。</p></div>}
+    </li>)}</ul> : <div className="empty-chart"><Icon name="empty" /><p>本期间没有已记录{cashFlow}。</p></div>}
   </section>;
 }
 
@@ -62,15 +64,19 @@ function RowsCard({ dataRef }) {
   const [data] = useData(dataRef);
   const [query, setQuery] = useState('');
   const [state, setState] = useState('all');
+  const [type, setType] = useState('all');
   const [page, setPage] = useState(0);
   const importing = dataRef === 'import_rows';
-  const filtered = data.filter(r => (state === 'all' || r.state === state) &&
+  const filtered = data.filter(r => (state === 'all' || r.state === state) && (type === 'all' || r.type === type) &&
     [r.id, r.merchant, r.category, r.occurred_at].some(v => String(v).toLocaleLowerCase().includes(query.toLocaleLowerCase())));
   const visible = filtered.slice(page * 20, (page + 1) * 20);
-  const title = importing ? '来源记录' : '交易依据';
+  const title = importing ? '来源记录' : ({income_transactions: '收入明细', expense_transactions: '支出明细'}[dataRef] || '交易依据');
   return <section className="card full" data-component={importing ? 'ImportRows' : 'Transactions'}>
     <h2>{title}</h2><div className="filters">
       <label>查找记录<input type="search" value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} placeholder="商户、分类、日期或记录 ID" /></label>
+      {dataRef === 'transactions' && <label>收支类型<select value={type} onChange={e => { setType(e.target.value); setPage(0); }}>
+        <option value="all">全部类型</option>{Object.entries(kinds).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      </select></label>}
       {importing && <label>记录状态<select value={state} onChange={e => { setState(e.target.value); setPage(0); }}>
         <option value="all">全部</option>{Object.entries(states).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
       </select></label>}

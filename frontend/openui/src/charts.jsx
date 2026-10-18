@@ -14,7 +14,7 @@ export function Icon({ name, className = '' }) {
   return <svg className={`icon ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={paths[name] || paths.chart} /></svg>;
 }
 
-export function RingChart({ rows, currency }) {
+export function RingChart({ rows, currency, label = '支出分类' }) {
   const [selected, setSelected] = useState(null);
   const [hovered, setHovered] = useState(null);
   const segments = ringSegments(rows);
@@ -22,7 +22,7 @@ export function RingChart({ rows, currency }) {
   const item = active == null ? null : segments[active];
   return <div className="ring-layout">
     <div className="ring-graphic">
-      <svg viewBox="0 0 220 220" className="ring-chart" role="img" aria-label="已记录支出的分类占比；金额及分类可在下方列表查看">
+      <svg viewBox="0 0 220 220" className="ring-chart" role="img" aria-label={`${label}占比；金额及分组可在下方列表查看`}>
         <circle cx="110" cy="110" r="80" fill="none" stroke="#edf0f6" strokeWidth="24" />
         {segments.map((row, i) => row.length > 0 && <circle key={row.label} cx="110" cy="110" r="80" pathLength="100" fill="none"
           stroke={row.color} strokeWidth={active === i ? 30 : 24} strokeDasharray={`${row.length} ${100 - row.length}`}
@@ -33,21 +33,21 @@ export function RingChart({ rows, currency }) {
           <title>{row.label}：{row.amount} {currency}</title>
         </circle>)}
       </svg>
-      <div className="ring-center" aria-hidden="true"><span>{item ? item.label : '支出分类'}</span><strong>{item ? item.amount : rows.length}</strong><small>{item ? currency : '个已记录分类'}</small></div>
+      <div className="ring-center" aria-hidden="true"><span>{item ? item.label : label}</span><strong>{item ? item.amount : rows.length}</strong><small>{item ? currency : '个已记录分组'}</small></div>
     </div>
-    <div className="chart-legend" aria-label="选择支出分类">
+    <div className="chart-legend" aria-label={`选择${label}`}>
       {segments.map((row, i) => <button key={row.label} type="button" aria-pressed={selected === i}
         onPointerEnter={() => setHovered(i)} onPointerLeave={() => setHovered(null)}
         onFocus={() => setHovered(i)} onBlur={() => setHovered(null)}
         onClick={() => { setSelected(selected === i ? null : i); setHovered(null); }}>
         <span className="legend-dot" style={{ background: row.color }} /><span>{row.label}</span><strong>{row.amount}</strong>
       </button>)}
-      <p className="muted">悬停查看 · 点击固定分类，再次点击取消</p>
+      <p className="muted">悬停查看 · 点击固定分组，再次点击取消</p>
     </div>
   </div>;
 }
 
-export function DayChart({ rows, currency, period }) {
+export function DayChart({ rows, currency, period, cashFlow = '支出' }) {
   const [selected, setSelected] = useState(0);
   const [hovered, setHovered] = useState(null);
   const points = dayColumns(rows, period.start, period.end);
@@ -55,8 +55,8 @@ export function DayChart({ rows, currency, period }) {
   const item = points[active];
   const selectedLabel = item ? `${item.label} · ${item.amount} ${currency}` : '暂无数据';
   return <div className="day-chart">
-    <div className="chart-readout"><span>已记录支出</span><strong>{selectedLabel}</strong></div>
-    <svg viewBox="0 0 420 220" role="img" aria-label={`每日已记录支出，横轴日期，纵轴相对金额；${selectedLabel}`}>
+    <div className="chart-readout"><span>已记录{cashFlow}</span><strong>{selectedLabel}</strong></div>
+    <svg viewBox="0 0 420 220" role="img" aria-label={`每日已记录${cashFlow}，横轴日期，纵轴相对金额；${selectedLabel}`}>
       <text x="44" y="17" className="axis-label">金额（{currency}）</text>
       {[36, 107, 178].map(y => <line key={y} x1="44" y1={y} x2="394" y2={y} className="chart-gridline" />)}
       <text x="32" y="182" textAnchor="end" className="axis-label">0</text>
@@ -65,7 +65,7 @@ export function DayChart({ rows, currency, period }) {
         onPointerEnter={() => setHovered(i)} onPointerLeave={() => setHovered(null)} onClick={() => setSelected(i)}>
         <rect x={point.x - Math.max(point.width, 8) / 2} y="30" width={Math.max(point.width, 8)} height="152" fill="transparent" />
         <rect x={point.x - point.width / 2} y={178 - point.height} width={point.width} height={point.height} rx="3"
-          fill={active === i ? '#345ec0' : '#9cb3df'} />
+          fill={cashFlow === '收入' ? (active === i ? '#28785b' : '#9bcbb7') : (active === i ? '#345ec0' : '#9cb3df')} />
         <title>{point.label}：{point.amount} {currency}</title>
       </g>)}
       <text x="44" y="205" className="axis-label">{period.start}</text>
@@ -74,6 +74,6 @@ export function DayChart({ rows, currency, period }) {
     <label className="day-picker">查看日期<select value={selected} onChange={event => { setSelected(Number(event.target.value)); setHovered(null); }}>
       {points.map((point, i) => <option key={point.label} value={i}>{point.label} · {point.amount} {currency}</option>)}
     </select></label>
-    <p className="muted">空白日期表示没有记录，不代表零支出。</p>
+    <p className="muted">空白日期表示没有记录，不代表零{cashFlow}。</p>
   </div>;
 }

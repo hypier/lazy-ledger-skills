@@ -70,6 +70,23 @@ test('generated HTML stays inside an opaque sandbox and carries no write bridge'
   assert.doesNotMatch(html, /allow-same-origin|allow-top-navigation|allow-popups/);
 });
 
+test('income composition exposes income charts and details with accurate labels', () => {
+  const lang = 'root = LedgerView([Breakdown("by_income_merchant"), Breakdown("by_income_day"), Transactions("income_transactions"), Transactions("transactions")])';
+  assert.deepEqual(validateLang(lang, 'report').refs, ['by_income_merchant', 'by_income_day', 'income_transactions', 'transactions']);
+  const row = { id: 'salary', occurred_at: '2026-10-01', type: 'income', merchant: '公司', category: '工资', amount: '8000.00', currency: 'CNY' };
+  const html = render({ mode: 'openui', kind: 'report', lang, currency: 'CNY', revision: 1,
+    period: { label: '本月', start: '2026-10-01', end: '2026-10-31' }, coverage: { notice: '仅已记录数据' },
+    datasets: { by_income_merchant: { label: '收入来源', rows: [{ label: '公司', amount: '8000.00' }] },
+      by_income_day: { label: '每日已记录收入', rows: [{ label: '2026-10-01', amount: '8000.00' }] },
+      income_transactions: [row], transactions: [row] } });
+  assert.match(html, /收入来源占比/);
+  assert.match(html, /每日已记录收入/);
+  assert.match(html, /收入明细/);
+  assert.match(html, /收支类型/);
+  assert.match(html, /8000\.00/);
+  assert.doesNotMatch(html, /零支出|支出分类/);
+});
+
 test('packaged generation spec comes from this exact component library', async () => {
   const bundled = JSON.parse(await readFile(new URL('../../../assets/openui/generation.json', import.meta.url)));
   assert.deepEqual(bundled.library, JSON.parse(JSON.stringify(library.toSpec())));
