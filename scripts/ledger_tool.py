@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import re
 import shutil
 import sys
@@ -23,6 +24,10 @@ from ledger_db import (
     read_json,
     write_text_secure,
 )
+from ledger_advice import build_advice
+from ledger_brief import action_items, digest, render_brief
+from ledger_insight import build_findings, find_negative_balances
+from ledger_voice import compose_record
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -154,7 +159,47 @@ TYPE_KEYWORDS = {
 # Reimbursement income phrases. The literal "报销到账" was the only recognised
 # form, so the far more common "报销回来"/"报销了" fell through to expense and
 # silently inflated spending.
-REIMBURSE_INCOME_KEYWORDS = ("报销到账", "报销回来", "报销了", "报销打款", "报销入账", "公司报销")
+REIMBURSE_INCOME_KEYWORDS = (
+    "报销到账",
+    "报销回来",
+    "报销了",
+    "报销打款",
+    "报销入账",
+    # "打过来/转过来了" is money arriving. The position carries the tense: "公司
+    # 打过来" is an arrival, "公司报销" with no arrival word is an expectation.
+    "打过来了",
+    "打过来",
+    "转过来了",
+    "转过来",
+    "转给我了",
+    "打款了",
+    "到账了",
+)
+# A bare "报销" almost never means "the money is here" -- it usually means "this
+# will be reimbursed". Treating it as arrival was invisible but wrong: the taxi
+# fare a user just paid got booked as income, so spending fell instead of rising.
+# Only these explicit past-tense forms count as arrival.
+REIMBURSE_EXPECTED_KEYWORDS = ("报销", "公司报", "要报销", "能报销", "可以报销", "待报销", "事后报销")
+# Money coming *back* to the user, said in ordinary speech rather than accounting
+# words. "垫的800还我了" is the same economic event as "报销回来800": the earlier
+# advance is settled, not a new expense. Without these the row was booked as
+# fresh spending and the period total grew by the amount instead of shrinking.
+REPAYMENT_INCOME_KEYWORDS = (
+    "还我了",
+    "还给我了",
+    "还给我",
+    "退给我了",
+    "退给我",
+    "退回来了",
+    "把钱还了",
+    "已还清",
+    "还清了",
+    "打给我了",
+    "打给我",
+    "转给我",
+    "还回来了",
+    "还回来",
+)
 # Advance/loan language marks money expected back, so it must not be counted as
 # ordinary spending even though cash leaves the account.
 ADVANCE_KEYWORDS = ("垫付", "垫钱", "代付", "代垫", "借出", "借给", "应收")
@@ -179,9 +224,12 @@ METHOD_KEYWORDS = {
     "bank": ["银行卡", "借记卡", "储蓄卡"],
 }
 ACCOUNT_KEYWORDS = {
-    "微信零钱": ["微信零钱"],
-    "支付宝": ["支付宝余额", "余额宝"],
-    "现金": ["现金账户", "现金"],
+    # "微信付的" names a wallet just as clearly as "微信零钱付的". Without the
+    # short forms, the account falls back to the learned default and a stated
+    # account is silently replaced by habit.
+    "微信零钱": ["微信零钱", "微信里", "微信付", "微信买了"],
+    "支付宝": ["支付宝余额", "余额宝", "支付宝付", "支付宝买"],
+    "现金": ["现金账户", "现金付", "现金买", "现金"],
     "信用卡": ["信用卡"],
 }
 TAG_KEYWORDS = {
@@ -989,6 +1037,39 @@ def apply_habit_to_proposal(proposal, habit, *, amount_from_habit=False):
     return proposal
 
 
+# A purchase this large (in yuan) is assumed to leave the wallet it is usually
+# paid from, so picking the account blindly would corrupt a small balance.
+LARGE_EXPENSE_THRESHOLD = 2000.0
+
+
+def affordable_account(ledger, amount):
+    """The visible account with the most headroom, if any can cover ``amount``.
+
+    Used only when the text names no account and the learned default clearly
+    cannot pay. ``account_balances`` returns computed balances (opening plus
+    flows), which is what a card in a real wallet would show.
+    """
+    if not ledger:
+        return None
+    try:
+        amount = float(amount or 0)
+    except (TypeError, ValueError):
+        return None
+    if amount <= 0:
+        return None
+    candidates = [
+        row
+        for row in account_balances(ledger)
+        if not row.get("archived")
+        and row.get("balance", 0) >= amount
+        # A credit card has no balance to overdraw; it is a valid payer.
+        and row.get("type") in {"wechat", "alipay", "cash", "bank", "card", "other"}
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda row: row.get("balance", 0))
+
+
 def apply_usage_defaults(proposal, ledger):
     profile = (ledger_preferences(ledger or {}).get("usage_profile") or {}) if ledger else {}
     defaults = profile.get("defaults") or {}
@@ -998,6 +1079,39 @@ def apply_usage_defaults(proposal, ledger):
         proposal["account"] = defaults["account"]
         if defaults.get("account_id"):
             proposal["account_id"] = defaults["account_id"]
+
+    # The learned default is where small everyday spending happens, not where a
+    # laptop is bought. Paying 8000 out of a 2000 wallet produces a negative
+    # balance, which then hides real problems behind a fake one.
+    #
+    # Only the *learned* default may be corrected. If the text names an account
+    # ("微信付的"), the user has stated a fact -- even an inconvenient one -- and
+    # an advance is deliberately charged where the money actually left from.
+    amount = safe_amount(proposal.get("amount"))
+    if (
+        proposal.get("type") == "expense"
+        and not proposal.get("excluded_from_totals")
+        and not proposal.get("advance")
+        and amount >= LARGE_EXPENSE_THRESHOLD
+        and not proposal.get("account_from_text")
+        and proposal.get("account") == defaults.get("account")
+        and proposal.get("account")
+    ):
+        balances = {row.get("name"): row for row in account_balances(ledger or {})}
+        chosen = balances.get(proposal.get("account"))
+        if chosen is not None and chosen.get("balance", 0) < amount:
+            better = affordable_account(ledger, amount)
+            if better and better.get("name") != proposal.get("account"):
+                proposal["account"] = better.get("name")
+                proposal["account_id"] = better.get("id")
+                proposal["account_reason"] = (
+                    f"默认账户 {chosen.get('name')} 余额不够这笔，改记到 {better.get('name')}"
+                )
+                # Rewrite the payment method too, else the row claims a bank
+                # card paid by WeChat.
+                resolved = ACCOUNT_TYPE_TO_METHOD.get(better.get("type"))
+                if resolved:
+                    proposal["method"] = resolved
     return proposal
 
 
@@ -1395,52 +1509,101 @@ def learn_habits_from_transaction(ledger, tx):
     return updated
 
 
-def classify_event(text):
-    """Decide the economic event once, then derive type and category together.
+def classify_event_detailed(text):
+    """Decide the economic event once and say *why*.
 
-    Returns (tx_type, category, flags, confidence). Type and category used to be
-    inferred independently, which allowed contradictory rows such as
-    ``type=expense`` with ``category=收入``. Deciding the event as a unit keeps
-    the two consistent by construction.
+    Returns a dict with ``event``, ``type``, ``category``, ``flags``,
+    ``confidence`` and ``reasons``. Type and category are derived together so
+    they cannot contradict each other, and every branch records the evidence
+    that fired, which lets the assistant explain a decision instead of
+    asserting it.
 
-    flags may contain ``advance`` (money expected back) and ``reimburse``.
+    ``reasons`` is a list of ``{"rule": ..., "match": ...}`` entries in firing
+    order; the last one is the decisive rule.
     """
-    if any(keyword in text for keyword in REIMBURSE_INCOME_KEYWORDS):
-        # Reimbursement arriving is income, and it settles an earlier advance.
-        return "income", "收入", {"reimburse": True}, 0.95
-    if any(keyword in text for keyword in RED_PACKET_INCOME_KEYWORDS):
-        return "income", "红包", {}, 0.9
-    if any(keyword in text for keyword in RED_PACKET_EXPENSE_KEYWORDS):
-        return "expense", "红包", {}, 0.9
-    if any(keyword in text for keyword in ADVANCE_KEYWORDS):
-        # Advance/loan: cash leaves now but is owed back, so it must not count
-        # as ordinary spending.
-        return "expense", "其他", {"advance": True}, 0.7
+    reasons = []
+
+    def decide(event, tx_type, category, flags=None, confidence=1.0, rule="", match=""):
+        if rule:
+            reasons.append({"rule": rule, "match": match})
+        return {
+            "event": event,
+            "type": tx_type,
+            "category": category,
+            "flags": flags or {},
+            "confidence": confidence,
+            "reasons": reasons,
+        }
+
+    for keyword in REPAYMENT_INCOME_KEYWORDS:
+        if keyword in text:
+            return decide("repayment_arrival", "income", "收入", {"reimburse": True}, 0.9,
+                          "REPAYMENT_INCOME_KEYWORDS", keyword)
+    for keyword in REIMBURSE_INCOME_KEYWORDS:
+        if keyword in text:
+            # Reimbursement arriving is income, and it settles an earlier advance.
+            return decide("reimbursement_arrival", "income", "收入", {"reimburse": True}, 0.95,
+                          "REIMBURSE_INCOME_KEYWORDS", keyword)
+    for keyword in REIMBURSE_EXPECTED_KEYWORDS:
+        if keyword in text:
+            # "打车26，公司报销" is money going out that will come back: an
+            # advance, not income. Getting this backwards moves the period total
+            # in the wrong direction, which is worse than any mis-labelled row.
+            return decide("advance_expected", "expense", "其他", {"advance": True}, 0.75,
+                          "REIMBURSE_EXPECTED_KEYWORDS", keyword)
+    for keyword in RED_PACKET_INCOME_KEYWORDS:
+        if keyword in text:
+            return decide("red_packet_received", "income", "红包", {}, 0.9,
+                          "RED_PACKET_INCOME_KEYWORDS", keyword)
+    for keyword in RED_PACKET_EXPENSE_KEYWORDS:
+        if keyword in text:
+            return decide("red_packet_sent", "expense", "红包", {}, 0.9,
+                          "RED_PACKET_EXPENSE_KEYWORDS", keyword)
+    for keyword in ADVANCE_KEYWORDS:
+        if keyword in text:
+            # Advance/loan: cash leaves now but is owed back, so it must not count
+            # as ordinary spending.
+            return decide("advance_out", "expense", "其他", {"advance": True}, 0.7,
+                          "ADVANCE_KEYWORDS", keyword)
     # An explicit route between two of the user's own accounts is a transfer,
     # even when the wording is "转100到" rather than the literal "还信用卡".
-    if infer_transfer_route(text):
-        return "transfer", "转账", {}, 0.9
+    route = infer_transfer_route(text)
+    if route:
+        return decide("own_account_transfer", "transfer", "转账", {}, 0.9,
+                      "TRANSFER_ROUTE_RE", "->".join(str(part) for part in route if part))
     for tx_type, keywords in TYPE_KEYWORDS.items():
-        if any(keyword in text for keyword in keywords):
-            if tx_type == "income":
-                return tx_type, ("红包" if "红包" in text else "收入"), {}, 1.0
-            if tx_type == "transfer":
-                return tx_type, "转账", {}, 1.0
-            return tx_type, None, {}, 1.0
-    if any(verb in text for verb in TRANSFER_VERBS):
-        return "transfer", "转账", {}, 0.8
-    tx_type = "expense"
+        for keyword in keywords:
+            if keyword in text:
+                if tx_type == "income":
+                    return decide("income", tx_type, ("红包" if "红包" in text else "收入"), {}, 1.0,
+                                  "TYPE_KEYWORDS[income]", keyword)
+                if tx_type == "transfer":
+                    return decide("own_account_transfer", tx_type, "转账", {}, 1.0,
+                                  "TYPE_KEYWORDS[transfer]", keyword)
+                return decide(tx_type, tx_type, None, {}, 1.0, f"TYPE_KEYWORDS[{tx_type}]", keyword)
+    for verb in TRANSFER_VERBS:
+        if verb in text:
+            return decide("own_account_transfer", "transfer", "转账", {}, 0.8, "TRANSFER_VERBS", verb)
     for category in CATEGORY_KEYWORDS:
         if category in text:
-            return tx_type, category, {}, 1.0
+            return decide("spending", "expense", category, {}, 1.0, "CATEGORY_KEYWORDS[exact]", category)
     for category, keywords in CATEGORY_KEYWORDS.items():
-        if any(keyword in text for keyword in keywords):
-            # A category-only cue such as "报销" without arrival language is an
-            # advance awaiting settlement, not a finished expense.
-            if category in INCOME_ONLY_CATEGORIES:
-                return tx_type, "其他", {"advance": True}, 0.7
-            return tx_type, category, {}, 1.0
-    return tx_type, "其他", {}, 1.0
+        for keyword in keywords:
+            if keyword in text:
+                # A category-only cue such as "报销" without arrival language is an
+                # advance awaiting settlement, not a finished expense.
+                if category in INCOME_ONLY_CATEGORIES:
+                    return decide("advance_expected", "expense", "其他", {"advance": True}, 0.7,
+                                  "CATEGORY_KEYWORDS[income-only]", keyword)
+                return decide("spending", "expense", category, {}, 1.0, f"CATEGORY_KEYWORDS[{category}]", keyword)
+    # Nothing matched: the row is still spending, but we say so honestly.
+    return decide("unknown_spending", "expense", "其他", {}, 0.6, "fallback", "no keyword matched")
+
+
+def classify_event(text):
+    """Backwards-compatible tuple form of :func:`classify_event_detailed`."""
+    decision = classify_event_detailed(text)
+    return decision["type"], decision["category"], decision["flags"], decision["confidence"]
 
 
 def infer_type(text):
@@ -1692,7 +1855,10 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
     date_token = extract_date_token(raw_text)
     date_text_removed = raw_text.replace(date_token, " ", 1) if date_token else raw_text
     amount, amount_removed = extract_amount(date_text_removed)
-    tx_type, event_category, event_flags, _event_confidence = classify_event(raw_text)
+    decision = classify_event_detailed(raw_text)
+    tx_type = decision["type"]
+    event_category = decision["category"]
+    event_flags = decision["flags"]
     merchant = infer_merchant(amount_removed, infer_category(raw_text, tx_type), raw_text)
     category = preferred_category(ledger, merchant, event_category or infer_category(raw_text, tx_type))
     if tx_type == "expense" and re.search(r"(?:转账-?转给|转账给|转给)", raw_text):
@@ -1732,12 +1898,25 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
         "tags": tags,
         "note": raw_text,
     }
+    # Say why this event was read the way it was. Without this a user who meant
+    # "a taxi fare my company will reimburse" gets silently booked as income.
+    proposal["event"] = {
+        "name": decision["event"],
+        "confidence": decision["confidence"],
+        "reasons": decision["reasons"],
+    }
+    if decision["reasons"]:
+        last = decision["reasons"][-1]
+        proposal["explained_by"] = f"{last['rule']}: {last['match']}"
     if merchant:
         proposal["merchant"] = merchant
     if method:
         proposal["method"] = method
     if account:
         proposal["account"] = account
+        # Remember that the account came from the sentence, not from habit: a
+        # stated account is a fact and must not be second-guessed later.
+        proposal["account_from_text"] = True
     if event_flags.get("advance"):
         proposal["advance"] = "open"
     apply_habit_to_proposal(proposal, habit, amount_from_habit=amount_from_habit)
@@ -1906,6 +2085,7 @@ def build_transaction_payload(
     relation=None,
     excluded_from_totals=False,
     advance=None,
+    account_reason=None,
 ):
     if amount_value is None:
         raise SystemExit("Amount is required unless --text includes one")
@@ -1959,6 +2139,10 @@ def build_transaction_payload(
         tx["method"] = method
     if account:
         tx["account"] = account
+    if account_reason:
+        # Where the account came from, when it was not simply the default. Kept
+        # on the transaction row so the reply can explain the choice.
+        tx["account_reason"] = account_reason
     if account_id:
         tx["account_id"] = account_id
     if to_account:
@@ -2056,6 +2240,7 @@ def payload_from_proposal(ledger, proposal, args, tx_id=None):
         relation=filled.get("relation"),
         excluded_from_totals=bool(filled.get("excluded_from_totals")),
         advance=filled.get("advance"),
+        account_reason=filled.get("account_reason"),
         tx_id=tx_id,
     )
 
@@ -2439,6 +2624,94 @@ def pct_change(new, old):
     return round((new - old) / old * 100, 1)
 
 
+# --- Ledger axes -----------------------------------------------------------
+# Two questions decide whether a row affects income and expense, and they are
+# independent. Treating them as one question is what scattered the rule across
+# type/advance/excluded_from_totals/relation and made the same check appear in
+# five places.
+#
+#   nature      what the money is: spending, earning, transfer, not_mine, advance
+#   settlement  where it stands: none, pending, settled, written_off
+#
+# These are projections of the stored fields, computed on read, so existing
+# ledgers need no migration.
+
+NATURES = ("spending", "earning", "transfer", "not_mine", "advance")
+SETTLEMENTS = ("none", "pending", "settled", "written_off")
+
+# The single place that answers "does this row count as spending / income?".
+# budget_progress(), brief, and every report read from here instead of repeating
+# their own conditions.
+LEDGER_RULE = {
+    ("spending", "none"): {"expense": True, "income": False},
+    ("spending", "pending"): {"expense": True, "income": False},
+    ("spending", "settled"): {"expense": True, "income": False},
+    ("spending", "written_off"): {"expense": True, "income": False},
+    ("earning", "none"): {"expense": False, "income": True},
+    ("earning", "pending"): {"expense": False, "income": True},
+    ("earning", "settled"): {"expense": False, "income": True},
+    ("earning", "written_off"): {"expense": False, "income": True},
+    ("transfer", "none"): {"expense": False, "income": False},
+    ("transfer", "pending"): {"expense": False, "income": False},
+    ("transfer", "settled"): {"expense": False, "income": False},
+    ("transfer", "written_off"): {"expense": False, "income": False},
+    ("not_mine", "none"): {"expense": False, "income": False},
+    ("not_mine", "pending"): {"expense": False, "income": False},
+    ("not_mine", "settled"): {"expense": False, "income": False},
+    ("not_mine", "written_off"): {"expense": False, "income": False},
+    # An advance is cash that leaves now and comes back. It is not spending
+    # until it is given up on: a written-off advance really is a loss.
+    ("advance", "none"): {"expense": False, "income": False},
+    ("advance", "pending"): {"expense": False, "income": False},
+    ("advance", "settled"): {"expense": False, "income": False},
+    ("advance", "written_off"): {"expense": True, "income": False},
+}
+
+
+def settlement_of(transaction):
+    """Where a row stands: none, pending, settled, or written_off."""
+    if not isinstance(transaction, dict):
+        return "none"
+    if transaction.get("advance") in VALID_ADVANCE_STATES:
+        return {"open": "pending"}.get(transaction["advance"], transaction["advance"])
+    return "none"
+
+
+def nature_of(transaction):
+    """What the money is, independent of where it stands.
+
+    A reimbursement arriving is money coming back rather than earnings; it is
+    represented by an income row whose settlement is 'settled', so it is
+    reported as the return of an advance instead of new income.
+    """
+    if not isinstance(transaction, dict):
+        return "spending"
+    if transaction.get("excluded_from_totals"):
+        return "not_mine"
+    tx_type = transaction.get("type") or "expense"
+    settlement = settlement_of(transaction)
+    if tx_type == "transfer":
+        return "transfer"
+    if tx_type == "income":
+        # Money returning from an advance is not earning, whatever the label.
+        if settlement == "settled" or transaction.get("relation") == "reimbursement":
+            return "advance"
+        return "earning"
+    if tx_type == "expense":
+        if settlement != "none" or transaction.get("relation") == "refund":
+            return "advance" if settlement != "none" else "spending"
+        return "spending"
+    return "spending"
+
+
+def counts_as(transaction, kind):
+    """Ask the rule table whether a row counts as ``expense`` or ``income``."""
+    nature = nature_of(transaction)
+    settlement = settlement_of(transaction)
+    rule = LEDGER_RULE.get((nature, settlement)) or {"expense": False, "income": False}
+    return rule[kind]
+
+
 def summarize(transactions, period=None, previous_transactions=None, previous_period_info=None, category_parents=None):
     totals = {"expense": 0.0, "income": 0.0, "refund": 0.0, "transfer": 0.0}
     by_category = defaultdict(float)
@@ -2465,10 +2738,14 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             invalid_count += 1
             continue
         amount = safe_amount(tx.get("amount"))
-        # An open advance is money owed back, not spending. It is kept out of
-        # the expense total until it is settled (or written off).
-        if tx_type == "expense" and tx.get("advance") == "open":
+        # Ask the rule table instead of re-deriving the conditions here.
+        nature = nature_of(tx)
+        settlement = settlement_of(tx)
+        if not counts_as(tx, "expense") and tx_type == "expense":
             type_counts["advance"] += 1
+            continue
+        if not counts_as(tx, "income") and tx_type == "income":
+            type_counts["advance_returned"] = type_counts.get("advance_returned", 0) + 1
             continue
         type_counts[tx_type] += 1
         if tx_type in totals:
@@ -2757,7 +3034,13 @@ def link_unmatched_refunds(ledger, transactions, period_rows):
             continue
         refund["related_transaction_id"] = expense["id"]
         refund["relation"] = "refund"
-        linked.append({"refund_id": refund.get("id"), "expense_id": expense.get("id")})
+        linked.append(
+            {
+                "refund_id": refund.get("id"),
+                "expense_id": expense.get("id"),
+                "amount": safe_amount(refund.get("amount")),
+            }
+        )
     return linked
 
 
@@ -2823,7 +3106,14 @@ def settle_advances(ledger, transactions, income_rows):
         if advance is None:
             continue
         if apply_advance_settlement(advance, income):
-            linked.append({"income_id": income.get("id"), "advance_id": advance.get("id")})
+            linked.append(
+                {
+                    "income_id": income.get("id"),
+                    "advance_id": advance.get("id"),
+                    "amount": safe_amount(income.get("amount")),
+                    "remaining": advance_remaining(advance),
+                }
+            )
             if advance.get("advance") != "open":
                 advances = [row for row in advances if row is not advance]
     return linked
@@ -2974,6 +3264,12 @@ def render_show(data, currency="CNY"):
             )
         elif pace.get("scope") == "year":
             lines.append(f"按日均推算全年 {format_money(pace['projected_expense'], currency)}")
+    if data.get("findings"):
+        lines.extend(["", "### 值得一说"])
+        for finding in data["findings"]:
+            lines.append(f"- {finding['message']}")
+            if finding.get("action"):
+                lines.append(f"  - {finding['action']}")
     if data.get("insights"):
         lines.extend(["", "### 观察"])
         for item in data["insights"]:
@@ -3094,7 +3390,300 @@ def build_summary(ledger, args, default_range=None):
     data["month_trend"] = month_trend(ledger.get("transactions") or [])
     data["pace"] = spending_pace(period, data.get("daily_average") or 0, data["budgets"])
     data["insights"] = build_insight_lines(data, ledger.get("currency", "CNY"))
+    # Butler findings: things worth saying that a totals table cannot express.
+    data["findings"] = build_findings(
+        ledger,
+        currency=default_currency(ledger.get("currency")),
+        balances=data["accounts"],
+        limit=3,
+    )
     return data
+
+
+def collect_open_items(ledger, currency="CNY"):
+    """Everything the user still owes attention to, from every source.
+
+    These used to live behind separate commands (``advance list``,
+    ``review next``, ``recurring``...), so the person had to ask seven times to
+    find out what needed doing. The butler asks once.
+    """
+    items = []
+    transactions = ledger.get("transactions") or []
+
+    for advance in open_advances(transactions):
+        remaining = advance_remaining(advance)
+        days = days_outstanding(advance)
+        label = advance.get("merchant") or advance.get("note") or advance.get("id")
+        age = f"，已经 {days} 天了" if days is not None and days >= 30 else ""
+        items.append(
+            {
+                "priority": 1,
+                "kind": "advance_open",
+                "transaction_id": advance.get("id"),
+                "say": f"{label} 的 {format_money(remaining, currency)} 还没收回{age}。",
+                "do": "收到就用 advance settle 销掉；要不回来就用 advance writeoff，别一直挂着。",
+                "command": f"ledger advance settle --id {advance.get('id')}",
+            }
+        )
+
+    for refund in unmatched_refunds(transactions, transactions):
+        items.append(
+            {
+                "priority": 1,
+                "kind": "unmatched_refund",
+                "say": (
+                    f"{refund.get('occurred_at', '')[:10]} 的退款 "
+                    f"{format_money(refund.get('amount'), currency)} 还没对上原始支出。"
+                ),
+                "do": "告诉我它退的是哪一笔，我挂回去。",
+                "command": f"ledger update --id {refund.get('id')} --related-id <原支出id>",
+            }
+        )
+
+    queue = ledger.get("review_queue") or {}
+    for key, entry in sorted((queue or {}).items()):
+        if not isinstance(entry, dict) or entry.get("resolved"):
+            continue
+        items.append(
+            {
+                "priority": 1 if entry.get("code") == "category_type_mismatch" else 2,
+                "kind": entry.get("code"),
+                "say": entry.get("message") or f"{entry.get('code')} 待确认",
+                "do": "确认后我改掉。",
+                "command": f"ledger review resolve --id {entry.get('transaction_id')} --code {entry.get('code')}",
+            }
+        )
+
+    for recurring in detect_recurring(transactions):
+        if recurring.get("missing_this_month"):
+            items.append(
+                {
+                    "priority": 2,
+                    "kind": "recurring_missing",
+                    "say": f"{recurring.get('label')} 这个月好像还没记。",
+                    "do": "如果是漏了，补一笔；如果不再发生，忽略即可。",
+                    "command": None,
+                }
+            )
+    return items
+
+
+def days_outstanding(transaction, today=None):
+    """How long ago the money went out, which is what makes an advance urgent."""
+    occurred = transaction.get("occurred_at")
+    if not isinstance(occurred, str):
+        return None
+    try:
+        day = date.fromisoformat(occurred[:10])
+    except ValueError:
+        return None
+    today = today or local_today().date()
+    return (today - day).days
+
+
+def brief_command(args):
+    """Say how things stand, as a person would, instead of printing a table."""
+    ledger = load_ledger(args.ledger, create=False)
+    currency = default_currency(ledger.get("currency"))
+    # A briefing is about now, so default to the current month rather than
+    # everything ever recorded.
+    if not (getattr(args, "month", None) or getattr(args, "start", None) or getattr(args, "end", None) or getattr(args, "range", None)):
+        args.range = "this-month"
+    data = build_summary(ledger, args)
+    findings = build_findings(
+        ledger,
+        currency=currency,
+        balances=data["accounts"],
+        limit=6,
+    )
+    open_items = collect_open_items(ledger, currency)
+    # A stale advance is reported both as a finding and as an open item. Showing
+    # both makes the butler look like it is nagging, so keep the finding's
+    # phrasing and drop the duplicate.
+    stale_ids = {
+        finding.get("transaction_id")
+        for finding in findings
+        if finding.get("kind") == "stale_advance"
+    }
+    open_items = [
+        item
+        for item in open_items
+        if not (item.get("kind") == "advance_open" and item.get("transaction_id") in stale_ids)
+    ]
+    expenses = [
+        tx
+        for tx in ledger.get("transactions") or []
+        if isinstance(tx, dict) and counts_as(tx, "expense") and month_key(tx.get("occurred_at")) == month_key(now_iso())
+    ]
+    advice = build_advice(ledger, expenses, month_key(now_iso()), currency, findings=findings)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "headline": render_brief(data, ledger, currency, findings, open_items)[:1],
+                    "findings": findings,
+                    "open_items": open_items,
+                    "advice": advice,
+                    "totals": data.get("totals"),
+                    "count": data.get("count"),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    for line in render_brief(data, ledger, currency, findings, open_items, advice=advice):
+        print(line)
+
+
+def _record_facts(payload, ledger, currency):
+    """Attach the two axes and the period totals to every row we just wrote."""
+    month = payload.get("month") or month_key(now_iso())
+    after = payload.get("month") or {}
+    for row in payload.get("added") or []:
+        if not isinstance(row, dict):
+            continue
+        row["nature"] = nature_of(row)
+        row["settlement"] = settlement_of(row)
+    return payload
+
+
+def record_command(args):
+    """Write a row the way ``add`` does, then say what it means.
+
+    ``add`` answers "what was stored"; this answers "what did I just do to my
+    money". Same write path, same validation, same duplicate protection -- only
+    the reply differs, which is why the two cannot drift apart.
+    """
+    ledger_before = load_ledger(args.ledger, create=False) if os.path.exists(args.ledger) else None
+    currency = default_currency((ledger_before or {}).get("currency") or args.currency)
+    month = month_key(now_iso())
+    before = month_snapshot(ledger_before, month) if ledger_before else {"count": 0, "totals": {}}
+    before_totals = dict(before.get("totals") or {})
+
+    payload = _capture_add(args)
+    if payload is None:
+        return
+
+    currency = default_currency((load_ledger(args.ledger, create=False) or {}).get("currency"))
+    payload = _record_facts(payload, ledger_before, currency)
+    after = payload.get("month") or {}
+    after_totals = dict(after.get("totals") or {})
+    after_totals["label"] = month
+    payload["before"] = before_totals
+    payload["after"] = after_totals
+
+    event = None
+    rows = payload.get("added") or []
+    if args.text and len(rows) == 1:
+        event = classify_event_detailed(args.text)
+        payload["event"] = event
+
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    ledger_after = load_ledger(args.ledger, create=False)
+    findings = []
+    if len(rows) == 1:
+        findings = _related_findings(ledger_after, rows[0], currency)
+    for line in compose_record(payload, currency, findings=findings):
+        print(line)
+
+
+def _related_findings(ledger, row, currency):
+    """Findings this particular write could plausibly have caused or revealed.
+
+    Reporting everything would make every coffee purchase re-raise last month's
+    stale advance. Only two things are relevant right after a write: a balance
+    that just went negative, and the account the money moved through.
+    """
+    if not isinstance(row, dict):
+        return []
+    balances = account_balances(ledger)
+    findings = find_negative_balances(balances, currency)
+    touched = {row.get("account_id"), row.get("to_account_id")}
+    return [
+        finding
+        for finding in findings
+        if finding.get("account") in {record.get("name") for record in balances if record.get("id") in touched}
+    ]
+
+
+def _capture_add(args):
+    """Run add_transaction and return its JSON payload instead of printing it."""
+    buffer = io.StringIO()
+    original = sys.stdout
+    try:
+        sys.stdout = buffer
+        add_transaction(args)
+    finally:
+        sys.stdout = original
+    text = buffer.getvalue().strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # add printed something other than its payload; pass it through.
+        print(text)
+        return None
+
+
+def digest_command(args):
+    """One report, ready to forward -- this is what a scheduled run prints.
+
+    It shares every number with ``brief`` and differs only in audience: a digest
+    is read away from the conversation, possibly on a phone, so commands and
+    internal vocabulary are dropped and the closing section names only what
+    genuinely needs a decision.
+    """
+    ledger = load_ledger(args.ledger, create=False)
+    currency = default_currency(ledger.get("currency"))
+    if not (args.month or args.start or args.end or args.range):
+        args.range = "this-month"
+    data = build_summary(ledger, args)
+    findings = build_findings(
+        ledger,
+        currency=currency,
+        balances=data["accounts"],
+        limit=6,
+    )
+    open_items = collect_open_items(ledger, currency)
+    stale_ids = {
+        finding.get("transaction_id")
+        for finding in findings
+        if finding.get("kind") == "stale_advance"
+    }
+    open_items = [
+        item
+        for item in open_items
+        if not (item.get("kind") == "advance_open" and item.get("transaction_id") in stale_ids)
+    ]
+    expenses = [
+        tx
+        for tx in ledger.get("transactions") or []
+        if isinstance(tx, dict) and counts_as(tx, "expense")
+    ]
+    advice = build_advice(ledger, expenses, month_key(now_iso()), currency, findings=findings)
+    lines = digest(data, ledger, currency, findings, open_items, advice=advice)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "period": data.get("period"),
+                    "lines": lines,
+                    "totals": data.get("totals"),
+                    "findings": findings,
+                    "open_items": open_items,
+                    "advice": advice,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    print("\n".join(lines))
 
 
 def summary_command(args):
@@ -3846,6 +4435,32 @@ def doctor_report(ledger):
                 bill_months.add(month)
     return {"ok": not issues, "issue_count": len(issues), "issues": issues}
 
+def insight_command(args):
+    """Report what a careful person would notice, with evidence and a next step."""
+    ledger = load_ledger(args.ledger, create=True)
+    findings = build_findings(
+        ledger,
+        currency=default_currency(ledger.get("currency")),
+        limit=getattr(args, "limit", None),
+        balances=account_balances(ledger),
+    )
+    counts = {}
+    for finding in findings:
+        counts[finding["severity"]] = counts.get(finding["severity"], 0) + 1
+    if getattr(args, "json", False):
+        print(json.dumps({"findings": findings, "count": len(findings), "severity_counts": counts}, ensure_ascii=False, indent=2))
+        return
+    if not findings:
+        print("账本很干净，暂时没发现值得说的事。")
+        return
+    labels = {"alert": "要处理", "warn": "留意", "info": "看看", "praise": "不错"}
+    for finding in findings:
+        print(f"[{labels.get(finding['severity'], finding['severity'])}] {finding['message']}")
+        action = finding.get("action")
+        if action:
+            print(f"    → {action}")
+
+
 def doctor_command(args):
     ledger = load_ledger(args.ledger, create=False)
     report = doctor_report(ledger)
@@ -4258,13 +4873,20 @@ def advance_list_command(args):
     if not items:
         print("没有待收的垫付款。")
         return
-    lines = [f"待收垫付 {len(items)} 笔，合计 {format_money(sum(item['remaining'] for item in items), ledger.get('currency'))}"]
+    open_items = [item for item in items if item["advance"] == "open"]
+    lines = [
+        f"待收垫付 {len(open_items)} 笔，合计 {format_money(sum(item['remaining'] for item in open_items), ledger.get('currency'))}"
+    ]
+    states = {"open": "待收", "settled": "已收回", "written_off": "已核销"}
     for item in items:
         date = (item.get("occurred_at") or "")[:10]
         label = item.get("merchant") or item.get("note") or item.get("id")
-        lines.append(
-            f"- {date} {label} 待收 {format_money(item['remaining'], ledger.get('currency'))} · {item.get('id')}"
-        )
+        state = states.get(item["advance"], item["advance"])
+        if item["advance"] == "open":
+            detail = f"待收 {format_money(item['remaining'], ledger.get('currency'))}"
+        else:
+            detail = f"{state} {format_money(item['settled'], ledger.get('currency'))}"
+        lines.append(f"- {date} {label} {detail} · {item.get('id')}")
     print("\n".join(lines))
 
 
@@ -4710,6 +5332,14 @@ def build_parser():
     p_add.add_argument("--allow-duplicate", action="store_true")
     p_add.set_defaults(func=add_transaction)
 
+    p_record = sub.add_parser("record", help="Record a transaction and explain what it means")
+    p_record.add_argument("--ledger", required=True)
+    add_common_tx_flags(p_record, include_text=True)
+    p_record.add_argument("--id", default=None)
+    p_record.add_argument("--allow-duplicate", action="store_true")
+    p_record.add_argument("--json", action="store_true", help="Print the full payload instead of the reply")
+    p_record.set_defaults(func=record_command)
+
     p_parse = sub.add_parser("parse", help="Preview casual text without writing")
     p_parse.add_argument("--text", required=True)
     p_parse.add_argument("--ledger", default=None)
@@ -4910,6 +5540,38 @@ def build_parser():
     p_bud_del.add_argument("--ledger", required=True)
     p_bud_del.add_argument("--id", required=True)
     p_bud_del.set_defaults(func=budget_delete_command)
+
+    p_brief = sub.add_parser("brief", help="How things stand, and what needs doing")
+    p_brief.add_argument("--ledger", required=True)
+    for flag, kwargs in (
+        ("--range", {"choices": RANGE_PRESETS}),
+        ("--month", {}),
+        ("--start", {}),
+        ("--end", {}),
+    ):
+        p_brief.add_argument(flag, **kwargs)
+    p_brief.add_argument("--compare", action="store_true", default=True)
+    p_brief.add_argument("--no-compare", dest="compare", action="store_false")
+    p_brief.add_argument("--json", action="store_true")
+    p_brief.set_defaults(func=brief_command)
+
+    p_digest = sub.add_parser("digest", help="A report ready to forward, for scheduled runs")
+    p_digest.add_argument("--ledger", required=True)
+    for flag, kwargs in (
+        ("--range", {"choices": RANGE_PRESETS}),
+        ("--month", {}),
+        ("--start", {}),
+        ("--end", {}),
+    ):
+        p_digest.add_argument(flag, **kwargs)
+    p_digest.add_argument("--json", action="store_true")
+    p_digest.set_defaults(func=digest_command)
+
+    p_insight = sub.add_parser("insight", help="What a careful person would notice about this ledger")
+    p_insight.add_argument("--ledger", required=True)
+    p_insight.add_argument("--limit", type=int, default=None)
+    p_insight.add_argument("--json", action="store_true")
+    p_insight.set_defaults(func=insight_command)
 
     p_doctor = sub.add_parser("doctor", help="Validate ledger data and report likely duplicates")
     p_doctor.add_argument("--ledger", required=True)

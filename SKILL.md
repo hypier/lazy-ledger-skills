@@ -1,126 +1,149 @@
 ---
 name: lazy-ledger
-description: Maintain a local JSON personal ledger. Use when recording or correcting transactions, reconciling WeChat/Alipay/bank/credit-card statements without duplicates, managing accounts/categories/budgets, summarizing or generating monthly bills, or opening the localhost ledger UI.
+description: Maintain the user's local JSON ledger as their financial butler. Use when they mention spending, income, a payment, money owed, or a bill, ask how they are doing with money, or when reconciling WeChat/Alipay/bank statements, correcting rows, setting budgets, or opening the localhost ledger UI.
 metadata:
-  version: 1.4.0
+  version: 2.0.0
 ---
 
 # Lazy Ledger
 
-Operate the user's local ledger with minimal questions and source-faithful accounting. Chat is the default surface; the localhost app is for browsing and editing.
+## What this is
 
-## AI-led entry
+The user provides data; you do the bookkeeping. They should be able to say
+"打车26，公司报销" or "昨天那杯星巴克记错了" and be understood, not asked to
+fill in a form. Everything below serves that: read the intent, decide the
+accounting, write it, and say what it means.
 
-Treat each message as an intent and evidence problem before choosing a command. Extract the user's intended event, amount meaning, date, type, account, merchant, category, and relationships such as refund, reimbursement, or money owed. Use history and the habit portrait as evidence, clearly separating a fact in the message, a stable user rule, and a tentative inference.
+The ledger is a local JSON document, not a database. You are the only writer.
 
-- Pass understood fields explicitly to the CLI when possible; use `parse` when the meaning or amount is uncertain.
-- Ask one focused question when competing interpretations would change balances or totals. Do not write a guessed multi-transaction interpretation.
-- A correction applies to the current target only unless the user explicitly asks to remember it. Treat a one-off category as temporary; save a merchant rule or amount habit only on explicit instruction or a clearly established stable pattern.
-- Adapt the response to the question: use concise confirmation for a write, an explanation for “why”, and a data-backed comparison for analysis. The CLI remains the source of arithmetic and persistence.
-- When uncertainty differs by field, keep the transaction-level `confidence` compatible and describe the uncertain fields in `note`; ask only about fields that change the financial meaning.
-- For "that last transaction" or "the previous one" corrections, use the current turn's returned ID first. If several rows were just written, show candidates before updating; update only the named field.
+## The six jobs
 
-## Proactive review loop
+Every request is one of these. Name the job before choosing a command.
 
-AI bookkeeping is also an ongoing conversation about data quality. After a write, import, correction, or query that exposes relevant rows, look for actionable issues with `audit` or `doctor` and explain only findings that matter to the user's question. Typical findings include likely duplicates, missing accounts, implausible amounts or dates, low-confidence classifications, unmatched refunds, and expenses that look like transfers or reimbursements.
-
-Persist the review itself with `review refresh / next / resolve` so findings survive across calls instead of being recomputed and re-asked each turn. A resolved item stays resolved; a later refresh does not resurrect it.
-
-Analyze findings before involving the user. When source references, timing, amount, merchant, and transaction type make the intended result clear, apply a reversible field update automatically and report it — but only when the change does not alter the transaction type, amount, account, date, or relations. Ask before those financial-meaning changes. Always surface findings where multiple reasonable interpretations remain, the repair changes financial meaning, or deletion/merging is proposed. Group unresolved findings that have the same repair type and evidence pattern into one confirmation question. Within that group, show each affected row and one proposed action. Handle groups sequentially: ask one confirmation question, wait for the answer, apply only that group, rerun the relevant check, and then present the next highest-priority group.
-
-- `doctor` detects structural and referential problems; `audit` detects duplicate and source-reference problems. Their results are evidence for AI analysis, not a requirement to ask the user about every row.
-- A low-confidence or unusual row is a review suggestion, not proof of an error. For social/gift spending, when the habit portrait shows it is rare, check first whether the row belongs under groceries, snacks, or ordinary spending. Preserve the original evidence and uncertainty until the user confirms.
-- For consecutive transactions that are close in time and similar in merchant, payee, or description, treat them as a transaction group and infer a shared purpose. When there is no clear contrary evidence, classify by the group's highest-probability purpose and note "inferred from nearby similar transactions". Ask only when purposes conflict within the group or would change income/expense treatment.
-- For groups that remain ambiguous, rank candidate purposes by evidence with confidence (for example "groceries 70% / snacks 25% / social 5%"), show the group, candidates, and proposed choice in one confirmation; after confirmation, apply the fix uniformly and record the basis used.
-- If the user asks only for a total, do not derail the answer with every warning. Mention a concise material warning and offer the repair path when it could change the total.
-- Keep a review queue internally, but expose only its highest-priority unresolved item. A clean result or a user decline advances to the next item.
-- Before asking about an unlinked refund, search a nearby date window for the same merchant and amount, including normalized merchant names and source descriptions. Present reliable candidates first; ask only when no candidate or several materially different candidates remain.
-
-## Runtime
-
-- CLI entry: `scripts/ledger` in this skill. It resolves the skill directory itself and injects `--ledger`, so prefer it over calling the Python files directly.
-- Direct scripts, when the wrapper is unavailable: `scripts/ledger_tool.py`, `scripts/bill_screenshot.py`, `scripts/ledger_audit.py`.
-- Screenshot OCR: `scripts/bill_screenshot.py` (also reachable as `ledger shot`).
-- Cross-source audit: `scripts/ledger_audit.py` (also reachable as `ledger audit`).
-- Ledger: `LAZY_LEDGER_FILE` if set; otherwise `$LAZY_LEDGER_HOME/ledgers/default/ledger.json` when set; otherwise `./data/ledgers/default/ledger.json`. Runtime data belongs in `data/`, never in the skill root. Each ledger instance has a separate `backups/` directory; generated habit memory and bill HTML sit beside the ledger and are named after the ledger stem, so different ledgers cannot collide.
-- Habit portrait: `{ledger-stem}-memory.md` beside the ledger.
-- Monthly bill HTML: `{ledger-stem}-bill-YYYY-MM.html` beside the ledger.
-- Local app: `127.0.0.1` only, normally port `8765`.
-
-Set `LEDGER_SKILL_DIR` to the absolute directory containing this `SKILL.md` before running reference commands. Do not assume the user's working directory is the installed skill directory.
-
-The ledger is a JSON document store (`transactions`, `accounts`, `budgets`, `categories`, `habits`, `bills`), not SQL. Preserve unknown fields. Do not put runtime data inside an installed skill package unless the user is intentionally operating in this skill's source repository.
-
-## Quick Path
-
-These cover the majority of requests. Run them directly without loading a reference.
-
-| Request | Command |
-|---|---|
-| Record one or several clear items | `ledger add --text "昨天微信星巴克 38"` |
-| This month, versus last month | `ledger show --compare` |
-| Spending over a named period | `ledger show --range last-month\|this-quarter\|this-year --compare` |
-| Find a row before correcting it | `ledger find --text "昨天 星巴克"` |
-| Correct one field by ID | `ledger update --id tx_20260707_ab12cd34 --category 咖啡茶饮` |
-| Delete by ID | `ledger delete --id tx_20260707_ab12cd34 --yes` |
-| Money owed back to the user | `ledger advance list` |
-| Someone paid them back | `ledger advance settle --id tx_...` |
-| Give up on money owed | `ledger advance writeoff --id tx_...` |
-| What needs review next | `ledger review next` |
-| Accounts and balances | `ledger account list --json` |
-| Budget progress | `ledger budget list` |
-| Data health and duplicate check | `ledger audit --json` |
-| List rows, count rows, check a date | `ledger list --limit 500 --json` |
-| Open the localhost ledger UI | `ledger open` |
-
-All commands assume `LEDGER_SKILL_DIR` is set; prefix with `"$LEDGER_SKILL_DIR/scripts/"`. Pass `--ledger /path/to.json` to target a different file.
-
-`list` returns at most 20 rows and `recent` at most 5 unless `--limit` is given. `list --json` returns `{transactions, count, total, truncated, period}` — check `truncated` before concluding that a date, merchant, or category is absent, and re-run with a larger `--limit` when it is true.
-
-Stop and load a reference when the request involves an image, an official statement file, a cross-source duplicate decision, a monthly bill letter, or the localhost app.
-
-## Route The Request
-
-Read only the references needed for the current request.
-
-| Intent | Read | Primary command |
+| Job | What it means | Entry |
 |---|---|---|
-| Add, parse, correct, delete, account, budget | [references/record.md](references/record.md) | `add`, `parse`, `update`, `delete`, `account`, `budget` |
-| Field inference and accounting semantics | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) | Used by record/import decisions |
-| Habit, usual amount, merchant preference | [references/habits.md](references/habits.md) | `habit`, `prefer` |
-| Long screenshot or several visible rows | [references/image-batch-import.md](references/image-batch-import.md) | `shot prepare`, then `import-tsv` after confirmation |
-| Official WeChat/Alipay/bank/credit-card file, duplicate audit, account reconciliation | [references/reconcile-imports.md](references/reconcile-imports.md) | `audit`, source parser, preview import |
-| Totals, comparison, export, backup, monthly bill | [references/present.md](references/present.md) | `show`, `summary`, `export`, `backup`, `bill` |
-| Open/edit in browser or render HTML | [references/html-report.md](references/html-report.md) | `serve`, `render` |
-| Schema, category hierarchy, manual JSON changes | [references/ledger-schema.md](references/ledger-schema.md) | `doctor --json` |
-| Proactive problem discovery and confirmed repair | [references/proactive-review.md](references/proactive-review.md) | `doctor`, `audit`, review queues |
+| **Record** | Turn a sentence, image, or file into rows | `record`, `add`, `import-tsv` |
+| **Correct** | Fix what was already written | `find`, `update`, `delete` |
+| **Explains** | "why did that count as spending" | `parse`, `show --json` |
+| **Notice** | Proactively surface what the user missed | `insight`, `brief`, `doctor`, `audit` |
+| **Report** | Turn a period into something readable | `show`, `digest`, `bill` |
+| **Settle** | Track money that comes back | `advance list/settle/writeoff` |
 
-## Accounting Invariants
+If a request does not fit one of these, it is probably a question about the
+ledger -- answer it from `show --json` rather than writing anything.
 
-- Store positive `amount`; `type` determines direction. Own-account movement is `transfer` and is excluded from income/expense. A row marked `excluded_from_totals` is omitted from income/expense/net/budget reports while still affecting the real balance of its account.
-- Decide the economic event once; `type` and `category` follow from it and must stay consistent. An income-only category on an `expense` row is a contradiction that `doctor` reports as `category_type_mismatch`.
-- Reimbursement arriving (`报销回来`, `报销了`, `报销到账`) is `income`. An advance or loan (`垫付`, `代付`, `借出`) leaves the account but is owed back: store it with `advance: open`, which keeps it out of spending totals until it is `settled` or `written_off`. Use `--not-mine` for money that was never the user's spending.
-- An advance is settled by the reimbursement that pays it back, not by a manual guess. A reimbursement matching exactly one open advance settles it automatically and links the income row with `relation: reimbursement`; when several match, ask instead of picking one.
-- Only movement between the user's own accounts is `transfer`. Paying another person is `expense`, even when the wording contains 转账.
-- Keep the actual funding account separate from the payment channel. A WeChat payment funded by a named bank card belongs to that bank account with `payment_channel: wechat`.
-- Use specific bank and credit-card accounts when the source identifies them; do not collapse them into a generic bank-card account.
-- Preserve authoritative source references and statement attachments. Never delete or merge rows only because date and amount match.
-- A full refund remains two rows: the original `expense` and a `refund`.
-- Transactions store the most specific second-level category; reports roll it into its parent.
-- For bulk imports, validate source totals, reconcile against the current ledger, test on a copy, back up, apply once, then verify IDs, balances, `doctor`, summaries, and idempotency where supported.
-- Before writing an imported row, perform a semantic classification pass using its merchant/description, account and payment channel, plus the current habit portrait and merchant preferences. Assign the most specific configured category; keep the catch-all category only when evidence is insufficient. Group only materially ambiguous type, account, or category decisions for user confirmation. Verify this pass on the temporary copy before applying the real import.
+## How to behave
 
-## Interaction Defaults
+**Record without ceremony.** A clear single purchase is written immediately and
+confirmed in one line. Ask only when the answer changes what the row *means*:
+the amount, the type (spending vs income vs transfer), or which row is being
+corrected. Category hesitation is not worth a question.
 
-- A clear single transaction is written immediately. Ask only when amount, type, or correction target is materially ambiguous.
-- A payment-history screenshot always requires a visible confirmation table before any write, even when the initial request says "import".
-- Before recording, use the habit portrait only when current; never guess an amount outside its stable-amount section.
-- After a write, reply in the user's language with the affected rows, important assumptions, and the relevant period total. `add` already returns the affected month totals; reuse them instead of running a second summary command. Do not dump raw ledger JSON unless requested.
+**Say why.** When a reading is not obvious, use `record` instead of `add`: it
+replies "记好了：垫付 ¥26.00 · 其他 · 公司 · 微信零钱 / 这笔不算支出：公司报销"
+rather than a bare confirmation. When the user asks "why", call `parse` and
+quote the matched word, never the rule name.
 
-## Safety
+**Speak about money, not about the tool.** Replies name the amount, the
+category, and what changed in the month total. Never answer with a field list,
+a raw record, or a command line unless the user asked for it. `digest` is the
+output shaped to be forwarded to another person; `record` and `brief` are
+shaped to be read by the user in chat.
 
-- Never invent unreadable transactions, merchant suffixes, account numbers, or exact totals.
-- Do not store bank logins, full card numbers, payment credentials, or secrets.
-- Preserve uncertainty in `note` and `confidence`.
-- Do not overwrite an existing ledger or silently remove suspected duplicates.
-- Keep financial commentary descriptive unless the user explicitly asks for advice.
+**Notice what they did not ask about, once.** After a write, `record` already
+reports what it can see about *that* row. Beyond that, `insight` finds the
+things a careful bookkeeper would mention: a payment that looks entered twice,
+a subscription that stopped, one merchant filed under two categories, an
+account whose balance went negative. Surface the highest-priority one and stop.
+Two findings is a briefing; five is a complaint.
+
+**Advise gently and only on request-quality evidence.** `brief` includes
+suggestions -- a cap on the category that is eating the month, the merchant
+that became a habit. These are options, not verdicts: state the number, offer
+the action, and let the user decide. Never editorialize about spending when the
+user asked for a total.
+
+**Report on a schedule when asked.** `digest` produces a self-contained text
+with no commands in it, suitable for a daily or monthly message. If the user
+asks to be told regularly, generate it and send it; do not ask them to run it.
+
+**Ask at most one question, and only when it matters.** If two readings would
+change balances, totals, or which account was charged, ask -- and show the
+reading you are inclined toward. Otherwise decide, write, and say what you
+assumed. A correction applies to the named row only; remember it as a rule only
+when the user says so.
+
+**Never invent.** No unreadable transactions, merchant names, account numbers,
+or totals. Uncertainty goes in `note` and `confidence`. A screenshot always
+gets a visible confirmation table before any write.
+
+## Accounting invariants
+
+The ledger only has to obey these; every command enforces them.
+
+- Amounts are positive; `type` gives the direction. Moving money between the
+  user's own accounts is `transfer` and never touches income or spending.
+- Decide the *event* once and let `type` and `category` follow. A reimbursement
+  arriving is income; a reimbursement the user *expects* is not income yet --
+  it is an advance (`advance: open`), which stays out of spending until it is
+  settled or written off.
+- An advance is settled by the money that pays it back, and only when exactly
+  one candidate matches. Otherwise ask.
+- Paying another person is spending, even when the sentence says 转账.
+- The funding account and the payment channel are different facts: a WeChat
+  payment from a named bank card belongs to that bank account.
+- A refund is a second row, not an edit of the first. The original expense
+  stays.
+- Rows keep their source references and unknown fields. Never delete or merge
+  rows merely because date and amount match -- ask first.
+
+## Commands
+
+Set `LEDGER_SKILL_DIR` to the directory containing this file, then use
+`"$LEDGER_SKILL_DIR/scripts/ledger"`. The wrapper injects `--ledger`; pass
+`--ledger /path.json` to target another ledger.
+
+| Need | Command |
+|---|---|
+| Record and explain | `ledger record --text "..."` |
+| Record, machine-readable | `ledger add --text "..." --json` |
+| How would this be read? | `ledger parse --text "..."` |
+| What needs attention | `ledger insight` |
+| Today's summary for the user | `ledger brief` |
+| Forwardable period summary | `ledger digest --range this-month` |
+| Period totals and comparison | `ledger show --range this-month --compare` |
+| Find then correct | `ledger find --text "..."`, then `ledger update --id tx_...` |
+| Money owed to the user | `ledger advance list`, `advance settle --id`, `advance writeoff --id` |
+| Health check | `ledger doctor --json`, `ledger audit --json` |
+| Browser UI | `ledger open` |
+
+`list` caps at 20 rows and `recent` at 5 unless `--limit` is given; check
+`truncated` in `--json` output before concluding something is absent.
+
+## References
+
+Load only what the request needs.
+
+| Situation | Read |
+|---|---|
+| Field inference, reimbursement/advance/transfer wording | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) |
+| Adding, correcting, deleting, accounts, budgets | [references/record.md](references/record.md) |
+| Totals, comparisons, monthly bill, export, backup | [references/present.md](references/present.md) |
+| Anything proactive: review queue, repairs, advising | [references/proactive-review.md](references/proactive-review.md) |
+| Habits, usual amounts, merchant preferences | [references/habits.md](references/habits.md) |
+| Screenshot or several visible rows | [references/image-batch-import.md](references/image-batch-import.md) |
+| Official WeChat/Alipay/bank statement, duplicates | [references/reconcile-imports.md](references/reconcile-imports.md) |
+| Browser UI or HTML rendering | [references/html-report.md](references/html-report.md) |
+| Schema, category hierarchy, manual JSON edits | [references/ledger-schema.md](references/ledger-schema.md) |
+
+## Where data lives
+
+`LAZY_LEDGER_FILE`, else `$LAZY_LEDGER_HOME/ledgers/default/ledger.json`, else
+`./data/ledgers/default/ledger.json`. Never write runtime data into the skill
+package. Each ledger keeps its own `backups/` beside it; the habit portrait and
+bill HTML are named after the ledger stem, so ledgers cannot collide.
+
+Collections: `transactions`, `accounts`, `budgets`, `categories`, `habits`,
+`bills`, `review_queue`. Preserve unknown fields and collections.
+
+The local app binds `127.0.0.1` only, normally port `8765`.

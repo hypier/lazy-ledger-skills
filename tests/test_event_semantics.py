@@ -355,3 +355,86 @@ class LedgerCompatTest(unittest.TestCase):
         ledger.pop("review_queue", None)
         normalized = ledger_tool.normalize_ledger(ledger)
         self.assertEqual(normalized["review_queue"], [])
+
+
+class ReimbursementTenseTest(unittest.TestCase):
+    """"公司报销" means money is coming; "打过来了" means it arrived.
+
+    Treating the bare word 报销 as arrival booked a taxi fare the user had just
+    paid as income, moving the period total in the opposite direction. Wrong
+    direction is worse than a wrong label: it silently understates spending.
+    """
+
+    def test_expectation_is_an_advance_not_income(self):
+        for text in ("打车26，公司报销", "公司报销的车费128", "这个月要报销400"):
+            with self.subTest(text=text):
+                tx_type, _category, flags, _confidence = ledger_tool.classify_event(text)
+                self.assertEqual(tx_type, "expense", text)
+                self.assertTrue(flags.get("advance"), text)
+
+    def test_arrival_language_is_income(self):
+        for text in ("公司把26打过来了", "报销回来26", "报销到账300", "公司打给我26", "报销了500"):
+            with self.subTest(text=text):
+                tx_type, category, _flags, _confidence = ledger_tool.classify_event(text)
+                self.assertEqual(tx_type, "income", text)
+                self.assertEqual(category, "收入", text)
+
+    def test_advance_then_reimbursement_nets_to_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run("init", cwd=tmp)
+            run("add", "--text", "打车26，公司报销", cwd=tmp)
+            run("add", "--text", "公司把26打过来了", cwd=tmp)
+
+            ledger = json.loads(ledger_path(tmp).read_text())
+            advance = next(tx for tx in ledger["transactions"] if tx["type"] == "expense")
+            self.assertEqual(advance.get("advance"), "settled")
+
+            totals = json.loads(run("summary", "--range", "this-month", "--json", cwd=tmp).stdout)["totals"]
+            self.assertEqual(totals["expense"], 0.0)
+            self.assertEqual(totals["income"], 0.0)
+            self.assertEqual(totals["net"], 0.0)
+
+
+class RecordCommandTest(unittest.TestCase):
+    """``record`` writes like ``add`` and answers in words, not JSON."""
+
+    def test_reply_states_what_was_written_and_why(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run("init", cwd=tmp)
+            result = run("record", "--text", "打车26，公司报销", cwd=tmp)
+            self.assertIn("记好了", result.stdout)
+            self.assertIn("垫付", result.stdout)
+            self.assertIn("26", result.stdout)
+            # The reason must quote the word that fired, not the rule name.
+            self.assertIn("报销", result.stdout)
+            self.assertNotIn("REIMBURSE", result.stdout)
+
+    def test_reply_reports_the_settlement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run("init", cwd=tmp)
+            run("record", "--text", "打车26，公司报销", cwd=tmp)
+            result = run("record", "--text", "公司把26打过来了", cwd=tmp)
+            self.assertIn("核销", result.stdout)
+
+    def test_record_and_add_agree_on_the_ledger(self):
+        """Same write path means the two can never drift apart."""
+        with tempfile.TemporaryDirectory() as tmp_a, tempfile.TemporaryDirectory() as tmp_b:
+            run("init", cwd=tmp_a)
+            run("init", cwd=tmp_b)
+            run("record", "--text", "星巴克38", cwd=tmp_a)
+            run("add", "--text", "星巴克38", cwd=tmp_b)
+
+            def shape(path):
+                tx = json.loads(path.read_text())["transactions"][0]
+                return {key: tx[key] for key in ("type", "amount", "category", "merchant", "account")}
+
+            self.assertEqual(shape(ledger_path(tmp_a)), shape(ledger_path(tmp_b)))
+
+    def test_json_flag_returns_the_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run("init", cwd=tmp)
+            payload = json.loads(run("record", "--text", "星巴克38", "--json", cwd=tmp).stdout)
+            self.assertEqual(payload["count"], 1)
+            self.assertEqual(payload["added"][0]["nature"], "spending")
+            self.assertEqual(payload["added"][0]["settlement"], "none")
+            self.assertIn("after", payload)

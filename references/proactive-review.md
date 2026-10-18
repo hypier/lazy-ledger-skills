@@ -40,3 +40,52 @@ If no deterministic repair exists, leave the rows unchanged and ask one focused 
 - After a single clear add: check the new row and obvious duplicate candidates; keep the response concise when clean.
 - Before asking about a refund relation, search nearby dates for the same merchant and amount; ask only if the search is inconclusive. After an import or bulk edit: run the full checks, then present the highest-priority repair group.
 - During a totals query: answer the requested total first, then mention a warning only when it may affect that total or indicates data loss.
+
+## What the butler notices on its own
+
+`ledger_insight.py` runs the detectors; `ledger insight` prints them, `brief`
+folds the top ones into the daily summary, and `record` re-checks only what is
+relevant to the row just written. They differ in what kind of mistake they look
+for:
+
+| Detector | Looks for | Severity |
+|---|---|---|
+| `negative_balance` | a derived balance below zero, which means missing data | alert |
+| `duplicate_suspected` | same amount, same subject, within 48 hours | alert |
+| `stale_advance` | money owed for more than 30 days | warn |
+| `missing_recurring` | a bill present 3+ consecutive months that stopped for 2+ | warn |
+| `category_surge` | a category spending 1.5x last month's count, with the driver named | warn |
+| `outlier` | one purchase 5x the usual single amount | info |
+| `habit_merchant` | one merchant frequent enough that the total is worth seeing | info |
+| `category_drift` | one merchant filed under two categories in different months | info |
+| `missing_details` | rows with no merchant or note | info |
+
+Two rules keep this from becoming nagging:
+
+- **Order by what changes the total.** A possible double entry outranks a
+  suggestion; a suggestion never outranks a contradiction.
+- **Say each thing once.** Advice is dropped when a finding already named the
+  same category or merchant, because repeating it reads as inattention.
+
+## Advice, and its limits
+
+`ledger_advice.py` produces at most two suggestions a month: a cap for the
+category that dominates spending, and an observation about a merchant that
+became a habit. Both are only offered when the month holds at least 8 rows --
+below that, a claim about habits describes the sample, not the person.
+
+The wording matters as much as the rule. Name the number, offer the action, and
+leave the decision open:
+
+> 这个月外食 7 次，¥315.00，占了 89% 的支出。
+> 要不要给外食设个 ¥300.00 的上限？超了我提醒你。
+
+Not `建议合理规划消费`. A suggestion the user cannot act on, or that implies
+they were wrong to spend, is worse than silence.
+
+## Brief versus digest
+
+`brief` is for the user, in chat: it may include `→ ledger ...` commands for
+repairs. `digest` is shaped to be forwarded: no commands, no field names, no
+IDs, and it ends with what (if anything) needs a human. Choose `digest` when
+the user asks to be told on a schedule or asks for something to send.

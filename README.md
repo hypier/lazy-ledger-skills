@@ -4,9 +4,11 @@
 
 ## 目标
 
-把本地 JSON 记账做成更顺手的个人记账系统：
+把本地 JSON 记账做成**以助手为主、用户只提供数据**的个人财务小管家：
 
-- 记账时更懂用户习惯
+- 用户说一句话，助手负责读出意图、判断会计口径、写账、解释结果
+- 记账时更懂用户习惯，不用每笔都确认
+- 主动发现问题（记重了、漏了、分类漂了），一次只提最要紧的那一条
 - 对话里能看懂账，页面里能改账
 - 数据用文档库保存，不引入 SQL
 
@@ -24,6 +26,11 @@
 - 退款关联：唯一确定的退款（90 天内、金额相符、商户相容）在写入时自动挂回原单，记 `related_transaction_id` + `relation: refund`；有多个候选时不猜，留给用户决定
 - 应收垫付：`advance list / settle / writeoff` 管理垫付的三种状态（open / settled / written_off）。未结垫付不计入支出，核销后计入，坏账后转为真实支出——同一笔钱在不同阶段算得清楚
 - 待复核队列：`review refresh / next / resolve` 把低置信度、分类矛盾、未对上退款等发现持久化到账本的 `review_queue`，复核可以跨多次调用继续，已解决的项不会被下次扫描复活
+- 管家入口：`record` 语义化记账（回复带「为什么这么记」和本月总额变化）、`insight` 主动发现、`brief` 今日简报、`digest` 可直接转发的周期汇报；管家模块为 `scripts/ledger_voice.py`（措辞）、`ledger_insight.py`（发现）、`ledger_advice.py`（建议）、`ledger_brief.py`（简报与汇报），均为只读或纯格式化，不改账本
+- 归账两轴：每笔按 `nature`（spending / earning / transfer / not_mine / advance）和 `settlement`（none / pending / settled / written_off）两个正交维度判定，`counts_as` 是唯一的「算不算支出」判据，替代原先散落在 `summarize` 里的多个 if
+- 报销时态：`打车26，公司报销` 是垫付（钱已花出、公司会还），`公司把26打过来了` 才是收入。区分"期待报销"和"报销到账"，避免刚花的钱被记成收入
+- 大额支出归账：默认账户余额不够时改记到能付得起的账户（`LARGE_EXPENSE_THRESHOLD = 2000`），并在回复里说明改到了哪个账户；用户明确说了账户、或者是垫付时，不擅自改
+- 新发现检测：疑似记重（同额同商户 48 小时内）、可能漏记的周期支出（连续 3 个月后中断）、同一商户分类漂移
 - 文档库：`data/ledgers/default/ledger.json` 作为本地 JSON document store（collections：transactions / accounts / budgets / categories / habits / bills / review_queue），带文件锁
 
 ## 工程约定
