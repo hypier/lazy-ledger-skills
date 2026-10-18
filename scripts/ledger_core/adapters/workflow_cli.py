@@ -11,8 +11,84 @@ def read(path):
     return json.loads(target.read_text(encoding="utf-8"))
 
 
+def generation_dispatch(args):
+    """Generation uses saved snapshots, so a layout revision cannot change facts."""
+    import copy
+    import uuid
+    from ..services import generative_ui as ui, ui_generation as generation
+    from ..storage import repository
+    from ..storage.documents import write_text_secure
+    from ..services.profile import runtime_dir
+    if args.action == "ui-spec":
+        print(json.dumps(generation.specification(), ensure_ascii=False, indent=2))
+        return
+    if args.action == "watch":
+        from ..services import preview
+        preview.run(args.ledger, args.id, args.openui or args.html_source, args.session_dir,
+                    mode="openui" if args.openui else "html", refs=args.refs, port=args.port, interval=args.interval)
+        return
+    report = reports.read_archive(args.ledger, args.id)
+    if args.action == "data":
+        kind = report.get("kind", "report")
+        refs = args.refs if args.refs is not None else [ref for spec in ui.catalog()["components"].values() if kind in spec["kinds"] for ref in spec["refs"]]
+        view = ui.project(report, refs=refs)
+        view.pop("lang")
+        view.pop("layout")
+        print(json.dumps(view, ensure_ascii=False, indent=2))
+        return
+    if getattr(args, "archive", False):
+        report = copy.deepcopy(report)
+        report["source_snapshot_id"] = report["id"]
+        report["id"] = "report_" + uuid.uuid4().hex
+        report["digest"] = repository.fingerprint({k: v for k, v in report.items() if k != "digest"})
+    path = Path(args.openui or args.html_source)
+    if path.stat().st_size > 500000:
+        raise ValueError("Generated source exceeds 500000 bytes")
+    source = path.read_text(encoding="utf-8")
+    view = generation.compose(report, lang=source if args.openui else None,
+                              html_source=source if args.html_source else None, refs=args.refs)
+    if args.action == "validate":
+        print(json.dumps({"valid": True, "mode": view["mode"], "refs": list(view["datasets"]),
+                          "snapshot_id": report["id"], "semantic_review_required": view["mode"] == "html"}, ensure_ascii=False))
+        return
+    if args.archive:
+        if args.output or args.replace:
+            raise ValueError("Use either --archive or --output; archives cannot be replaced")
+        print(json.dumps(reports.archive(args.ledger, report, format=args.format, view=view), ensure_ascii=False))
+        return
+    output = ui.document(view) if args.format == "openui" else json.dumps(view, ensure_ascii=False, indent=2) + "\n"
+    if args.replace and (not args.output or args.format != "openui"):
+        raise ValueError("--replace requires --output and openui format")
+    if args.output:
+        target = Path(args.output)
+        resolved = target.resolve()
+        protected = [Path(args.ledger).resolve(), runtime_dir(args.ledger).resolve(), Path(__file__).resolve().parents[3]]
+        if any(resolved == p or p in resolved.parents for p in protected):
+            raise ValueError("Write generated previews outside the ledger, runtime and installed skill")
+        if target.exists():
+            if not args.replace:
+                raise ValueError("Output already exists; use a new path or --replace for an existing preview")
+            # Only replace our preview container, never arbitrary user files.
+            import re
+            import base64
+            match = re.search(r'<script id="ledger-view"[^>]*>([^<]+)</script>', target.read_text(encoding="utf-8"))
+            try:
+                prior = json.loads(base64.b64decode(match[1])) if match else {}
+            except (ValueError, TypeError):
+                prior = {}
+            if not str(prior.get("renderer", "")).startswith("ledger-openui-"):
+                raise ValueError("--replace only accepts an existing Lazy Ledger preview")
+        write_text_secure(target, output)
+        print(json.dumps({"artifact": str(resolved), "mode": view["mode"], "snapshot_id": report["id"]}, ensure_ascii=False))
+    else:
+        print(output, end="")
+
+
 def dispatch(args):
     try:
+        if args.command == "report" and args.action in {"ui-spec", "data", "compose", "validate", "watch"}:
+            generation_dispatch(args)
+            return
         if args.command == "metadata-migrate":
             result = migrations.apply(args.ledger, read(args.input)) if args.apply else migrations.prepare(args.ledger, read(args.input))
         elif args.command == "proposal":
@@ -113,3 +189,29 @@ def add_commands(sub):
     p.add_argument("--id", required=True)
     p.add_argument("--format", choices=["markdown", "json", "html", "openui", "view-json"], default="markdown")
     p.add_argument("--output", help="Write to a new artifact file")
+
+    p = group.add_parser("ui-spec", help="Read the installed component schema and AI generation instructions")
+    p.add_argument("--ledger", help="Accepted for wrapper compatibility; no ledger is read")
+    p.set_defaults(func=dispatch)
+    p = leaf(group, "data", "Export selected public datasets from a saved snapshot")
+    p.add_argument("--id", required=True)
+    p.add_argument("--refs", nargs="+")
+    for name in ("compose", "validate", "watch"):
+        p = leaf(group, name, {"validate": "Validate AI-authored source against an archived snapshot",
+                               "compose": "Render an AI-authored page from a frozen snapshot",
+                               "watch": "Watch authored source and automatically update a local preview"}[name])
+        p.add_argument("--id", required=True, help="Source report snapshot ID")
+        sources = p.add_mutually_exclusive_group(required=True)
+        sources.add_argument("--openui", help="AI-authored OpenUI Lang file")
+        sources.add_argument("--html-source", help="AI-authored self-contained HTML file")
+        p.add_argument("--refs", nargs="+", help="HTML only: explicitly selected data references")
+        if name == "compose":
+            p.add_argument("--format", choices=["openui", "view-json"], default="openui")
+            p.add_argument("--output")
+            p.add_argument("--archive", action="store_true")
+            p.add_argument("--replace", action="store_true", help="Update an existing preview outside authoritative storage")
+
+        if name == "watch":
+            p.add_argument("--session-dir", required=True, help="New private directory for preview and diagnostics")
+            p.add_argument("--port", type=int, default=0, help="Loopback port; 0 selects an available port")
+            p.add_argument("--interval", type=float, default=0.5, help="File sampling interval in seconds")

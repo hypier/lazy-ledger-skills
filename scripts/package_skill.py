@@ -134,12 +134,13 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
                 "scripts/ledger_core/adapters/runtime_cli.py", "scripts/ledger_core/services/reports.py", "scripts/ledger_core/services/remotes.py",
                 "scripts/ledger_core/adapters/api.py", "scripts/ledger_core/services/generative_ui.py",
                 "assets/openui/catalog.json", "assets/openui/renderer.js", "assets/openui/renderer.css",
-                "assets/openui/build.json", "assets/openui/THIRD_PARTY_LICENSES.txt"}
+                "assets/openui/build.json", "assets/openui/THIRD_PARTY_LICENSES.txt",
+                "assets/openui/validate.cjs", "assets/openui/generation.json", "scripts/ledger_core/services/ui_generation.py", "scripts/ledger_core/services/preview.py"}
     missing_packaged = sorted(required - set(included))
     if missing_packaged:
         raise ValidationError("Required runtime files filtered from package: " + ", ".join(missing_packaged))
 
-    # Built assets travel with the Python-only distribution. Prevent a stale
+    # Built assets and the self-contained Node validator ship together. Prevent a stale
     # bundle/catalog combination from silently shipping a fallback-only viewer.
     try:
         asset_root = skill_dir / "assets/openui"
@@ -147,7 +148,7 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
         catalog = json.loads((asset_root / "catalog.json").read_text())
         if manifest["renderer"] != catalog["renderer"]:
             raise ValueError("renderer versions differ")
-        for filename in ("renderer.js", "renderer.css", "catalog.json"):
+        for filename in ("renderer.js", "renderer.css", "catalog.json", "validate.cjs", "generation.json"):
             if hashlib.sha256((asset_root / filename).read_bytes()).hexdigest() != manifest["sha256"][filename]:
                 raise ValueError("stale " + filename)
     except (OSError, ValueError, KeyError) as exc:

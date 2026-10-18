@@ -31,12 +31,12 @@ self-contained, read-only page without a template or server. It contains no
 client-side financial calculations. Chinese long text wraps on narrow screens.
 Choose rich host visualizations only when they improve understanding.
 
-`--format openui` adds an offline interactive snapshot; `--format view-json`
-returns only its minimal display data. Choose and order registered components
-using `--layout`, or let the core select a default based on data and density.
-For layout rules, import previews and archive behavior, read
-[generative-ui.md](generative-ui.md). These components replace fixed-page design,
-not the shared financial calculations. The renderer exposes no write actions.
+For a custom interactive view, read [generative-ui.md](generative-ui.md). The agent
+chooses the structure and authors OpenUI Lang or HTML, using `report ui-spec` and
+selected `report data` from a frozen report. `report validate` returns diagnostics;
+`report compose` renders the corrected source or archives it. Core financial values
+remain authoritative; agent prose and HTML need semantic review. The old
+`--format openui --layout ...` path remains available for simple compositions.
 
 `--archive` saves a unique report directory with data, the rendered result and
 a renderer/digest manifest. The data includes source transaction IDs and rows,

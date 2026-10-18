@@ -1,0 +1,833 @@
+{
+  "version": 1,
+  "library": {
+    "root": "LedgerView",
+    "components": {
+      "LedgerView": {
+        "signature": "LedgerView(children: any[])",
+        "description": "Root of an agent-designed view; no prescribed content or layout"
+      },
+      "Metric": {
+        "signature": "Metric(dataRef: \"totals.income\" | \"totals.expense\" | \"totals.refund\" | \"totals.net\")",
+        "description": "Read-only Metric from a verified snapshot reference"
+      },
+      "Breakdown": {
+        "signature": "Breakdown(dataRef: \"by_category\" | \"by_day\")",
+        "description": "Read-only Breakdown from a verified snapshot reference"
+      },
+      "Budget": {
+        "signature": "Budget(dataRef: \"budgets\")",
+        "description": "Read-only Budget from a verified snapshot reference"
+      },
+      "Transactions": {
+        "signature": "Transactions(dataRef: \"transactions\")",
+        "description": "Read-only Transactions from a verified snapshot reference"
+      },
+      "ImportSummary": {
+        "signature": "ImportSummary(dataRef: \"import_summary\")",
+        "description": "Read-only ImportSummary from a verified snapshot reference"
+      },
+      "ImportRows": {
+        "signature": "ImportRows(dataRef: \"import_rows\")",
+        "description": "Read-only ImportRows from a verified snapshot reference"
+      },
+      "Issues": {
+        "signature": "Issues(dataRef: \"import_issues\")",
+        "description": "Read-only Issues from a verified snapshot reference"
+      },
+      "Text": {
+        "signature": "Text(text: string, tone?: \"neutral\" | \"blue\" | \"green\" | \"coral\" | \"violet\" | \"amber\")",
+        "description": "Agent-authored explanation, not an authoritative financial value"
+      },
+      "Section": {
+        "signature": "Section(title: string, children: any[], tone?: \"neutral\" | \"blue\" | \"green\" | \"coral\" | \"violet\" | \"amber\")",
+        "description": "Titled group; compose any children"
+      },
+      "Stack": {
+        "signature": "Stack(children: any[])",
+        "description": "Vertical composition of any components"
+      },
+      "Columns": {
+        "signature": "Columns(children: any[], columns?: number)",
+        "description": "Responsive equal columns, collapsing on small screens"
+      },
+      "Disclosure": {
+        "signature": "Disclosure(title: string, children: any[])",
+        "description": "Expandable evidence or explanation; works with keyboard"
+      },
+      "Tabs": {
+        "signature": "Tabs(titles: string[], children: any[])",
+        "description": "Switch between children; one title per child"
+      }
+    },
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "LedgerView": {
+          "$ref": "#/$defs/LedgerView"
+        },
+        "Metric": {
+          "$ref": "#/$defs/Metric"
+        },
+        "Breakdown": {
+          "$ref": "#/$defs/Breakdown"
+        },
+        "Budget": {
+          "$ref": "#/$defs/Budget"
+        },
+        "Transactions": {
+          "$ref": "#/$defs/Transactions"
+        },
+        "ImportSummary": {
+          "$ref": "#/$defs/ImportSummary"
+        },
+        "ImportRows": {
+          "$ref": "#/$defs/ImportRows"
+        },
+        "Issues": {
+          "$ref": "#/$defs/Issues"
+        },
+        "Text": {
+          "$ref": "#/$defs/Text"
+        },
+        "Section": {
+          "$ref": "#/$defs/Section"
+        },
+        "Stack": {
+          "$ref": "#/$defs/Stack"
+        },
+        "Columns": {
+          "$ref": "#/$defs/Columns"
+        },
+        "Disclosure": {
+          "$ref": "#/$defs/Disclosure"
+        },
+        "Tabs": {
+          "$ref": "#/$defs/Tabs"
+        }
+      },
+      "required": [
+        "LedgerView",
+        "Metric",
+        "Breakdown",
+        "Budget",
+        "Transactions",
+        "ImportSummary",
+        "ImportRows",
+        "Issues",
+        "Text",
+        "Section",
+        "Stack",
+        "Columns",
+        "Disclosure",
+        "Tabs"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "LedgerView": {
+          "type": "object",
+          "properties": {
+            "children": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "children"
+          ],
+          "additionalProperties": false,
+          "id": "LedgerView",
+          "description": "Root of an agent-designed view; no prescribed content or layout"
+        },
+        "__schema0": {
+          "minItems": 1,
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Metric"
+              },
+              {
+                "$ref": "#/$defs/Breakdown"
+              },
+              {
+                "$ref": "#/$defs/Budget"
+              },
+              {
+                "$ref": "#/$defs/Transactions"
+              },
+              {
+                "$ref": "#/$defs/ImportSummary"
+              },
+              {
+                "$ref": "#/$defs/ImportRows"
+              },
+              {
+                "$ref": "#/$defs/Issues"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/Section"
+              },
+              {
+                "$ref": "#/$defs/Stack"
+              },
+              {
+                "$ref": "#/$defs/Columns"
+              },
+              {
+                "$ref": "#/$defs/Disclosure"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
+              }
+            ]
+          }
+        },
+        "Metric": {
+          "type": "object",
+          "properties": {
+            "dataRef": {
+              "type": "string",
+              "enum": [
+                "totals.income",
+                "totals.expense",
+                "totals.refund",
+                "totals.net"
+              ]
+            }
+          },
+          "required": [
+            "dataRef"
+          ],
+          "additionalProperties": false,
+          "id": "Metric",
+          "description": "Read-only Metric from a verified snapshot reference"
+        },
+        "Breakdown": {
+          "type": "object",
+          "properties": {
+            "dataRef": {
+              "type": "string",
+              "enum": [
+                "by_category",
+                "by_day"
+              ]
+            }
+          },
+          "required": [
+            "dataRef"
+          ],
+          "additionalProperties": false,
+          "id": "Breakdown",
+          "description": "Read-only Breakdown from a verified snapshot reference"
+        },
+        "Budget": {
+          "type": "object",
+          "properties": {
+            "dataRef": {
+              "type": "string",
+              "enum": [
+                "budgets"
+              ]
+            }
+          },
+          "required": [
+            "dataRef"
+          ],
+          "additionalProperties": false,
+          "id": "Budget",
+          "description": "Read-only Budget from a verified snapshot reference"
+        },
+        "Transactions": {
+          "type": "object",
+          "properties": {
+            "dataRef": {
+              "type": "string",
+              "enum": [
+                "transactions"
+              ]
+            }
+          },
+          "required": [
+            "dataRef"
+          ],
+          "additionalProperties": false,
+          "id": "Transactions",
+          "description": "Read-only Transactions from a verified snapshot reference"
+        },
+        "ImportSummary": {
+          "type": "object",
+          "properties": {
+            "dataRef": {
+              "type": "string",
+              "enum": [
+                "import_summary"
+              ]
+            }
+          },
+          "required": [
+            "dataRef"
+          ],
+          "additionalProperties": false,
+          "id": "ImportSummary",
+          "description": "Read-only ImportSummary from a verified snapshot reference"
+        },
+        "ImportRows": {
+          "type": "object",
+          "properties": {
+            "dataRef": {
+              "type": "string",
+              "enum": [
+                "import_rows"
+              ]
+            }
+          },
+          "required": [
+            "dataRef"
+          ],
+          "additionalProperties": false,
+          "id": "ImportRows",
+          "description": "Read-only ImportRows from a verified snapshot reference"
+        },
+        "Issues": {
+          "type": "object",
+          "properties": {
+            "dataRef": {
+              "type": "string",
+              "enum": [
+                "import_issues"
+              ]
+            }
+          },
+          "required": [
+            "dataRef"
+          ],
+          "additionalProperties": false,
+          "id": "Issues",
+          "description": "Read-only Issues from a verified snapshot reference"
+        },
+        "Text": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 6000
+            },
+            "tone": {
+              "type": "string",
+              "enum": [
+                "neutral",
+                "blue",
+                "green",
+                "coral",
+                "violet",
+                "amber"
+              ]
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false,
+          "id": "Text",
+          "description": "Agent-authored explanation, not an authoritative financial value"
+        },
+        "Section": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "children": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "tone": {
+              "type": "string",
+              "enum": [
+                "neutral",
+                "blue",
+                "green",
+                "coral",
+                "violet",
+                "amber"
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "children"
+          ],
+          "additionalProperties": false,
+          "id": "Section",
+          "description": "Titled group; compose any children"
+        },
+        "Stack": {
+          "type": "object",
+          "properties": {
+            "children": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "children"
+          ],
+          "additionalProperties": false,
+          "id": "Stack",
+          "description": "Vertical composition of any components"
+        },
+        "Columns": {
+          "type": "object",
+          "properties": {
+            "children": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          },
+          "required": [
+            "children"
+          ],
+          "additionalProperties": false,
+          "id": "Columns",
+          "description": "Responsive equal columns, collapsing on small screens"
+        },
+        "Disclosure": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "children": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "title",
+            "children"
+          ],
+          "additionalProperties": false,
+          "id": "Disclosure",
+          "description": "Expandable evidence or explanation; works with keyboard"
+        },
+        "Tabs": {
+          "type": "object",
+          "properties": {
+            "titles": {
+              "minItems": 1,
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100
+              }
+            },
+            "children": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "titles",
+            "children"
+          ],
+          "additionalProperties": false,
+          "id": "Tabs",
+          "description": "Switch between children; one title per child"
+        }
+      }
+    }
+  },
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "LedgerView": {
+        "$ref": "#/$defs/LedgerView"
+      },
+      "Metric": {
+        "$ref": "#/$defs/Metric"
+      },
+      "Breakdown": {
+        "$ref": "#/$defs/Breakdown"
+      },
+      "Budget": {
+        "$ref": "#/$defs/Budget"
+      },
+      "Transactions": {
+        "$ref": "#/$defs/Transactions"
+      },
+      "ImportSummary": {
+        "$ref": "#/$defs/ImportSummary"
+      },
+      "ImportRows": {
+        "$ref": "#/$defs/ImportRows"
+      },
+      "Issues": {
+        "$ref": "#/$defs/Issues"
+      },
+      "Text": {
+        "$ref": "#/$defs/Text"
+      },
+      "Section": {
+        "$ref": "#/$defs/Section"
+      },
+      "Stack": {
+        "$ref": "#/$defs/Stack"
+      },
+      "Columns": {
+        "$ref": "#/$defs/Columns"
+      },
+      "Disclosure": {
+        "$ref": "#/$defs/Disclosure"
+      },
+      "Tabs": {
+        "$ref": "#/$defs/Tabs"
+      }
+    },
+    "required": [
+      "LedgerView",
+      "Metric",
+      "Breakdown",
+      "Budget",
+      "Transactions",
+      "ImportSummary",
+      "ImportRows",
+      "Issues",
+      "Text",
+      "Section",
+      "Stack",
+      "Columns",
+      "Disclosure",
+      "Tabs"
+    ],
+    "additionalProperties": false,
+    "$defs": {
+      "LedgerView": {
+        "type": "object",
+        "properties": {
+          "children": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "children"
+        ],
+        "additionalProperties": false,
+        "id": "LedgerView",
+        "description": "Root of an agent-designed view; no prescribed content or layout"
+      },
+      "__schema0": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Metric"
+            },
+            {
+              "$ref": "#/$defs/Breakdown"
+            },
+            {
+              "$ref": "#/$defs/Budget"
+            },
+            {
+              "$ref": "#/$defs/Transactions"
+            },
+            {
+              "$ref": "#/$defs/ImportSummary"
+            },
+            {
+              "$ref": "#/$defs/ImportRows"
+            },
+            {
+              "$ref": "#/$defs/Issues"
+            },
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "$ref": "#/$defs/Section"
+            },
+            {
+              "$ref": "#/$defs/Stack"
+            },
+            {
+              "$ref": "#/$defs/Columns"
+            },
+            {
+              "$ref": "#/$defs/Disclosure"
+            },
+            {
+              "$ref": "#/$defs/Tabs"
+            }
+          ]
+        }
+      },
+      "Metric": {
+        "type": "object",
+        "properties": {
+          "dataRef": {
+            "type": "string",
+            "enum": [
+              "totals.income",
+              "totals.expense",
+              "totals.refund",
+              "totals.net"
+            ]
+          }
+        },
+        "required": [
+          "dataRef"
+        ],
+        "additionalProperties": false,
+        "id": "Metric",
+        "description": "Read-only Metric from a verified snapshot reference"
+      },
+      "Breakdown": {
+        "type": "object",
+        "properties": {
+          "dataRef": {
+            "type": "string",
+            "enum": [
+              "by_category",
+              "by_day"
+            ]
+          }
+        },
+        "required": [
+          "dataRef"
+        ],
+        "additionalProperties": false,
+        "id": "Breakdown",
+        "description": "Read-only Breakdown from a verified snapshot reference"
+      },
+      "Budget": {
+        "type": "object",
+        "properties": {
+          "dataRef": {
+            "type": "string",
+            "enum": [
+              "budgets"
+            ]
+          }
+        },
+        "required": [
+          "dataRef"
+        ],
+        "additionalProperties": false,
+        "id": "Budget",
+        "description": "Read-only Budget from a verified snapshot reference"
+      },
+      "Transactions": {
+        "type": "object",
+        "properties": {
+          "dataRef": {
+            "type": "string",
+            "enum": [
+              "transactions"
+            ]
+          }
+        },
+        "required": [
+          "dataRef"
+        ],
+        "additionalProperties": false,
+        "id": "Transactions",
+        "description": "Read-only Transactions from a verified snapshot reference"
+      },
+      "ImportSummary": {
+        "type": "object",
+        "properties": {
+          "dataRef": {
+            "type": "string",
+            "enum": [
+              "import_summary"
+            ]
+          }
+        },
+        "required": [
+          "dataRef"
+        ],
+        "additionalProperties": false,
+        "id": "ImportSummary",
+        "description": "Read-only ImportSummary from a verified snapshot reference"
+      },
+      "ImportRows": {
+        "type": "object",
+        "properties": {
+          "dataRef": {
+            "type": "string",
+            "enum": [
+              "import_rows"
+            ]
+          }
+        },
+        "required": [
+          "dataRef"
+        ],
+        "additionalProperties": false,
+        "id": "ImportRows",
+        "description": "Read-only ImportRows from a verified snapshot reference"
+      },
+      "Issues": {
+        "type": "object",
+        "properties": {
+          "dataRef": {
+            "type": "string",
+            "enum": [
+              "import_issues"
+            ]
+          }
+        },
+        "required": [
+          "dataRef"
+        ],
+        "additionalProperties": false,
+        "id": "Issues",
+        "description": "Read-only Issues from a verified snapshot reference"
+      },
+      "Text": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 6000
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "neutral",
+              "blue",
+              "green",
+              "coral",
+              "violet",
+              "amber"
+            ]
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false,
+        "id": "Text",
+        "description": "Agent-authored explanation, not an authoritative financial value"
+      },
+      "Section": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "children": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "neutral",
+              "blue",
+              "green",
+              "coral",
+              "violet",
+              "amber"
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "children"
+        ],
+        "additionalProperties": false,
+        "id": "Section",
+        "description": "Titled group; compose any children"
+      },
+      "Stack": {
+        "type": "object",
+        "properties": {
+          "children": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "children"
+        ],
+        "additionalProperties": false,
+        "id": "Stack",
+        "description": "Vertical composition of any components"
+      },
+      "Columns": {
+        "type": "object",
+        "properties": {
+          "children": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "columns": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "required": [
+          "children"
+        ],
+        "additionalProperties": false,
+        "id": "Columns",
+        "description": "Responsive equal columns, collapsing on small screens"
+      },
+      "Disclosure": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "children": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "title",
+          "children"
+        ],
+        "additionalProperties": false,
+        "id": "Disclosure",
+        "description": "Expandable evidence or explanation; works with keyboard"
+      },
+      "Tabs": {
+        "type": "object",
+        "properties": {
+          "titles": {
+            "minItems": 1,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          "children": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "required": [
+          "titles",
+          "children"
+        ],
+        "additionalProperties": false,
+        "id": "Tabs",
+        "description": "Switch between children; one title per child"
+      }
+    }
+  },
+  "prompt": "You are an AI assistant that responds using openui-lang, a declarative UI language. Your ENTIRE response must be valid openui-lang code — no markdown, no explanations, just openui-lang.\n\n## Syntax Rules\n\n1. Each statement is on its own line: `identifier = Expression`\n2. `root` is the entry point — every program must define `root = LedgerView(...)`\n3. Expressions are: strings (\"...\"), numbers, booleans (true/false), null, arrays ([...]), objects ({...}), or component calls TypeName(arg1, arg2, ...)\n4. Use references for readability: define `name = ...` on one line, then use `name` later\n5. EVERY variable (except root) MUST be referenced by at least one other variable. Unreferenced variables are silently dropped and will NOT render. Always include defined variables in their parent's children/items array.\n6. Arguments are POSITIONAL (order matters, not names). Write `SomeComp([children], \"row\", \"l\")` NOT `SomeComp([children], direction: \"row\", gap: \"l\")` — colon syntax is NOT supported and silently breaks\n7. Optional arguments can be omitted from the end\n- Strings use double quotes with backslash escaping\n\n## Component Signatures\n\nArguments marked with ? are optional. Sub-components can be inline or referenced; prefer references for better streaming.\n\nLedgerView(children: any[]) — Root of an agent-designed view; no prescribed content or layout\nMetric(dataRef: \"totals.income\" | \"totals.expense\" | \"totals.refund\" | \"totals.net\") — Read-only Metric from a verified snapshot reference\nBreakdown(dataRef: \"by_category\" | \"by_day\") — Read-only Breakdown from a verified snapshot reference\nBudget(dataRef: \"budgets\") — Read-only Budget from a verified snapshot reference\nTransactions(dataRef: \"transactions\") — Read-only Transactions from a verified snapshot reference\nImportSummary(dataRef: \"import_summary\") — Read-only ImportSummary from a verified snapshot reference\nImportRows(dataRef: \"import_rows\") — Read-only ImportRows from a verified snapshot reference\nIssues(dataRef: \"import_issues\") — Read-only Issues from a verified snapshot reference\nText(text: string, tone?: \"neutral\" | \"blue\" | \"green\" | \"coral\" | \"violet\" | \"amber\") — Agent-authored explanation, not an authoritative financial value\nSection(title: string, children: any[], tone?: \"neutral\" | \"blue\" | \"green\" | \"coral\" | \"violet\" | \"amber\") — Titled group; compose any children\nStack(children: any[]) — Vertical composition of any components\nColumns(children: any[], columns?: number) — Responsive equal columns, collapsing on small screens\nDisclosure(title: string, children: any[]) — Expandable evidence or explanation; works with keyboard\nTabs(titles: string[], children: any[]) — Switch between children; one title per child\n\n## Hoisting & Streaming (CRITICAL)\n\nopenui-lang supports hoisting: a reference can be used BEFORE it is defined. The parser resolves all references after the full input is parsed.\n\nDuring streaming, the output is re-parsed on every chunk. Undefined references are temporarily unresolved and appear once their definitions stream in. This creates a progressive top-down reveal — structure first, then data fills in.\n\n**Recommended statement order for optimal streaming:**\n1. `root = LedgerView(...)` — UI shell appears immediately\n2. Component definitions — fill in as they stream\n3. Data values — leaf content last\n\nAlways write the root = LedgerView(...) statement first so the UI shell appears immediately, even before child data has streamed in.\n## Important Rules\n- Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.)\n\n## Final Verification\nBefore finishing, walk your output and verify:\n1. root = LedgerView(...) is the FIRST line (for optimal streaming).\n2. Every referenced name is defined. Every defined name (other than root) is reachable from root.\n\n- Generate a page for the current question; do not follow a fixed report template.\n- Children are component expressions/references (including nested Stack, Columns, Section, Disclosure and Tabs), never strings.\n- Use only literal props and component references. No Query, Mutation, global state or function/action expressions. Local component controls already work.\n- Use the dataRef values available in this snapshot. Never put invented amounts in text. Text is an agent explanation, not a core metric.\n- Use at most 256 component nodes, 16 nesting levels and 64 children per container. Tabs has one title per child, at most 12.\n- Return OpenUI source without Markdown fences. Validation diagnostics can be used for correction."
+}

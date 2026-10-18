@@ -125,9 +125,15 @@ def html_document(markdown):
     return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>账务报告</title><style>body{max-width:72ch;margin:2rem auto;padding:1rem;font:16px/1.7 system-ui;color:#22332b;background:#fafbf8;overflow-wrap:anywhere}h1{font-size:1.6rem}h2{font-size:1.2rem;margin-top:2rem}main{padding:1rem}a{color:#245f49}</style><main>' + ''.join(content) + '</main></html>'
 
 
-def archive(path, report, *, format="markdown", layout=None):
+def archive(path, report, *, format="markdown", layout=None, view=None):
     check(report)
-    output = render(report, format, layout=layout)
+    if view is not None:
+        if format not in {"openui", "view-json"} or view["snapshot_digest"] != report["digest"]:
+            raise ValueError("Composed view does not match snapshot or format")
+        from . import generative_ui as ui
+        output = ui.document(view) if format == "openui" else json.dumps(view, ensure_ascii=False, indent=2) + "\n"
+    else:
+        output = render(report, format, layout=layout)
     target = runtime_dir(path) / "reports" / report["id"]
     target.mkdir(parents=True, exist_ok=False)
     atomic_write_json(target / "data.json", report)
@@ -138,14 +144,18 @@ def archive(path, report, *, format="markdown", layout=None):
     if format in {"openui", "view-json"}:
         from . import generative_ui as ui
         import hashlib
-        view = ui.project(report, layout)
+        view = view if view is not None else ui.project(report, layout)
         atomic_write_json(target / "view.json", view)
         atomic_write_json(target / "layout.json", view["layout"])
         write_text_secure(target / "view.openui", view["lang"])
         write_text_secure(target / "fallback.md", ui.fallback(view))
+        extra = []
+        if view.get("mode") == "html":
+            write_text_secure(target / "source.html", view["html_source"])
+            extra = ["source.html"]
         manifest.update(renderer=view["renderer"], layout_version=1,
                         files={name: hashlib.sha256((target / name).read_bytes()).hexdigest()
-                               for name in (artifact.name, "view.json", "layout.json", "view.openui", "fallback.md")})
+                               for name in (artifact.name, "view.json", "layout.json", "view.openui", "fallback.md", *extra)})
         try:
             manifest["build"] = ui.asset_bytes()[0]
         except (OSError, ValueError, KeyError):
@@ -176,7 +186,13 @@ def render_archive(path, report_id, format="markdown"):
             if manifest.get("data_digest") != report["digest"] or hashlib.sha256(content).hexdigest() != manifest.get("files", {}).get(filename):
                 raise ValueError("Archived presentation failed its integrity check")
             return content.decode("utf-8")
-        # A view-json archive has no frozen HTML bundle; use its frozen layout.
+        # A view-json archive has no frozen bundle; preserve its authored source.
         view = json.loads(render_archive(path, report_id, "view-json"))
+        if view.get("mode"):
+            from . import ui_generation, generative_ui as ui
+            composed = ui_generation.compose(report, lang=view["lang"] if view["mode"] == "openui" else None,
+                                             html_source=view.get("html_source"),
+                                             refs=list(view["datasets"]) if view["mode"] == "html" else None)
+            return ui.document(composed)
         return render(report, format, layout=view["layout"])
     return render(report, format)

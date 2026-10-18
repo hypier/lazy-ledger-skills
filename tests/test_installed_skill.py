@@ -41,6 +41,14 @@ class InstalledSkillTest(unittest.TestCase):
             run("report", "build", "--start", "2026-10-01", "--end", "2026-10-31", "--format", "openui", "--output", str(rich))
             self.assertIn("ledger-view", rich.read_text())
             self.assertNotIn("交互资源不可用", rich.read_text())
+            frozen = json.loads(run("report", "build", "--start", "2026-10-01", "--end", "2026-10-31", "--format", "view-json", "--archive"))
+            spec = json.loads(run("report", "ui-spec"))
+            self.assertIn("Section", spec["library"]["components"])
+            source_ui = folder / "generated.openui"
+            source_ui.write_text('root = LedgerView([Section("用户问题", [Metric("totals.expense")], "green")])')
+            generated = folder / "generated.html"
+            run("report", "compose", "--id", frozen["report_id"], "--openui", str(source_ui), "--output", str(generated))
+            self.assertIn("ledger-view", generated.read_text())
             run("record", "--text", "咖啡12", "--date", "2026-10-02")
             rows = folder / "rows.tsv"
             rows.write_text("occurred_at\ttype\tamount\tcategory\tmerchant\n2026-10-03\texpense\t5\t交通\t公交\n")

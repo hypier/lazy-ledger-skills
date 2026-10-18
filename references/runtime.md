@@ -121,3 +121,9 @@ an explicit Git restore preview; snapshot current data first. Do not overwrite
 new transactions with an old filesystem backup. Without Git, work from the saved
 bundle in an isolated path, reconcile later operations, and validate before
 switching. Optional-field migration retries return the original receipt.
+
+AI presentation sources are not converter extensions. `report ui-spec` exports
+installed component capabilities; `report compose` validates authored sources
+against a frozen report. Node.js 18+ runs the bundled official parser for AI
+OpenUI input, without npm installation. Open-ended HTML uses a separate sandboxed
+presentation container. See [generative-ui.md](generative-ui.md).

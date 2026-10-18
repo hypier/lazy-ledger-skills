@@ -2,7 +2,7 @@
 name: lazy-ledger
 description: Maintain local personal ledgers as an intelligent financial butler. Use for recording expenses or income, importing and reconciling statements, tracking money owed, managing budgets, explaining financial changes, producing reports, and configuring optional ledger history and backup.
 metadata:
-  version: 3.1.0
+  version: 3.2.1
 ---
 
 # Lazy Ledger
@@ -99,10 +99,15 @@ immutable snapshot. `bill save` retains the legacy narrative-only workflow.
 `render` and `bill render` now use this report service; optional `serve` exposes
 read-only reports and a compatibility API. The three fixed HTML assets are removed. See [present.md](references/present.md).
 
-For optional interactive snapshots, use `report build --format openui` and a
-validated component layout. The installed capability catalog is returned in
-context; OpenUI does not require a model API or a running server. Read
-[generative-ui.md](references/generative-ui.md) only when composing these views.
+For interactive views, the host agent authors OpenUI Lang or self-contained HTML
+for the current question; do not follow fixed page templates. Freeze a report,
+read `report ui-spec` and the selected `report data`, then validate and compose the
+authored source. For iterative design, `report watch` publishes validated changes
+to a local preview; read its status file after edits and stop it when finished.
+User presentation preferences stay in their profile. Financial
+values come from the core; generated prose and HTML need semantic review. OpenUI
+source validation needs Node.js 18+ but no npm, MCP or additional model API.
+Read [generative-ui.md](references/generative-ui.md) only when generating views.
 
 Optional `x_` metadata fields can be registered with `schema register` so every
 role discovers them through context. Changes to financial semantics require a

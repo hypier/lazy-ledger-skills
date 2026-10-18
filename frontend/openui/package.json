@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:charts": "node --test test/charts.test.mjs",
+    "test:generation": "node --test test/generation.test.mjs",
+    "test:unit": "node --test test/charts.test.mjs test/generation.test.mjs test/preview.test.mjs"
   },
   "dependencies": {
     "@openuidev/react-lang": "1.0.1",

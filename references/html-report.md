@@ -1,8 +1,7 @@
 # Optional HTML output and compatibility HTTP API
 
-No fixed HTML assets ship in 3.0. The three old interactive pages have been
-removed. Version 3.1 adds optional OpenUI component assets, with no fixed HTML
-pages. Recording, correction, analysis and reports work without a browser.
+The three old fixed interactive pages have been removed. Version 3.2 adds
+AI-authored OpenUI and HTML sources through a universal presentation container. Recording, correction, analysis and reports work without a browser.
 Use [present.md](present.md) to choose an output that helps the current task.
 
 `report build --start YYYY-MM-DD --end YYYY-MM-DD --format html` renders the
@@ -11,9 +10,9 @@ source snapshot and renderer version. The page is read-only, responsive, fully
 escaped and contains no JavaScript or client-side financial calculations.
 Account balances are the current snapshot's balances, not period-end balances.
 
-`--format openui` is a separate interactive output backed by locally bundled
-OpenUI/React. It embeds its minimal data, renderer and static fallback in one
-HTML file; see [generative-ui.md](generative-ui.md). The compatibility server
+`report compose --openui ...` or `--html-source ...` renders an AI-designed
+page from a frozen snapshot. It embeds selected data, renderer and textual fallback
+in one HTML file; see [generative-ui.md](generative-ui.md). The compatibility server
 continues to serve static reports; OpenUI snapshots need no server or HTTP API.
 
 Compatibility entry points:
@@ -33,7 +32,9 @@ Bind only to `127.0.0.1`. `serve --open` opens a browser and blocks until stoppe
 its first JSON line gives the actual URL. Start a server only for a concrete
 viewing or integration need. If unavailable, return Markdown or a chat summary.
 
-Generate one-off visualizations from the report JSON using host capabilities.
+Generate one-off visualizations from the minimal `report data` projection using
+the workflow in [generative-ui.md](generative-ui.md). Do not pass full private
+report JSON into UI generation.
 Keep their data snapshot, period and coverage; do not place a second accounting
 engine in the view. Custom executable renderers require host isolation and
 verification. A reusable template is optional and should be introduced only

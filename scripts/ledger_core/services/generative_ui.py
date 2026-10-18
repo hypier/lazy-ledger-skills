@@ -1,8 +1,4 @@
-"""Read-only OpenUI projection, bounded composition and offline HTML artifacts.
-
-Only registered data references enter OpenUI Lang. Models never supply amounts,
-executable expressions, tools or HTML. Financial values come from the core snapshot.
-"""
+"""Minimal financial projections and a universal offline presentation host."""
 import base64
 import copy
 import hashlib
@@ -31,7 +27,9 @@ def capabilities():
     except (OSError, ValueError, KeyError):
         value["available"] = False
     value["formats"] = ["openui", "view-json"]
-    value["generation"] = "validated JSON layout compiled to OpenUI Lang; no model API required"
+    value["generation"] = catalog()["generation"]
+    import shutil
+    value["generation"]["node_available"] = bool(shutil.which("node"))
     return value
 
 
@@ -112,11 +110,19 @@ def validate_layout(layout, kind):
     return copy.deepcopy(layout)
 
 
-def project(report, layout=None):
+def project(report, layout=None, *, refs=None):
     from .reports import check
     check(report)
     kind = report.get("kind", "report")
-    layout = validate_layout(default_layout(report) if layout is None else layout, kind)
+    if refs is None:
+        layout = validate_layout(default_layout(report) if layout is None else layout, kind)
+    else:
+        if not isinstance(refs, list) or any(not isinstance(r, str) for r in refs):
+            raise ValueError("Data refs must be an array of strings")
+        available = {ref: name for name, spec in catalog()["components"].items() if kind in spec["kinds"] for ref in spec["refs"]}
+        if any(ref not in available for ref in refs):
+            raise ValueError("Unknown data reference for this snapshot")
+        layout = {"version": 1, "blocks": [{"component": available[r], "ref": r} for r in dict.fromkeys(refs)]}
     datasets = {}
     for block in layout["blocks"]:
         ref = block["ref"]
@@ -178,7 +184,7 @@ def asset_bytes():
     if manifest["renderer"] != catalog()["renderer"]:
         raise ValueError("OpenUI assets version mismatch")
     content = {}
-    for name in ("renderer.js", "renderer.css", "catalog.json"):
+    for name in ("renderer.js", "renderer.css", "catalog.json", "generation.json", "validate.cjs"):
         raw = (ASSETS / name).read_bytes()
         if hashlib.sha256(raw).hexdigest() != manifest["sha256"][name]:
             raise ValueError("OpenUI assets failed integrity check")
@@ -198,10 +204,16 @@ def document(view):
     except (OSError, ValueError, KeyError):
         status = "交互资源不可用，已显示文本快照。"
     # Base64 prevents any ledger string from closing a script tag. The CSP allows
-    # only this exact trusted bundle; no inline event handlers or external I/O.
+    # the trusted bundle plus inspected child scripts by hash. Child scripts
+    # run only in the opaque iframe; resource loads remain CSP-restricted.
     payload = base64.b64encode(json.dumps(view, ensure_ascii=False).encode()).decode()
     script_hash = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
-    policy = f"default-src 'none'; script-src 'sha256-{script_hash}'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'"
+    script_sources = "'sha256-" + script_hash + "'"
+    for child_script in view.get("html_scripts", []):
+        script_sources += " 'sha256-" + base64.b64encode(hashlib.sha256(child_script.encode()).digest()).decode() + "'"
+    frame_policy = "; frame-src 'self' about:" if view.get("mode") == "html" else "; frame-src 'none'"
+    image_policy = "data:" if view.get("mode") == "html" else "'none'"
+    policy = f"default-src 'none'; script-src {script_sources}; style-src 'unsafe-inline'; connect-src 'none'; img-src {image_policy}; font-src 'none'; base-uri 'none'; form-action 'none'" + frame_policy
     return ('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<meta http-equiv="Content-Security-Policy" content="{policy}">'

@@ -1,4 +1,4 @@
-# Lazy Ledger 3.1
+# Lazy Ledger 3.2.1
 
 以智能管家为主的本地记账 skill。用户提供事实和目标，管家负责记账、导入对账、预算、分析、复核与报告；专业角色按任务加载，普通记账不需要启动多个 agent。
 
@@ -14,7 +14,7 @@
 - 可选 Git：建账时询问，不启用/仅本地/私有远程三种模式；私有 GitHub 建仓与核验、手动或已授权的写后同步、离线重试、三方合并、同来源身份统一、冲突计划、历史差异与新设备恢复。
 - 主动复核：写后维护发现事项，支持待补充、忽略、暂缓、解决和按新证据重开；通知回执去重。
 - 按需展示：三个固定 HTML 模板已移除。对话优先；Markdown、JSON、可选只读 HTML 共用报告数据，归档保存不可变快照。旧展示入口已转向新报告服务。
-- OpenUI 展示：按问题组合指标、分类/每日支出、预算、明细和导入复核组件；本地离线 HTML、搜索分页、文本降级和原样归档重放。模型选择组件，核心提供金额。无需配置模型 API、Gateway 或运行前端服务。
+- AI 自主展示：由 IDE 中的 AI 按问题直接生成 OpenUI Lang，支持嵌套布局、说明、分栏、标签页和折叠依据；也可生成独立 HTML/CSS/JS/SVG。组件能力与提示词从实际代码导出，脚本负责数据投影、校验、预览和归档，无需额外模型 API 或 MCP。
 
 ## 使用
 
@@ -30,7 +30,7 @@ scripts/ledger report build --start 2026-10-01 --end 2026-10-31 --format openui 
 
 账本使用 `<文件名主体>-runtime/` 隔离画像、能力、报告和本机设置；建议放在 skill 安装目录之外。未决定 Git 模式时照常记账，不初始化历史或上传。
 
-OpenUI 仅用于只读展示。`--layout` 可指定组件排列，`--format view-json` 导出最小展示数据；`report import-preview --input PLAN --format openui` 查看导入计划。使用和归档约定见 [生成式展示](references/generative-ui.md)。
+AI 生成入口为 `report ui-spec` → 冻结报告 → `report data` → AI 编写源码 → `report validate` → `report compose`。支持 `--openui` 或 `--html-source`；`--replace` 可更新独立预览，`--archive` 保存源码和不可变快照。旧 `--layout` 入口保留兼容。AI OpenUI 校验需要 Node.js 18+，安装版无需 npm；HTML 的内容含义仍需 AI 核对。`report watch` 可监听源码，校验通过后自动更新本地预览，失败时保留上一版并输出诊断；不接管 IDE 的逐 token 输出。具体命令见 [生成式展示](references/generative-ui.md)。
 
 ```sh
 scripts/ledger history configure --mode local

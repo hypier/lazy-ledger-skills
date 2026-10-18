@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -25,8 +26,13 @@ for (const [dir, info] of Object.entries(lock.packages)) {
   }
 }
 await writeFile(`${out}/THIRD_PARTY_LICENSES.txt`, licenses.join('\n\n'));
+await build({ absWorkingDir: root, entryPoints: ['src/generation-cli.jsx'], outfile: `${out}/validate.cjs`,
+  bundle: true, minify: true, format: 'cjs', platform: 'node', target: ['node18'],
+  define: { 'process.env.NODE_ENV': '"production"', 'process.env.OPENUI_TELEMETRY_DISABLED': '"1"', 'process.env.DO_NOT_TRACK': '"1"' } });
+const spec = JSON.parse(execFileSync(process.execPath, [`${out}/validate.cjs`, '--spec'], { encoding: 'utf8' }));
+await writeFile(`${out}/generation.json`, JSON.stringify(spec, null, 2) + '\n');
 const sha256 = {};
-for (const name of ['renderer.js', 'renderer.css', 'catalog.json']) sha256[name] = createHash('sha256').update(await readFile(`${out}/${name}`)).digest('hex');
+for (const name of ['renderer.js', 'renderer.css', 'catalog.json', 'validate.cjs', 'generation.json']) sha256[name] = createHash('sha256').update(await readFile(`${out}/${name}`)).digest('hex');
 const catalog = JSON.parse(await readFile(`${out}/catalog.json`));
 await writeFile(`${out}/build.json`, JSON.stringify({ renderer: catalog.renderer, dependencies, sha256 }, null, 2) + '\n');
 console.log(`Built ${out}`);
