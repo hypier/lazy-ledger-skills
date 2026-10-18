@@ -14,16 +14,19 @@ export function Icon({ name, className = '' }) {
   return <svg className={`icon ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={paths[name] || paths.chart} /></svg>;
 }
 
-export function RingChart({ rows, currency, label = '支出分类' }) {
+const incomePalette = ['#53785a', '#527b88', '#8b8246', '#547d78', '#b88736', '#b65a3d'];
+
+export function RingChart({ rows, currency, label = '支出分类', cashFlow = '支出' }) {
   const [selected, setSelected] = useState(null);
   const [hovered, setHovered] = useState(null);
-  const segments = ringSegments(rows);
+  const segments = ringSegments(rows).map((row, index) => cashFlow === '收入'
+    ? { ...row, color: incomePalette[index % incomePalette.length] } : row);
   const active = hovered ?? selected;
   const item = active == null ? null : segments[active];
   return <div className="ring-layout">
     <div className="ring-graphic">
       <svg viewBox="0 0 220 220" className="ring-chart" role="img" aria-label={`${label}占比；金额及分组可在下方列表查看`}>
-        <circle cx="110" cy="110" r="80" fill="none" stroke="#edf0f6" strokeWidth="24" />
+        <circle cx="110" cy="110" r="80" fill="none" stroke="#e8eae2" strokeWidth="24" />
         {segments.map((row, i) => row.length > 0 && <circle key={row.label} cx="110" cy="110" r="80" pathLength="100" fill="none"
           stroke={row.color} strokeWidth={active === i ? 30 : 24} strokeDasharray={`${row.length} ${100 - row.length}`}
           strokeDashoffset={-row.offset} transform="rotate(-90 110 110)" className="ring-segment"
@@ -65,7 +68,7 @@ export function DayChart({ rows, currency, period, cashFlow = '支出' }) {
         onPointerEnter={() => setHovered(i)} onPointerLeave={() => setHovered(null)} onClick={() => setSelected(i)}>
         <rect x={point.x - Math.max(point.width, 8) / 2} y="30" width={Math.max(point.width, 8)} height="152" fill="transparent" />
         <rect x={point.x - point.width / 2} y={178 - point.height} width={point.width} height={point.height} rx="3"
-          fill={cashFlow === '收入' ? (active === i ? '#28785b' : '#9bcbb7') : (active === i ? '#345ec0' : '#9cb3df')} />
+          fill={cashFlow === '收入' ? (active === i ? '#226247' : '#9db99c') : (active === i ? '#315f70' : '#9fb8bf')} />
         <title>{point.label}：{point.amount} {currency}</title>
       </g>)}
       <text x="44" y="205" className="axis-label">{period.start}</text>

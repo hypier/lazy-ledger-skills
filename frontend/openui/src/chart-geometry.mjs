@@ -1,5 +1,5 @@
 // Geometry only: all displayed amounts remain the core's original strings.
-export const palette = ['#c66b4e', '#6485ca', '#9276b7', '#598b77', '#b48330', '#448b9a'];
+export const palette = ['#b65a3d', '#527b88', '#8b8246', '#53785a', '#b88736', '#547d78'];
 
 export function ringSegments(rows) {
   const weights = rows.map(row => Number(row.amount));

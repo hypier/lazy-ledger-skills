@@ -38,7 +38,7 @@ function BreakdownCard({ dataRef }) {
     </div>
     <p className="muted">{view.period.label} · 金额（{view.currency}）</p>
     {data.rows.length ? mode === 'chart' ? (!dataRef.endsWith('_day') ?
-      <RingChart rows={data.rows} currency={view.currency} label={data.label} /> :
+      <RingChart rows={data.rows} currency={view.currency} label={data.label} cashFlow={cashFlow} /> :
       <DayChart rows={data.rows} currency={view.currency} period={view.period} cashFlow={cashFlow} />) : <ul className="bars">{data.rows.map(row => <li key={row.label}>
       <span>{row.label}</span><div className="bar-track" aria-hidden="true"><div style={{ width: `${Number(row.amount) / max * 100}%` }} /></div>
       <strong>{row.amount}</strong>
@@ -231,10 +231,10 @@ function Content({ view }) {
   if (failed) return null;
   const coverage = view.coverage;
   return <Snapshot.Provider value={view}>
-    <header><div className="eyebrow">LAZY LEDGER / 账务管家</div><h1>{view.period.label}</h1>
-      <p>币种 {view.currency} · 修订 {view.revision} · 生成于 {view.generated_at}</p>
+    <header><div className="brand">账务管家<span>Lazy Ledger</span></div><h1>{view.period.label}</h1>
+      <p className="report-meta"><span>币种 {view.currency}</span><span>修订 {view.revision}</span><span>生成于 {view.generated_at}</span></p>
       <p className="notice">{coverage.notice}</p>
-      {view.kind === 'report' ? <p>已记录 {coverage.recorded_rows} 条 · 未指定账户 {coverage.unassigned_rows} 条 · 期初未确认账户 {coverage.unknown_openings} 个</p> :
+      {view.kind === 'report' ? <p className="coverage-meta">已记录 {coverage.recorded_rows} 条 · 未指定账户 {coverage.unassigned_rows} 条 · 期初未确认账户 {coverage.unknown_openings} 个</p> :
         <p className="notice">{coverage.ready_at_prepare ? '准备时可提交，尚未执行' : '存在未解决事项，不能提交此计划'}</p>}
     </header>
     {view.mode === 'html' ? <section className="html-artifact"><p className="muted">AI 自定义展示 · 数值请结合下方原始快照核对</p>

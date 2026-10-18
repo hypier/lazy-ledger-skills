@@ -13,10 +13,10 @@
     "zod": "4.1.12"
   },
   "sha256": {
-    "renderer.js": "cfc8bdb020eb5da2cf4c98a4684a41ebddac810ed1a49416dda77757b7b61cc5",
-    "renderer.css": "108a1f1c7d5c9ef1d7cf5b13d27928119863e67b0b3953d9b7221b8ba9a99da0",
+    "renderer.js": "47008a460784e8d6671cc472d162f15fc512da6e6a30e5cb3b763b5e2372e754",
+    "renderer.css": "355dda6cc2470d6023dc6cfbdfb322c89ff5576b892b448886045a28d05097fe",
     "catalog.json": "009f2a8b45176a13d97f0c43266578b4dbd651fe4d9f949b4eb26124cdc9a8b3",
-    "validate.cjs": "c50aa735fe2f9ea8aa897026dba55ba7bcb74c3c271021e3985953a04f9d7672",
+    "validate.cjs": "71348d11d86c3d5a4232d704669103ed808d93fef215a339b4d09e34d71780b4",
     "generation.json": "3a06649fbe6bfd1f713069053d5509114dd5a01a8b2a2ae89a0a65bfbba62a02"
   }
 }
