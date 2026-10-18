@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { dayColumns, ringSegments } from './chart-geometry.mjs';
+import { CategoryLabel } from './category-icons.jsx';
+import { displayMoney } from './money-display.mjs';
 
 export function Icon({ name, className = '' }) {
   const paths = {
@@ -16,7 +18,7 @@ export function Icon({ name, className = '' }) {
 
 const incomePalette = ['#53785a', '#527b88', '#8b8246', '#547d78', '#b88736', '#b65a3d'];
 
-export function RingChart({ rows, currency, label = '支出分类', cashFlow = '支出' }) {
+export function RingChart({ rows, currency, label = '支出分类', cashFlow = '支出', categories = false }) {
   const [selected, setSelected] = useState(null);
   const [hovered, setHovered] = useState(null);
   const segments = ringSegments(rows).map((row, index) => cashFlow === '收入'
@@ -33,17 +35,17 @@ export function RingChart({ rows, currency, label = '支出分类', cashFlow = '
           opacity={active != null && active !== i ? .3 : 1}
           onPointerEnter={() => setHovered(i)} onPointerLeave={() => setHovered(null)}
           onClick={() => { setSelected(selected === i ? null : i); setHovered(null); }}>
-          <title>{row.label}：{row.amount} {currency}</title>
+          <title>{row.label}：{displayMoney(row.amount, currency)}</title>
         </circle>)}
       </svg>
-      <div className="ring-center" aria-hidden="true"><span>{item ? item.label : label}</span><strong>{item ? item.amount : rows.length}</strong><small>{item ? currency : '个已记录分组'}</small></div>
+      <div className="ring-center" aria-hidden="true"><span>{item ? item.label : label}</span><strong>{item ? displayMoney(item.amount, currency) : rows.length}</strong>{!item && <small>个已记录分组</small>}</div>
     </div>
     <div className="chart-legend" aria-label={`选择${label}`}>
       {segments.map((row, i) => <button key={row.label} type="button" aria-pressed={selected === i}
         onPointerEnter={() => setHovered(i)} onPointerLeave={() => setHovered(null)}
         onFocus={() => setHovered(i)} onBlur={() => setHovered(null)}
         onClick={() => { setSelected(selected === i ? null : i); setHovered(null); }}>
-        <span className="legend-dot" style={{ background: row.color }} /><span>{row.label}</span><strong>{row.amount}</strong>
+        <span className="legend-dot" style={{ background: row.color }} /><span>{categories ? <CategoryLabel category={row.label} /> : row.label}</span><strong>{displayMoney(row.amount, currency)}</strong>
       </button>)}
       <p className="muted">悬停查看 · 点击固定分组，再次点击取消</p>
     </div>
@@ -56,26 +58,26 @@ export function DayChart({ rows, currency, period, cashFlow = '支出' }) {
   const points = dayColumns(rows, period.start, period.end);
   const active = hovered ?? selected;
   const item = points[active];
-  const selectedLabel = item ? `${item.label} · ${item.amount} ${currency}` : '暂无数据';
+  const selectedLabel = item ? `${item.label} · ${displayMoney(item.amount, currency)}` : '暂无数据';
   return <div className="day-chart">
     <div className="chart-readout"><span>已记录{cashFlow}</span><strong>{selectedLabel}</strong></div>
     <svg viewBox="0 0 420 220" role="img" aria-label={`每日已记录${cashFlow}，横轴日期，纵轴相对金额；${selectedLabel}`}>
-      <text x="44" y="17" className="axis-label">金额（{currency}）</text>
+      <text x="44" y="17" className="axis-label">金额</text>
       {[36, 107, 178].map(y => <line key={y} x1="44" y1={y} x2="394" y2={y} className="chart-gridline" />)}
-      <text x="32" y="182" textAnchor="end" className="axis-label">0</text>
-      <text x="394" y="17" textAnchor="end" className="axis-label">最高 {rows.reduce((top, row) => Number(row.amount) > Number(top) ? row.amount : top, '0.00')}</text>
+      <text x="32" y="182" textAnchor="end" className="axis-label">{displayMoney('0', currency)}</text>
+      <text x="394" y="17" textAnchor="end" className="axis-label">最高 {displayMoney(rows.reduce((top, row) => Number(row.amount) > Number(top) ? row.amount : top, '0.00'), currency)}</text>
       {points.map((point, i) => <g key={point.label} className="day-column"
         onPointerEnter={() => setHovered(i)} onPointerLeave={() => setHovered(null)} onClick={() => setSelected(i)}>
         <rect x={point.x - Math.max(point.width, 8) / 2} y="30" width={Math.max(point.width, 8)} height="152" fill="transparent" />
         <rect x={point.x - point.width / 2} y={178 - point.height} width={point.width} height={point.height} rx="3"
           fill={cashFlow === '收入' ? (active === i ? '#226247' : '#9db99c') : (active === i ? '#315f70' : '#9fb8bf')} />
-        <title>{point.label}：{point.amount} {currency}</title>
+        <title>{point.label}：{displayMoney(point.amount, currency)}</title>
       </g>)}
       <text x="44" y="205" className="axis-label">{period.start}</text>
       <text x="394" y="205" textAnchor="end" className="axis-label">{period.end}</text>
     </svg>
     <label className="day-picker">查看日期<select value={selected} onChange={event => { setSelected(Number(event.target.value)); setHovered(null); }}>
-      {points.map((point, i) => <option key={point.label} value={i}>{point.label} · {point.amount} {currency}</option>)}
+      {points.map((point, i) => <option key={point.label} value={i}>{point.label} · {displayMoney(point.amount, currency)}</option>)}
     </select></label>
     <p className="muted">空白日期表示没有记录，不代表零{cashFlow}。</p>
   </div>;

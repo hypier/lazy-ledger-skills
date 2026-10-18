@@ -215,3 +215,22 @@ Official references: [component definitions](https://www.openui.com/docs/openui-
 [generated prompts](https://www.openui.com/docs/openui-lang/system-prompts),
 [Renderer](https://www.openui.com/docs/openui-lang/renderer),
 [open-ended HTML](https://www.openui.com/docs/agent/guides/open-ended-html).
+
+### Category icons
+
+OpenUI category breakdowns, budget labels, and transaction/import category labels
+include local SVG icons. The original artwork and exact-name presentation aliases
+live in `frontend/openui/src/category-icons.jsx`; all built-in categories and their
+parents have explicit icons. Unknown user-defined categories use a tag icon and
+retain their full text. These aliases do not infer or change accounting categories.
+Merchant and date breakdown labels are not treated as categories. Icons are
+bundled, work offline, and are hidden from assistive technology because the adjacent
+text names the category. Add artwork/aliases in the registry and rebuild the OpenUI
+assets when extending this presentation set; no runtime icon download is needed.
+AI-authored HTML can choose its own inline SVG artwork within the existing sandbox.
+
+Monetary labels use a leading currency symbol (for example `¥8000.00`) without a
+trailing currency code. Preserve the exact decimal string, signs, and precision;
+counts, dates, and percentages are not money. The header gives the full currency
+name to disambiguate shared symbols. Raw snapshot data retains ISO currency codes
+for auditing and interchange. Apply the same convention to AI-authored HTML.

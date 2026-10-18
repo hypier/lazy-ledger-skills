@@ -3,6 +3,8 @@ import { Renderer, createLibrary, createParser, defineComponent } from '@openuid
 import { z } from 'zod/v4';
 import catalog from '../../../assets/openui/catalog.json';
 import { DayChart, RingChart, Icon } from './charts.jsx';
+import { CategoryLabel } from './category-icons.jsx';
+import { displayMoney, currencyName } from './money-display.mjs';
 
 const Snapshot = createContext(null);
 const kinds = { expense: '支出', income: '收入', refund: '退款', transfer: '转账' };
@@ -16,7 +18,7 @@ const useData = ref => {
 function MetricCard({ dataRef }) {
   const [data, view] = useData(dataRef);
   return <section className="card metric" data-component="Metric" data-metric={dataRef.split('.')[1]}>
-    <div className="metric-heading"><h2>{data.label}</h2><Icon name={dataRef.split('.')[1]} /></div><div className="amount">{data.value}<small>{view.currency}</small></div>
+    <div className="metric-heading"><h2>{data.label}</h2><Icon name={dataRef.split('.')[1]} /></div><div className="amount">{displayMoney(data.value, view.currency)}</div>
     <details><summary>金额依据 · {data.evidence.length} 条</summary>
       <ul>{data.evidence.map(id => <li key={id}>{id}</li>)}</ul>
     </details>
@@ -36,12 +38,12 @@ function BreakdownCard({ dataRef }) {
         <button type="button" aria-pressed={mode === 'list'} onClick={() => setMode('list')}>列表</button>
       </div>
     </div>
-    <p className="muted">{view.period.label} · 金额（{view.currency}）</p>
+    <p className="muted">{view.period.label}</p>
     {data.rows.length ? mode === 'chart' ? (!dataRef.endsWith('_day') ?
-      <RingChart rows={data.rows} currency={view.currency} label={data.label} cashFlow={cashFlow} /> :
+      <RingChart rows={data.rows} currency={view.currency} label={data.label} cashFlow={cashFlow} categories={dataRef === 'by_category'} /> :
       <DayChart rows={data.rows} currency={view.currency} period={view.period} cashFlow={cashFlow} />) : <ul className="bars">{data.rows.map(row => <li key={row.label}>
-      <span>{row.label}</span><div className="bar-track" aria-hidden="true"><div style={{ width: `${Number(row.amount) / max * 100}%` }} /></div>
-      <strong>{row.amount}</strong>
+      <span>{dataRef === 'by_category' ? <CategoryLabel category={row.label} /> : row.label}</span><div className="bar-track" aria-hidden="true"><div style={{ width: `${Number(row.amount) / max * 100}%` }} /></div>
+      <strong>{displayMoney(row.amount, view.currency)}</strong>
     </li>)}</ul> : <div className="empty-chart"><Icon name="empty" /><p>本期间没有已记录{cashFlow}。</p></div>}
   </section>;
 }
@@ -49,10 +51,10 @@ function BreakdownCard({ dataRef }) {
 function BudgetCard({ dataRef }) {
   const [data, view] = useData(dataRef);
   return <section className="card wide" data-component="Budget"><h2 className="icon-heading"><Icon name="budget" />预算执行</h2>
-    <p className="muted">实际支出范围：{view.period.label} · {view.currency}。不足整月时，仅比较已选期间。</p>
+    <p className="muted">实际支出范围：{view.period.label}。不足整月时，仅比较已选期间。</p>
     {data.length ? data.map(row => <article className="budget" key={row.id}>
-      <div className="spread"><h3>{row.category}</h3><span>{row.month || '通用预算'}</span></div>
-      <p>已用 <strong>{row.spent}</strong> / 预算 {row.limit} · 剩余 {row.remaining}</p>
+      <div className="spread"><h3><CategoryLabel category={row.category} /></h3><span>{row.month || '通用预算'}</span></div>
+      <p>已用 <strong>{displayMoney(row.spent, view.currency)}</strong> / 预算 {displayMoney(row.limit, view.currency)} · 剩余 {displayMoney(row.remaining, view.currency)}</p>
       <div className="bar-track" role="img" aria-label={row.pct == null ? '预算比例不可计算' : `已用 ${row.pct}%`}>
         <div className={row.over ? 'over' : ''} style={{ width: `${Math.min(100, Math.max(0, row.pct ?? 0))}%` }} />
       </div><p className="muted">{row.pct == null ? '预算为零，比例不可计算' : `已用 ${row.pct}%`}</p>
@@ -82,11 +84,11 @@ function RowsCard({ dataRef }) {
       </select></label>}
     </div>
     <div className="table-wrap"><table><caption>{title} · 显示 {filtered.length} 条，筛选不改变报告指标</caption>
-      <thead><tr>{(importing ? ['来源行', '状态', '日期', '类型', '商户 / 分类', '金额 / 币种', '记录 ID'] : ['日期', '类型', '商户 / 分类', '金额 / 币种', '记录 ID']).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
+      <thead><tr>{(importing ? ['来源行', '状态', '日期', '类型', '商户 / 分类', '金额', '记录 ID'] : ['日期', '类型', '商户 / 分类', '金额', '记录 ID']).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
       <tbody>{visible.map((r, index) => <tr key={`${r.line || r.id}-${index}`}>
         {importing && <><td>{r.line}</td><td><span className="badge" data-state={r.state}>{states[r.state] || r.state}</span></td></>}
         <td>{r.occurred_at.slice(0, 10)}</td><td><span className="badge" data-kind={r.type}>{kinds[r.type] || r.type}</span>{r.excluded && '（不计总额）'}</td>
-        <td>{r.merchant || '未填商户'}<small>{r.category}</small></td><td className="number">{r.amount} {r.currency}</td><td className="record-id">{r.id || '尚未分配'}</td>
+        <td>{r.merchant || '未填商户'}<small><CategoryLabel category={r.category} /></small></td><td className="number">{displayMoney(r.amount, r.currency)}</td><td className="record-id">{r.id || '尚未分配'}</td>
       </tr>)}</tbody></table></div>
     {!visible.length && <p>没有符合条件的记录。</p>}
     <nav className="pager" aria-label={`${title}分页`}>
@@ -232,7 +234,7 @@ function Content({ view }) {
   const coverage = view.coverage;
   return <Snapshot.Provider value={view}>
     <header><div className="brand">账务管家<span>Lazy Ledger</span></div><h1>{view.period.label}</h1>
-      <p className="report-meta"><span>币种 {view.currency}</span><span>修订 {view.revision}</span><span>生成于 {view.generated_at}</span></p>
+      <p className="report-meta"><span>币种 {currencyName(view.currency)}</span><span>修订 {view.revision}</span><span>生成于 {view.generated_at}</span></p>
       <p className="notice">{coverage.notice}</p>
       {view.kind === 'report' ? <p className="coverage-meta">已记录 {coverage.recorded_rows} 条 · 未指定账户 {coverage.unassigned_rows} 条 · 期初未确认账户 {coverage.unknown_openings} 个</p> :
         <p className="notice">{coverage.ready_at_prepare ? '准备时可提交，尚未执行' : '存在未解决事项，不能提交此计划'}</p>}

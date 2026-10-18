@@ -94,3 +94,14 @@ test('packaged generation spec comes from this exact component library', async (
   assert.deepEqual(bundled.library.schema, library.toJSONSchema());
   assert.match(bundled.prompt, /Columns/);
 });
+
+test('metric, budget and detail amounts use symbols while counts and percentages stay numeric', () => {
+  const lang = 'root = LedgerView([Metric("totals.net"), Budget("budgets"), Transactions("transactions")])';
+  const html = render({ mode: 'openui', kind: 'report', lang, currency: 'CNY', revision: 1,
+    period: { label: '本月' }, coverage: { notice: '仅已记录数据', recorded_rows: 1 },
+    datasets: { 'totals.net': { label: '净额', value: '-12.35', evidence: ['a'] },
+      budgets: [{ id: 'b', category: '餐饮', spent: '12.35', limit: '10.00', remaining: '-2.35', pct: 123.5, over: true }],
+      transactions: [{ id: 'a', occurred_at: '2026-10-01', type: 'expense', category: '餐饮', amount: '12.35', currency: 'CNY' }] } });
+  for (const value of ['-¥12.35', '¥12.35', '¥10.00', '-¥2.35', '123.5%', '人民币']) assert.ok(html.includes(value), value);
+  assert.doesNotMatch(html, /CNY|¥123.5%|¥2026/);
+});
