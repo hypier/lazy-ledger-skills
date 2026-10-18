@@ -46,7 +46,9 @@ def git(path, *args, check=True, input=None):
     return result
 
 
-def configure(path, mode, remote=None, private_confirmed=False):
+def configure(path, mode, remote=None, private_confirmed=False, sync_mode="manual"):
+    if sync_mode not in {"manual", "after-write"} or sync_mode == "after-write" and mode != "remote":
+        raise ValueError("Automatic synchronization requires explicit remote mode")
     if mode not in {"off", "local", "remote"}:
         raise ValueError("Unsupported Git mode")
     if mode == "remote":
@@ -66,6 +68,7 @@ def configure(path, mode, remote=None, private_confirmed=False):
                 raise ValueError("History directory is not empty; refusing to take it over")
             root.mkdir(parents=True, exist_ok=True)
             git(path, "init", "-b", "main")
+        write_text_secure(root / ".git" / "info" / "exclude", "*\n!ledger.json\n!user-profile.md\n!runtime.json\n")
         top = Path(git(path, "rev-parse", "--show-toplevel").stdout.strip()).resolve()
         if top != root.resolve():
             raise ValueError("History must have its own repository")
@@ -75,8 +78,8 @@ def configure(path, mode, remote=None, private_confirmed=False):
         if mode == "remote":
             existing = git(path, "remote", "get-url", "origin", check=False)
             git(path, "remote", "set-url" if existing.returncode == 0 else "add", "origin", remote)
-    atomic_write_json(profile.runtime_dir(path) / "git-local.json", {"mode": mode, "sync": "manual"})
-    return {"mode": mode, "sync": "manual", "uploaded": False}
+    atomic_write_json(profile.runtime_dir(path) / "git-local.json", {"mode": mode, "sync": sync_mode})
+    return {"mode": mode, "sync": sync_mode, "uploaded": False}
 
 
 def record(path):
@@ -149,6 +152,8 @@ def restore(path, revision, apply=False):
             raise ValueError("Snapshot belongs to another ledger")
         result = {"applied": False, "source": revision, "current_revision": current["revision"],
                   "transactions_before": len(current["transactions"]), "transactions_after": len(old["transactions"])}
+        from .migrations import financial_snapshot
+        result.update(before=financial_snapshot(current), after=financial_snapshot(old))
         if not apply:
             return result
         record(path)  # preserve the current state before restoration
@@ -179,7 +184,7 @@ def _status(path, value):
 
 
 def _merge_bundle(path, base_sha, local_sha, remote_sha, resolution):
-    from ..domain.merge import merge
+    from ..domain.merge import merge, align_source_identities
     from ..domain.validation import validate
     from ..domain.model import now_iso
     triples = [snapshot(path, sha) for sha in (base_sha,local_sha,remote_sha)]
@@ -194,6 +199,7 @@ def _merge_bundle(path, base_sha, local_sha, remote_sha, resolution):
         # The prose and confirmed rules have separate conflict units.
         prose=profile.BLOCK.sub('__PROFILE_RULES__',text)
         inputs.append({'ledger':ledger,'profile':rules,'prose':prose,'runtime':capabilities})
+    inputs = align_source_identities(inputs)
     merged,conflicts=merge(*inputs,choices=(resolution or {}).get('choices'))
     if conflicts: return None, conflicts
     data,rules,capabilities=merged['ledger'],merged['profile'],merged['runtime']
@@ -286,3 +292,31 @@ def sync(path, resolution=None):
         except (ValueError,OSError,subprocess.TimeoutExpired) as exc:
             _status(path,{'state':'pending','message':str(exc)})
             raise
+
+
+def queue_auto_sync(path):
+    """Persist retry intent; never wait for a network under the business lock."""
+    config=settings(path)
+    if config['mode']=='remote' and config.get('sync')=='after-write':
+        atomic_write_json(profile.runtime_dir(path)/'sync-request-local.json', {'pending':True})
+
+
+def flush_auto_sync(path):
+    target=profile.runtime_dir(path)/'sync-request-local.json'
+    config=settings(path)
+    if config['mode'] != 'remote' or config.get('sync') != 'after-write' or not target.exists():
+        return None
+    from ..storage.documents import ledger_lock_held
+    if ledger_lock_held(path):
+        raise ValueError('Automatic synchronization must run after releasing the business lock')
+    try:
+        result=sync(path)
+    except (ValueError,OSError,subprocess.TimeoutExpired):
+        return sync_status(path)
+    if result.get('state')=='synced':
+        with ledger_lock(path):
+            # A write between push verification and this cleanup must retain retry intent.
+            actual=git(path,'rev-parse','HEAD').stdout.strip()
+            if actual == result.get('commit'):
+                target.unlink(missing_ok=True)
+    return result

@@ -45,6 +45,10 @@ def validate(profile):
         raise ValueError("Profile habits and goals must be lists")
     if type(profile["communication"].get("advice", False)) is not bool:
         raise ValueError("Advice preference must be a boolean")
+    if 'presentation' in profile:
+        presentation = profile['presentation']
+        if not isinstance(presentation,dict) or presentation.get('density','normal') not in {'compact','normal','detailed'}:
+            raise ValueError('Presentation density must be compact, normal or detailed')
     from ..domain.money import decimal_amount
     phrases = set()
     for habit in profile["habits"]:

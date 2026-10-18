@@ -12,7 +12,7 @@ def reconcile(ledger, candidates):
     seen=set()
     for candidate in candidates:
         item=copy.deepcopy(candidate)
-        evidence={key:item.get(key) for key in ('code','transaction_id','occurred_at','amount','merchant','note','detail')}
+        evidence=item.get('facts') or {key:item.get(key) for key in ('code','transaction_id','occurred_at','amount','merchant','note','detail')}
         token=fingerprint(evidence)
         item.update(id='finding_'+fingerprint(item['key'])[:24], evidence=token)
         seen.add(item['key'])
@@ -61,3 +61,25 @@ def notifications(path, candidates, *, acknowledge=None):
         receipt={'version':1,'items':items}
         receipt['digest']=fingerprint(receipt)
         return receipt
+
+
+def insight_candidate(finding):
+    identity = finding.get('transaction_id') or finding.get('account') or finding.get('category') or finding.get('merchant') or 'ledger'
+    key = finding['kind'] + ':' + str(identity)
+    # Elapsed time changes the explanation, not the underlying accounting evidence.
+    facts = {k:v for k,v in finding.get('evidence', {}).items() if k not in {'days_outstanding', 'days'}}
+    return {'key':key, 'code':finding['kind'], 'transaction_id':finding.get('transaction_id'),
+            'detail':finding['message'], 'action':finding.get('action'), 'status':'open',
+            'facts':{'kind':finding['kind'], 'identity':identity, **facts}, 'severity':finding.get('severity')}
+
+
+def active_insights(ledger, **kwargs):
+    from ledger_insight import build_findings
+    limit = kwargs.pop('limit', None)
+    output=[]
+    for finding in build_findings(ledger, **kwargs):
+        candidate=insight_candidate(finding)
+        # Reconcile one candidate against just its own existing decision.
+        state={'review_queue':[r for r in ledger.get('review_queue',[]) if r.get('key') == candidate['key']]}
+        if reconcile(state,[candidate])[0]['status'] == 'open': output.append(finding)
+    return output[:limit] if limit else output

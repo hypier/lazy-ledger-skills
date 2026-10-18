@@ -42,6 +42,8 @@ def normalize_row(ledger, row):
             account = next((a for a in ledger["accounts"] if a.get("id") == value[id_key]), None)
             if account:
                 value[name_key] = account["name"]
+    for field in ('related_transaction_id', 'writeoff_transaction_id'):
+        if value.get(field): value[field] = ledger.get('identity_aliases', {}).get(value[field], value[field])
     for field, val in value.items():
         if field.startswith("x_"):
             spec = ledger.runtime["custom_fields"].get(field)
@@ -49,6 +51,16 @@ def normalize_row(ledger, row):
             if not spec or not isinstance(val, types[spec["type"]]) or (spec["type"] == "number" and type(val) is bool):
                 raise ValueError("Unregistered or invalid custom field: " + field)
     return value
+
+
+
+def mark_corrections(before, after, evidence):
+    fields = {'amount','type','currency','category','merchant','occurred_at','account_id','to_account_id','relation','related_transaction_id','excluded_from_totals'}
+    for field in fields:
+        if before.get(field) != after.get(field):
+            after.setdefault('field_evidence', {})[field] = {'kind':'correction', 'value':after.get(field),
+                'previous_value':before.get(field), 'evidence':copy.deepcopy(evidence)}
+    return after
 
 
 def apply_to_copy(ledger, operations):
@@ -91,6 +103,8 @@ def prepare(path, request, *, persist=True, expected_context=None):
     operations = []
     for item in request.get("operations", []):
         op = copy.deepcopy(item)
+        if op.get("id"):
+            op["id"] = ledger.get("identity_aliases", {}).get(op["id"], op["id"])
         collection = op.setdefault("collection", "transactions")
         if op.get("action") == "add":
             if collection == "transactions":
@@ -119,6 +133,8 @@ def prepare(path, request, *, persist=True, expected_context=None):
                     op["after"].pop(field, None)
                 if collection == "transactions":
                     op["after"] = normalize_row(ledger, op["after"])
+                    if not request.get("undo_of"):
+                        mark_corrections(row, op["after"], {"reason":request["reason"], **request.get("evidence", {})})
         operations.append(op)
     candidate = apply_to_copy(ledger, operations)
     proposal = {"version": 1, "id": "proposal_" + uuid.uuid4().hex, "context": context_token(ledger),
@@ -155,6 +171,8 @@ def commit(path, proposal):
         result.setdefault("operations", {})[proposal["id"]] = {"request_hash": digest, "result": receipt}
         result.operation = {"id": proposal["id"], "reason": proposal["reason"],
                             "evidence": proposal["evidence"], "undo_of": proposal.get("undo_of")}
+        from .inspections import build_review_queue
+        result['review_queue'] = build_review_queue(result, include_handled=True)
         repository.save(path, result)
         return {**receipt, "history": getattr(result, "history_status", None)}
 

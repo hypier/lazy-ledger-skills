@@ -29,7 +29,7 @@ def dispatch(args):
             if args.action == "prepare":
                 result = imports.prepare(args.ledger, args.input, provider=args.provider, account=args.account,
                                          expected_count=args.expected_count, expected_total=args.expected_total,
-                                         links=read(args.links) if args.links else None, distinct=args.distinct)
+                                         links=read(args.links) if args.links else None, distinct=args.distinct, confirmed_image=args.confirmed_image)
             else:
                 plan = read(args.input)
                 if not plan.get("ready"):
@@ -66,6 +66,7 @@ def add_commands(sub):
     p = leaf(group, "prepare", "Parse CSV/TSV and reconcile source identities")
     p.add_argument("--input", required=True)
     p.add_argument("--provider", default=None)
+    p.add_argument("--confirmed-image", action="store_true", help="User has checked the OCR rows")
     p.add_argument("--account", default=None)
     p.add_argument("--expected-count", type=int)
     p.add_argument("--expected-total")

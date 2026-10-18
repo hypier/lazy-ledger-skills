@@ -26,7 +26,7 @@ class Ledger(dict):
 
 def load(path, currency="CNY", create=True):
     path = Path(path)
-    if not path.exists() and not create:
+    if not path.exists() and not create and not (profile.runtime_dir(path) / "pending.json").exists():
         raise FileNotFoundError(path)
     def read():
         raw = read_json(path) if path.exists() else None
@@ -91,5 +91,6 @@ def save(path, ledger):
             status = history.record(path)
         except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
             status = {"state": "pending", "message": str(exc)}
+        history.queue_auto_sync(path)
         if isinstance(ledger, Ledger):
             ledger.history_status = status

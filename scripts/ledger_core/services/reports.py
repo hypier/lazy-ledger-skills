@@ -13,10 +13,16 @@ from .proposals import context_token
 
 
 def build(path, *, start, end):
+    ledger = repository.load(path, create=False)
+    from .history import settings, sync_status
+    state = {**settings(path), "status": sync_status(path)}
+    return from_ledger(ledger, start=start, end=end, history_state=state)
+
+
+def from_ledger(ledger, *, start, end, history_state=None):
     from datetime import date
     if date.fromisoformat(start) > date.fromisoformat(end):
         raise ValueError("Report start is after end")
-    ledger = repository.load(path, create=False)
     rows = [r for r in ledger["transactions"] if start <= r.get("occurred_at", "")[:10] <= end]
     period = {"label": f"{start} 至 {end}", "start": start, "end": end,
               "month": start[:7] if start[:7] == end[:7] else None}
@@ -27,6 +33,10 @@ def build(path, *, start, end):
     report = {"version": 1, "id": "report_" + uuid.uuid4().hex, "generated_at": now_iso(),
               "context": context_token(ledger), "currency": ledger["currency"], "period": period,
               "metrics": metrics, "evidence": evidence, "transactions": rows,
+              "balance_scope": "current ledger snapshot, not period-end balance",
+              "balance_inputs": {"accounts": ledger["accounts"], "transactions": ledger["transactions"]},
+              "history": history_state or {"mode": "off"},
+              "review": [r for r in ledger.get("review_queue", []) if r.get("status") == "open"],
               "coverage": {"recorded_rows": len(rows), "unassigned_rows": sum(not r.get("account_id") for r in rows),
                            "unknown_openings": [a["id"] for a in ledger["accounts"] if not a.get("opening_confirmed")],
                            "sources": ledger.get("imports", []), "complete": False},
@@ -61,8 +71,19 @@ def render(report, format="markdown"):
         lines.extend(["", "## 预算", ""])
         for budget in report["metrics"]["budgets"]:
             lines.append(f"- {budget['category']}：已用 {budget['spent']:.2f} / {budget['limit']:.2f}，剩余 {budget['remaining']:.2f}。")
+    lines.extend(["", "## 账户余额（生成报告时的流水余额）", ""])
+    for account in report["metrics"]["accounts"]:
+        lines.append(f"- {account['name']}：{account['balance']:.2f}" + ("（期初未确认）" if not account['opening_confirmed'] else ""))
+    if report.get("review"):
+        lines.extend(["", "## 待复核", ""])
+        lines.extend("- " + str(item.get("detail") or item.get("code")) for item in report["review"])
+    state = report.get("history", {})
+    if state.get("mode") == "remote":
+        lines.extend(["", "同步状态：" + str(state.get("status", {}).get("state", "never_synced")) + "。"])
+    elif state.get("mode") == "local":
+        lines.extend(["", "历史：仅本地 Git 快照。"])
     lines.extend(["", "## 明细", ""])
-    for row in report["transactions"]:
+    for row in report["transactions"] if report.get("presentation", {}).get("density") != "compact" else []:
         label = str(row.get("merchant") or row.get("note") or row.get("category") or "").replace("\n", " ")
         # Markdown source text is rendered as escaped plain text, never active HTML.
         label = html.escape(label).replace("[", "\\[").replace("]", "\\]")
@@ -70,7 +91,17 @@ def render(report, format="markdown"):
     markdown = "\n".join(lines) + "\n"
     if format == "markdown":
         return markdown
-    return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>账务报告</title><style>body{max-width:64rem;margin:2rem auto;padding:1rem;font:16px/1.7 system-ui}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>' + html.escape(markdown) + '</pre></html>'
+    return html_document(markdown)
+
+
+def html_document(markdown):
+    """Escape all source strings; HTML never interprets financial data or runs code."""
+    content = []
+    for line in markdown.splitlines():
+        if not line: continue
+        tag, text = ('h1', line[2:]) if line.startswith('# ') else ('h2', line[3:]) if line.startswith('## ') else ('p', line)
+        content.append('<' + tag + '>' + html.escape(html.unescape(text)) + '</' + tag + '>')
+    return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>账务报告</title><style>body{max-width:72ch;margin:2rem auto;padding:1rem;font:16px/1.7 system-ui;color:#22332b;background:#fafbf8;overflow-wrap:anywhere}h1{font-size:1.6rem}h2{font-size:1.2rem;margin-top:2rem}main{padding:1rem}a{color:#245f49}</style><main>' + ''.join(content) + '</main></html>'
 
 
 def archive(path, report, *, format="markdown"):

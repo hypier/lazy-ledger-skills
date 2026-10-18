@@ -2,7 +2,7 @@
 name: lazy-ledger
 description: Maintain local personal ledgers as an intelligent financial butler. Use for recording expenses or income, importing and reconciling statements, tracking money owed, managing budgets, explaining financial changes, producing reports, and configuring optional ledger history and backup.
 metadata:
-  version: 3.0.0-dev
+  version: 3.0.0
 ---
 
 # Lazy Ledger
@@ -96,8 +96,8 @@ Conversation is the default output. Use the same core metrics for a brief,
 CSV, chart, or report. `report build --start ... --end ...` returns a traceable
 Markdown report; `--format json` exposes the same data and `--archive` saves its
 immutable snapshot. `bill save` retains the legacy narrative-only workflow.
-Existing `render`, `bill render`, and `serve` remain optional legacy tools;
-there is no required template count. See [present.md](references/present.md).
+`render` and `bill render` now use this report service; optional `serve` exposes
+read-only reports and a compatibility API. The three fixed HTML assets are removed. See [present.md](references/present.md).
 
 Optional `x_` metadata fields can be registered with `schema register` so every
 role discovers them through context. Changes to financial semantics require a

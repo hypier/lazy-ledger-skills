@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
 import os
 import re
 import subprocess
@@ -16,7 +17,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SWIFT_SRC = SCRIPT_DIR / "ocr_bill.swift"
 OCR_BIN = Path(os.environ.get("LAZY_LEDGER_OCR_BIN", "/tmp/lazy-ledger-ocr-bill"))
 sys.path.insert(0, str(SCRIPT_DIR))
-from ledger_tool import infer_category  # noqa: E402
+from ledger_core.services.interpretation import infer_category  # noqa: E402
 from ledger_db import write_text_secure  # noqa: E402
 
 DATE_RE = re.compile(r"^(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})$")
@@ -65,6 +66,8 @@ TSV_FIELDS = (
     "method",
     "account",
     "to_account",
+    "source_image_sha256",
+    "source_image_row",
 )
 
 
@@ -154,6 +157,8 @@ def ensure_ocr_bin():
 
 
 def run_ocr(image_path):
+    if sys.platform != "darwin":
+        raise SystemExit("Built-in screenshot OCR requires macOS Vision; use a verified host OCR adapter")
     binary = ensure_ocr_bin()
     result = subprocess.run([str(binary), str(image_path)], capture_output=True)
     if result.returncode != 0:
@@ -318,7 +323,7 @@ def infer_screenshot_category(merchant, tx_type):
     return infer_category(text, tx_type=tx_type)
 
 
-def classify_row(row, *, account="微信零钱", method="wechat", bill_label="微信账单截图"):
+def classify_row(row, *, account="", method="wechat", bill_label="微信账单截图"):
     merchant = row["merchant"]
     sign = row["sign"]
     status = row.get("status") or ""
@@ -359,7 +364,7 @@ def classify_row(row, *, account="微信零钱", method="wechat", bill_label="�
         "confidence": f"{confidence:.2f}",
         "method": method,
         "account": account,
-        "to_account": "银行卡" if tx_type == "transfer" and "提现" in merchant else "",
+        "to_account": "",
         "sign": sign,
         "status": status or "",
         "display_time": row["occurred_at"],
@@ -384,7 +389,7 @@ def render_markdown(header, rows):
             f"{row['display_amount']:.2f} | {row.get('status') or ''} |"
         )
     lines.append("")
-    lines.append("截断的商户名按原样保留。已全额退款的会记成「支出 + 退款」两笔。")
+    lines.append("截断的商户名按原样保留。退款只记录画面中的事实，不反推原支出；转账账户需要确认。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -398,7 +403,7 @@ def write_tsv(path, rows):
     return path.resolve()
 
 
-def prepare(image, output=None, json_out=False, *, account="微信零钱", method="wechat", bill_label="微信账单截图"):
+def prepare(image, output=None, json_out=False, *, account="", method="wechat", bill_label="微信账单截图"):
     info = find_original_image(image)
     ocr = run_ocr(info["path"])
     items = ocr.get("items") or []
@@ -415,15 +420,10 @@ def prepare(image, output=None, json_out=False, *, account="微信零钱", metho
         raise SystemExit(2)
     header, raw_rows = pair_rows(items, datetime.now().year)
     classified = []
-    for row in raw_rows:
+    image_hash = hashlib.sha256(Path(info["path"]).read_bytes()).hexdigest()
+    for row_number, row in enumerate(raw_rows, start=1):
         item = classify_row(row, account=account, method=method, bill_label=bill_label)
-        if item["type"] == "refund":
-            original = dict(item)
-            original["type"] = "expense"
-            original["sign"] = "-"
-            original["confidence"] = "0.60"
-            original["note"] = f"{bill_label}；全额退款对应的原支出（由退款行反推）"
-            classified.append(original)
+        item.update(source_image_sha256=image_hash, source_image_row=row_number)
         classified.append(item)
     if not classified:
         raise SystemExit("No complete bill rows (merchant + date + amount) were recognized.")
@@ -460,7 +460,7 @@ def build_parser():
     p_prepare.add_argument("--image", required=True)
     p_prepare.add_argument("--output", default=None, help="TSV path; default ./wechat-bill-rows.tsv")
     p_prepare.add_argument("--json", action="store_true")
-    p_prepare.add_argument("--account", default="微信零钱", help="Funding account for recognized rows")
+    p_prepare.add_argument("--account", default="", help="Funding account for recognized rows")
     p_prepare.add_argument("--method", default="wechat", help="Payment method for recognized rows")
     p_prepare.add_argument("--bill-label", default="微信账单截图", help="Note label for the source screenshot")
     p_prepare.set_defaults(

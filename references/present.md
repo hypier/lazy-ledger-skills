@@ -17,11 +17,12 @@ payload; include period, currency and coverage. Do not invent another financial
 aggregation algorithm inside a template. Refresh data before publishing a
 previously generated view. State whether an artifact is a snapshot.
 
-The old `render`, `bill render` and `serve` entry points are optional legacy
-views, documented in [html-report.md](html-report.md). They are retained for
-compatibility, not the target presentation architecture. No new workflow depends
-on any of the three shipped HTML assets. Reuse a template only after a real
-recurring need; a ledger's runtime manifest can legitimately list zero templates.
+The `render`, `bill render` and `serve` compatibility entries now use the shared
+report service, documented in [html-report.md](html-report.md). All three old
+HTML assets were removed. The runtime manifest legitimately lists zero templates.
+`profile.presentation.density` accepts `compact`, `normal` or `detailed`; compact
+output retains metrics/evidence and omits the row listing. Graph and format
+preferences in user prose guide the host's output choice.
 
 Use `report build --start YYYY-MM-DD --end YYYY-MM-DD` for the new workflow.
 Default Markdown contains totals, coverage, budget progress and evidence rows;

@@ -1,26 +1,21 @@
-# Lazy Ledger
+# Lazy Ledger 3.0
 
-以智能管家为主的本地记账 skill：用户提供事实，管家负责入账、对账、预算、分析和报告。
-当前分支实现 3.0 的账务基础及提案、导入、扩展、同步和报告流程，保留旧 CLI 并逐步移出单体业务代码。
-完整范围及未完成阶段见 [执行计划](product-design-audit/execution-plan-2026-10.md)。
+以智能管家为主的本地记账 skill。用户提供事实和目标，管家负责记账、导入对账、预算、分析、复核与报告；专业角色按任务加载，普通记账不需要启动多个 agent。
 
-## 本轮实现
+本次重构在 `codex/ledger-butler-refactor` 完成。CLI 已缩为参数与分发入口，CLI 和 HTTP 共用业务服务。实施与验收见 [执行计划](product-design-audit/execution-plan-2026-10.md) 和 [验收记录](product-design-audit/release-3.0.md)。
 
-- 共享领域内核：十进制金额、余额、汇总、预算与收支判定；存储不再反向依赖 CLI。
-- 独立用户画像：每次加载账本读取 `user-profile.md`。已确认规则与统计观察分开；无默认付款账户，不根据余额换账户，不从两次重复价格推定固定金额。
-- 一致写入：文件锁、修订与读指纹检查、画像/能力冲突检查、可恢复多文件事务、行变更记录；add/record 支持幂等键。
-- 结算：明确还款证据、实际收入关联、部分收回、剩余金额在核销当期计损失；相关分录拒绝单独破坏性修改。
-- 统一上下文：`context`、`profile show/apply`、`schema show/register`、`migrate`。
-- 可选 Git：账本独立仓库、本地快照、显式远程配置、前台同步、独立记录三方合并、冲突选择与整本恢复；网络等待不占用账本写锁。
-- 通用提案：校验后一次提交、字段来源、幂等回执和定向撤销；旧提案不能覆盖新数据。
-- 导入对账：微信/支付宝 CSV 与规范化 TSV、来源交易号去重、跨来源关联、笔数/金额核对；歧义先进入计划。
-- 用户扩展：代码独立存放、版本登记、样例验证、摘要绑定和本机启用；macOS OS 沙箱运行，输出仍须经核心提案提交。
-- 结构演进：可选字段改名/类型转换的预览、备份、指标一致性检查与可恢复提交。
-- 复核状态：待处理、待补充、解决、忽略、暂缓；按证据重开，通知回执去重。
-- 展示按需：无模板的 Markdown/JSON/静态 HTML 报告，归档保存数据快照和依据；旧三个视图仅为兼容入口。
-- 专业职责按任务加载，普通记账无需多 agent 并行。
+## 已实现
 
-## 使用与开发
+- 共享账务内核：十进制金额、统一收支/余额/预算口径，明确转账、退款、垫付、部分结算与当期核销。
+- 独立用户习惯文档：每次任务加载 `user-profile.md`；明确规则、历史观察和单次选择分开。未知付款账户保持未分配。
+- 一致写入：锁、完整上下文校验、幂等回执、字段证据、操作记录、定向撤销和可恢复多文件事务。
+- 受控演进：字段登记、迁移预览/备份/指标核对；自定义解析脚本与系统分离，登记、样例验证、本机授权后才运行。
+- 导入对账：微信/支付宝 CSV、已声明布局的银行和信用卡 CSV、规范化 CSV/TSV、macOS 截图 OCR。来源去重、跨来源关联、总额核验；截图确认前不入账，退款不反推原支出。
+- 可选 Git：建账时询问，不启用/仅本地/私有远程三种模式；私有 GitHub 建仓与核验、手动或已授权的写后同步、离线重试、三方合并、同来源身份统一、冲突计划、历史差异与新设备恢复。
+- 主动复核：写后维护发现事项，支持待补充、忽略、暂缓、解决和按新证据重开；通知回执去重。
+- 按需展示：三个固定 HTML 模板已移除。对话优先；Markdown、JSON、可选只读 HTML 共用报告数据，归档保存不可变快照。旧展示入口已转向新报告服务。
+
+## 使用
 
 ```sh
 export LAZY_LEDGER_FILE=/path/to/personal/ledger.json
@@ -28,36 +23,38 @@ scripts/ledger init --git-mode undecided
 scripts/ledger context --task record
 scripts/ledger record --text "午饭28" --operation-id unique-request-id
 scripts/ledger show --range this-month
-scripts/ledger history configure --mode local
-scripts/ledger history list
+scripts/ledger report build --start 2026-10-01 --end 2026-10-31 --archive
 ```
 
-创建账本时由管家询问 Git 选择；未回答时不初始化 Git、不上传。
-远程设置需要明确目标及已核验的私有可见性；不自动创建仓库。
-账本使用 `<文件名主体>-runtime/` 隔离画像、能力和本机设置。
-正式账本应放在 skill 安装目录以外。
+账本使用 `<文件名主体>-runtime/` 隔离画像、能力、报告和本机设置；建议放在 skill 安装目录之外。未决定 Git 模式时照常记账，不初始化历史或上传。
 
 ```sh
-python3 -m unittest discover -s tests -p 'test_*.py'
+scripts/ledger history configure --mode local
+scripts/ledger history remote --repository OWNER/BOOK --create
+# 用户选定目标后，明确执行创建/连接；此步仍不上传
+scripts/ledger history remote --repository OWNER/BOOK --create --apply
+scripts/ledger history sync
+scripts/ledger history list
+scripts/ledger history diff --commit COMMIT
+```
+
+新设备先 `history inspect --source URL`，再 `history clone --ledger NEW_PATH --source URL --expected-ledger-id ID --expected-commit SHA`；默认仅本地模式，扩展须在本机重新验证。具体模式和恢复范围见 [历史说明](references/history.md)。
+
+## 支持范围
+
+- 一个账本一种币种，不进行无依据的汇率换算。
+- 内置 OCR 和扩展隔离执行支持 macOS；其他平台没有合格隔离器时拒绝执行扩展。核心账务不需要这些可选能力。
+- XLSX/PDF 和未声明的银行布局通过宿主解析器或已验证转换器适配，不猜测任意文件结构。
+- Git 快照包含账务、画像、能力及登记的扩展代码。来源附件、报告成品和本机授权不包含在恢复范围内。账务中的用户输入原文与路径完整保留；凭据及本机运行配置不进入快照。
+- 不内置常驻调度服务。只有用户提出需求时，管家才使用宿主支持的调度与消息能力。
+- GitHub 提供方流程使用模拟响应验证；没有创建、修改或上传真实远程仓库，也没有改动正式账本。
+
+## 开发验证
+
+```sh
+python3 -m unittest discover -s tests -v
 python3 scripts/package_skill.py --validate-only
 python3 scripts/package_skill.py /tmp/ledger-package
 ```
 
-测试使用临时合成账本；HTTP 测试需要本机监听权限。分发校验应覆盖实际
-解压后的运行，不能只依赖 frontmatter 与文件存在检查。
-
-## 边界与后续工作
-
-扩展运行目前仅支持 macOS `sandbox-exec`，没有可用隔离器就拒绝执行；不安装
-第三方依赖。动态字段迁移限于不影响账务口径的 `x_` 元数据。同步遇到相同来源
-但不同记录 ID 时拒绝重复合并，需要先显式对账；远程建仓、自动核验私有可见性、
-新设备自动引导和后台调度尚未实现。源附件、报告和本机授权不在 Git 快照范围。
-
-旧 CLI 中仍有业务流程需要继续迁入服务层，旧 HTML 只保留兼容用途。
-不同银行/XLSX/PDF 格式及更多截图样例仍需单独适配。完整阶段状态见执行计划，
-不将这些兼容路径视为全部重构完成。
-
-本轮验证：199 项回归，198 通过、1 项缺少原有截图样例跳过；包含 HTTP、
-真实 macOS 隔离、双设备本地远程同步，以及移除 HTML 资源后的安装包端到端流程。
-最终导入边界修正后，43 项相关流程定向复验全部通过；远程快照账户校验
-补充后，7 项历史恢复/同步复验全部通过。
+全量 219 项测试通过，无跳过。测试使用临时合成账本和本地 Git 远程，包含独立解压安装运行。HTTP 测试需本机监听权限；扩展测试需要 macOS 的实际隔离能力。标准 skill 元数据另使用 `skill-creator/scripts/quick_validate.py` 校验。

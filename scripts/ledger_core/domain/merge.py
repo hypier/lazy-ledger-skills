@@ -59,3 +59,96 @@ def merge(base, local, remote, *, choices=None):
     value=walk(base,local,remote,'')
     if set(choices)-used: raise ValueError('Resolution contains stale or unknown conflict paths')
     return copy.deepcopy(value),conflicts
+
+
+def align_source_identities(inputs):
+    """Unify authoritative source identities before merging record contents.
+
+    Audit receipts remain immutable; aliases preserve their historical IDs.
+    Differing financial/classification values still reach the normal conflict UI.
+    """
+    values = copy.deepcopy(inputs)
+    parent = {}
+    sources = {}
+
+    def root(identity):
+        parent.setdefault(identity, identity)
+        if parent[identity] != identity:
+            parent[identity] = root(parent[identity])
+        return parent[identity]
+
+    def unite(left, right):
+        left, right = root(left), root(right)
+        parent[max(left, right)] = min(left, right)
+
+    for value in values:
+        ledger = value['ledger']
+        for old, new in ledger.get('identity_aliases', {}).items():
+            unite(old, new)
+        for row in ledger['transactions']:
+            root(row['id'])
+            evidence = list(row.get('sources', []))
+            for field, provider in [('wechat_transaction_id','wechat'),('bank_statement_ref','bank'),('credit_statement_ref','credit')]:
+                if row.get(field): evidence.append({'provider':provider,'transaction_id':row[field]})
+            for source in evidence:
+                if source.get('provider') and source.get('transaction_id'):
+                    key = ('reference', source['provider'], source['transaction_id'])
+                elif source.get('file_hash') and source.get('row') is not None:
+                    key = ('file', source['file_hash'], source['row'])
+                else:
+                    continue
+                if key in sources: unite(row['id'], sources[key])
+                sources[key] = row['id']
+    groups = {}
+    for identity in parent:
+        groups.setdefault(root(identity), []).append(identity)
+    base_ids = {r['id'] for r in values[0]['ledger']['transactions']}
+    aliases = {}
+    for ids in groups.values():
+        canonical = min(set(ids) & base_ids or ids)
+        aliases.update({identity: canonical for identity in ids if identity != canonical})
+
+    for value in values:
+        ledger = value['ledger']
+        ledger['identity_aliases'] = aliases
+        for row in ledger['transactions']:
+            row['id'] = aliases.get(row['id'], row['id'])
+            for field in ('related_transaction_id', 'writeoff_transaction_id'):
+                if row.get(field): row[field] = aliases.get(row[field], row[field])
+            for allocation in row.get('advance_settlements', []):
+                allocation['transaction_id'] = aliases.get(allocation['transaction_id'], allocation['transaction_id'])
+        for item in ledger.get('review_queue', []):
+            if item.get('transaction_id') in aliases:
+                old = item['transaction_id']; item['transaction_id'] = aliases[old]
+                if item.get('key') == item.get('code', '') + ':' + old:
+                    item['key'] = item['code'] + ':' + item['transaction_id']
+                    # Derivation gives this finding its current stable ID on refresh.
+                    item.pop('id', None)
+
+    # Identical new economic events can differ in provenance and wall-clock fields.
+    import json
+    def fingerprint(value):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    base = {r['id'] for r in values[0]['ledger']['transactions']}
+    left = {r['id']: r for r in values[1]['ledger']['transactions']}
+    right = {r['id']: r for r in values[2]['ledger']['transactions']}
+    ignored = {'created_at','updated_at','sources','field_evidence'}
+    for identity in (left.keys() & right.keys()) - base:
+        l, r = left[identity], right[identity]
+        if {k:v for k,v in l.items() if k not in ignored} != {k:v for k,v in r.items() if k not in ignored}:
+            continue
+        combined = copy.deepcopy(l)
+        evidence = {fingerprint(s):s for row in (l,r) for s in row.get('sources', [])}
+        combined['sources'] = [evidence[key] for key in sorted(evidence)]
+        for key in ('created_at', 'updated_at'):
+            dates = [row[key] for row in (l,r) if row.get(key)]
+            if dates: combined[key] = (min if key == 'created_at' else max)(dates)
+        fields = set(l.get('field_evidence', {})) | set(r.get('field_evidence', {}))
+        combined['field_evidence'] = {}
+        for field in fields:
+            evidence = {fingerprint(row['field_evidence'][field]):row['field_evidence'][field] for row in (l,r) if field in row.get('field_evidence', {})}
+            items = [evidence[key] for key in sorted(evidence)]
+            combined['field_evidence'][field] = items[0] if len(items) == 1 else {'kind':'combined_sources','evidence':items}
+        l.clear(); l.update(copy.deepcopy(combined))
+        r.clear(); r.update(copy.deepcopy(combined))
+    return values

@@ -13,13 +13,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
-APP_HTML = SKILL_DIR / "assets" / "ledger-app.html"
+
 
 
 def _tool():
-    import ledger_tool
-
-    return ledger_tool
+    from ledger_core.adapters import api
+    return api
 
 
 MAX_BODY_BYTES = 5_000_000
@@ -62,6 +61,8 @@ def _send(handler, status, payload=None, body=None, content_type="application/js
 def _invoke(func, args):
     try:
         result = func.result(args)
+        from ledger_core.services.history import flush_auto_sync
+        flush_auto_sync(args.ledger)
         return 200, result if result is not None else {"ok": True}
     except SystemExit as exc:
         return (409 if exc.code == 2 else 400), {"error": str(exc.code)}
@@ -156,7 +157,13 @@ def make_handler(ledger_path):
             query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
             tool = _tool()
             if path in {"/", "/settings"}:
-                _send(self, 200, body=APP_HTML.read_bytes(), content_type="text/html; charset=utf-8")
+                from ledger_core.services import reports
+                from datetime import date
+                ledger = tool.load_ledger(ledger_path, create=True)
+                days = [tx["occurred_at"][:10] for tx in ledger["transactions"]]
+                start, end = (min(days), max(days)) if days else (date.today().isoformat(), date.today().isoformat())
+                report = reports.from_ledger(ledger, start=start, end=end)
+                _send(self, 200, body=reports.render(report, "html").encode(), content_type="text/html; charset=utf-8")
                 return
             if path == "/bill" or path.startswith("/bill/"):
                 month = None if path == "/bill" else path.rsplit("/", 1)[-1]

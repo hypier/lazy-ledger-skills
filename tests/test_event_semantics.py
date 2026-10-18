@@ -333,7 +333,8 @@ class ReviewQueueTest(unittest.TestCase):
             run("init", cwd=tmp)
             tx = json.loads(run("add", "--text", "星巴克 咖啡38", "--confidence", "0.6", cwd=tmp).stdout)["added"][0]
             refreshed = json.loads(run("review", "refresh", "--json", cwd=tmp).stdout)
-            self.assertEqual(refreshed["added"], 1)
+            self.assertEqual(refreshed["added"], 0)  # detected and persisted by the write
+            self.assertEqual(refreshed["open_count"], 1)
 
             # A fresh command still sees the queued item, proving persistence.
             nxt = json.loads(run("review", "next", "--json", cwd=tmp).stdout)

@@ -35,7 +35,7 @@ def _money(amount, currency):
 
 
 def _month_rows(transactions, month):
-    from ledger_tool import month_key
+    from ledger_core.domain.metrics import month_key
 
     return [
         row

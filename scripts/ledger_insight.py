@@ -92,9 +92,9 @@ def find_category_surges(transactions, today, currency="CNY"):
         if not _counts(transaction):
             continue
         month = month_key(transaction)
-        if month == this_month:
+        if month == this_month and _day(transaction) <= today.isoformat():
             current[transaction.get("category") or "其他"].append(transaction)
-        elif month == last_month:
+        elif month == last_month and int(_day(transaction)[8:10]) <= today.day:
             previous[transaction.get("category") or "其他"].append(transaction)
 
     findings = []
@@ -118,7 +118,7 @@ def find_category_surges(transactions, today, currency="CNY"):
                 "severity": "warn",
                 "category": category,
                 "message": (
-                    f"{category}比上月多了 {ratio:.1f} 倍：{len(baseline_rows)} 笔 → {len(rows)} 笔"
+                    f"{category}本月截至 {today.day} 日为上月同期的 {ratio:.1f} 倍：{len(baseline_rows)} 笔 → {len(rows)} 笔"
                     f"（{format_money(baseline_amount, currency)} → {format_money(current_amount, currency)}）"
                     f"，主要来自{driver}（{driver_count} 笔）。"
                 ),

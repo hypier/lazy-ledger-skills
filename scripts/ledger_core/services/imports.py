@@ -12,11 +12,11 @@ from .profile import runtime_dir
 from . import proposals
 
 ALIASES = {
-    "date": ("occurred_at", "交易时间", "交易创建时间", "付款时间", "交易日期"),
-    "amount": ("amount", "金额(元)", "金额（元）", "金额", "交易金额"),
-    "direction": ("type", "收/支", "收支", "资金流向"),
+    "date": ("occurred_at", "交易时间", "交易创建时间", "付款时间", "交易日期", "消费日期"),
+    "amount": ("amount", "金额(元)", "金额（元）", "金额", "交易金额", "支出金额", "收入金额", "入账金额"),
+    "direction": ("type", "收/支", "收支", "资金流向", "交易性质"),
     "merchant": ("merchant", "交易对方", "对方户名", "商户"),
-    "note": ("note", "商品", "商品名称", "商品说明", "摘要", "备注"),
+    "note": ("note", "商品", "商品名称", "商品说明", "摘要", "备注", "交易说明"),
     "status": ("当前状态", "交易状态", "status"),
     "id": ("交易单号", "交易订单号", "交易号", "流水号", "source_transaction_id"),
     "method": ("支付方式", "收/付款方式", "付款方式", "method"),
@@ -61,7 +61,7 @@ def parse_file(filename, *, provider=None, currency="CNY"):
             break
     if start is None:
         raise ValueError("Unsupported statement header; provide normalized TSV or a verified converter")
-    inferred = "wechat" if "微信" in "\n".join(lines[:start + 1]) or "交易单号" in lines[start] else "alipay" if "支付宝" in text[:2000] or "交易号" in lines[start] or "交易订单号" in lines[start] else "normalized"
+    inferred = "bank" if "支出金额" in lines[start] or "收入金额" in lines[start] else "credit" if "消费日期" in lines[start] else "wechat" if "微信" in "\n".join(lines[:start + 1]) or "交易单号" in lines[start] else "alipay" if "支付宝" in text[:2000] or "交易号" in lines[start] or "交易订单号" in lines[start] else "normalized"
     provider = provider or inferred
     reader = csv.DictReader(io.StringIO("\n".join(lines[start:])), delimiter=delimiter)
     reader.fieldnames = [x.strip() for x in reader.fieldnames]
@@ -78,12 +78,18 @@ def parse_file(filename, *, provider=None, currency="CNY"):
                 raise ValueError("Unexpected extra columns")
             date_text = cell(row, "date").replace("/", "-")
             occurred = datetime.fromisoformat(date_text).astimezone().isoformat(timespec="seconds")
-            amount = decimal_amount(re.sub(r"[¥￥,\s]", "", cell(row, "amount")))
+            direction = cell(row, "direction")
+            amount_text = cell(row, "amount")
+            if "支出金额" in row or "收入金额" in row:
+                debit, credit = (decimal_amount(re.sub(r"[¥￥,\s]", "", row.get(k) or "0")) for k in ("支出金额", "收入金额"))
+                if debit < 0 or credit < 0 or (debit > 0) == (credit > 0):
+                    raise ValueError("Bank row needs exactly one positive debit or credit")
+                direction, amount_text = ("expense", str(debit)) if debit else ("income", str(credit))
+            amount = decimal_amount(re.sub(r"[¥￥,\s]", "", amount_text))
             if amount <= 0:
                 raise ValueError("Amount must be positive; use direction for sign")
-            direction = cell(row, "direction")
             status = cell(row, "status")
-            kind = {"支出": "expense", "收入": "income", "退款": "refund", "expense": "expense", "income": "income", "refund": "refund", "transfer": "transfer"}.get(direction)
+            kind = {"消费": "expense", "还款": "transfer", "支出": "expense", "收入": "income", "退款": "refund", "expense": "expense", "income": "income", "refund": "refund", "transfer": "transfer"}.get(direction)
             refund_original = kind == "expense" and "退款" in status
             if "退款成功" in status and kind != "expense":
                 kind = "refund"
@@ -104,6 +110,14 @@ def parse_file(filename, *, provider=None, currency="CNY"):
                 candidate["account"] = row["account"]
             if row.get("to_account"):
                 candidate["to_account"] = row["to_account"]
+            # Normalized exports retain their explicit metadata; unknown fields need registration.
+            for key in ("id", "related_transaction_id", "relation", "attachment", "account_id", "to_account_id"):
+                if row.get(key): candidate[key] = row[key]
+            if row.get("source"): candidate["source"] = row["source"]
+            if row.get("confidence"): candidate["confidence"] = float(row["confidence"])
+            if row.get("tags"): candidate["tags"] = [tag.strip() for tag in row["tags"].split(",") if tag.strip()]
+            if row.get("excluded_from_totals"):
+                candidate["excluded_from_totals"] = row["excluded_from_totals"].lower() in {"true", "1", "yes"}
             for key in row:
                 if key.startswith("x_") and row[key]:
                     candidate[key] = row[key]
@@ -122,7 +136,7 @@ def parse_file(filename, *, provider=None, currency="CNY"):
             "declared_totals": declared_totals}
 
 
-def prepare(path, filename, *, provider=None, account=None, expected_count=None, expected_total=None, links=None, distinct=None):
+def prepare(path, filename, *, provider=None, account=None, expected_count=None, expected_total=None, links=None, distinct=None, confirmed_image=False):
     ledger = repository.load(path, create=False)
     source = parse_file(filename, provider=provider, currency=ledger["currency"])
     links, distinct = links or {}, set(distinct or [])
@@ -137,6 +151,9 @@ def prepare(path, filename, *, provider=None, account=None, expected_count=None,
     updates = {}
     for item in source["rows"]:
         row, line = item["candidate"], item["line"]
+        if row.get("source") == "image" and not confirmed_image:
+            review.append({"line": line, "reason": "Image extraction needs user confirmation before importing"})
+            continue
         if item["state"] != "ready":
             dispositions.append({"line": line, "state": item["state"], "status": item["status"]})
             if item["state"] == "review":
@@ -207,3 +224,18 @@ def prepare(path, filename, *, provider=None, account=None, expected_count=None,
     target = runtime_dir(path) / "work" / "imports" / (source["file_hash"] + ".json")
     atomic_write_json(target, report)
     return report
+
+
+def import_legacy(path, filename, *, currency=None, allow_duplicate=False, confirmed_image=False):
+    """Compatibility entry uses the same reconciliation and commit engine."""
+    from ..storage.documents import ledger_lock
+    with ledger_lock(path):
+        if not Path(path).exists():
+            repository.save(path, repository.load(path, currency=currency or "CNY"))
+        distinct = [str(r["line"]) for r in parse_file(filename)["rows"]] if allow_duplicate else []
+        report = prepare(path, filename, distinct=distinct, confirmed_image=confirmed_image)
+        if not report["ready"]:
+            raise ValueError("Import needs review; use import prepare to inspect errors, overlaps and source totals")
+        receipt = proposals.commit(path, report["proposal"])
+        ids = [op["id"] for op in report["proposal"]["operations"] if op["action"] == "add" and op.get("collection", "transactions") == "transactions"]
+        return {"input": str(filename), "added": len(ids), "ids": ids, "receipt": receipt}

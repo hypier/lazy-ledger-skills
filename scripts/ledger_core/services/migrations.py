@@ -4,6 +4,7 @@ import json
 import math
 import uuid
 from pathlib import Path
+from ..domain.model import SCHEMA_VERSION
 from ..domain.metrics import summarize, account_balances
 from ..domain.validation import validate
 from ..storage import repository
@@ -54,8 +55,21 @@ def candidate(ledger, request):
 
 
 def financial_snapshot(ledger):
+    from ..domain.metrics import budget_progress, category_parent_map
+    from ..domain.semantics import remaining_amount
+    from ..domain.money import money_sum
+    from calendar import monthrange
+    months = sorted({r['occurred_at'][:7] for r in ledger['transactions']})
+    periods = {}
+    for month in months:
+        year, number = map(int, month.split('-'))
+        period = {'month': month, 'start': month+'-01', 'end': f'{month}-{monthrange(year,number)[1]:02d}', 'label': month}
+        rows = [r for r in ledger['transactions'] if r['occurred_at'][:7] == month]
+        periods[month] = {'totals':summarize(rows,period=period,category_parents=category_parent_map(ledger))['totals'], 'budgets':budget_progress(ledger,rows,period)}
     return {'count':len(ledger['transactions']), 'totals':summarize(ledger['transactions'])['totals'],
-            'accounts':account_balances(ledger)}
+            'accounts':account_balances(ledger), 'periods':periods,
+            'outstanding':money_sum(remaining_amount(row) for row in ledger['transactions'] if row.get('advance') == 'open'),
+            'source_identities':{row['id']:{key:row[key] for key in ('sources','wechat_transaction_id','bank_statement_ref','credit_statement_ref') if key in row} for row in ledger['transactions']}}
 
 
 def prepare(path, request):
@@ -91,3 +105,51 @@ def apply(path, plan):
         after.operation={'id':plan['id'],'reason':plan['request']['reason'],'kind':'metadata_migration'}
         repository.save(path,after)
         return receipt
+
+
+def migrate_core(path, apply=False):
+    with ledger_lock(path):
+        ledger = repository.load(path, create=False)
+        result = {"from": ledger["schema_version"], "to": SCHEMA_VERSION, "applied": False,
+                  "notes": ["Unknown fields are preserved", "Legacy default account requires user confirmation",
+                            "Old inferred prices are observations only", "Historical written-off rows retain legacy date semantics"]}
+        if ledger["schema_version"] == SCHEMA_VERSION and ledger.profile_token is not None:
+            result["needed"] = False
+            return result
+        before = financial_snapshot(ledger)
+        candidate = copy.deepcopy(ledger)
+        candidate['schema_version'] = SCHEMA_VERSION
+        candidate.runtime['schema_version'] = SCHEMA_VERSION
+        validate(candidate)
+        result.update(before=before, after=financial_snapshot(candidate), needed=True)
+        if not apply:
+            return result
+        backup = profile.runtime_dir(path) / "backups" / ("migration-" + uuid.uuid4().hex)
+        backup.mkdir(parents=True)
+        for name, source in {"ledger.json": Path(path), "user-profile.md": profile.profile_path(path),
+                             "runtime.json": profile.runtime_dir(path) / "runtime.json"}.items():
+            if source.exists():
+                write_text_secure(backup / name, source.read_text(encoding="utf-8"))
+        if ledger.profile_token is None:
+            rules = profile.empty_profile()
+            fields = profile.confirmed_fields(ledger)
+            fields.pop("account_id")  # old defaults have no evidence of user confirmation
+            rules.update(fields)
+            from .habits import habit_memory_path
+            memory = habit_memory_path(path)
+            if memory.is_file():
+                original_memory = memory.read_text(encoding='utf-8')
+                write_text_secure(backup / 'legacy-memory.md', original_memory)
+                ledger.profile_text = profile.render(rules) + '\n## 迁移保留的旧观察（未经用户确认为规则）\n\n' + original_memory
+                result['legacy_memory_preserved'] = True
+            ledger.profile_override = rules
+            ledger["preferences"]["default_account_id"] = None
+        ledger["schema_version"] = SCHEMA_VERSION
+        ledger.runtime["schema_version"] = SCHEMA_VERSION
+        validate(ledger)
+        if financial_snapshot(ledger) != result['after']:
+            raise ValueError('Migration differs from preview')
+        ledger.operation = {'id':'migration_'+uuid.uuid4().hex, 'reason':'Core schema migration', 'kind':'core_migration'}
+        repository.save(path, ledger)
+        result.update(applied=True, backup=str(backup), revision=ledger["revision"])
+        return result

@@ -19,7 +19,7 @@ class InstalledSkillTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             archive, included = package(ROOT, folder / "dist")
-            self.assertIn("assets/ledger-bill-canvas.html", included)
+            self.assertFalse(any(item.startswith("assets/") for item in included))
             self.assertFalse(any("-runtime/" in item or item.startswith("tests/") for item in included))
             with zipfile.ZipFile(archive) as bundle:
                 bundle.extractall(folder / "installed")
@@ -36,8 +36,7 @@ class InstalledSkillTest(unittest.TestCase):
             # Optional legacy renderer is usable in the complete distribution.
             report = folder / "snapshot.html"
             run("bill", "render", "--month", "2026-10", "--output", str(report))
-            self.assertIn("<canvas", report.read_text())
-            shutil.rmtree(installed / "assets")
+            self.assertIn("<main>", report.read_text())
             run("record", "--text", "咖啡12", "--date", "2026-10-02")
             rows = folder / "rows.tsv"
             rows.write_text("occurred_at\ttype\tamount\tcategory\tmerchant\n2026-10-03\texpense\t5\t交通\t公交\n")
@@ -84,7 +83,6 @@ class InstalledSkillTest(unittest.TestCase):
             shutil.copy2(ROOT / "SKILL.md", root / "SKILL.md")
             shutil.copytree(ROOT / "scripts", root / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
             shutil.copytree(ROOT / "references", root / "references")
-            shutil.copytree(ROOT / "assets", root / "assets")
-            (root / ".skillignore").write_text((ROOT / ".skillignore").read_text() + "\n*-bill-*.html\n")
+            (root / ".skillignore").write_text((ROOT / ".skillignore").read_text() + "\nscripts/ledger_core/services/reports.py\n")
             with self.assertRaisesRegex(ValidationError, "filtered"):
                 validate(root)

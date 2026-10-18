@@ -49,7 +49,7 @@ plan.json --apply`. Example request:
 ```
 
 The preview binds all context tokens and compares transaction count, totals and
-account balances. Apply creates a three-file backup, updates data and registry
+account balances, source identities, outstanding receivables and period budgets. Apply creates a three-file backup, updates data and registry
 together, and records an idempotent receipt. Failed conversion or a collision
 stops before writing. `metadata_revision` tracks these changes separately from
 core schema. Monetary fields and new financial semantics require a tested core
@@ -93,3 +93,25 @@ wall time and output size. It is not a general dependency installer or a memory
 quota system. Unsupported hosts or a sandbox that cannot start fail closed;
 never substitute an unrestricted subprocess. Use an already supported importer
 or a converter on a supported host instead.
+
+## Core migration and recovery
+
+Before switching a real ledger, take an independent copy of its JSON and runtime
+directory. Run `context`, `doctor`, `audit` and `migrate` on that copy; inspect the
+financial before/after metrics and the neutral default-account change. Existing
+legacy writeoffs retain their date semantics and are called out in the preview.
+Do not silently reinterpret an old loss as a new dated event.
+
+Stop other writers during the final switch, reload current context and repeat the
+preview against that revision. `migrate --apply` writes a three-file backup and a
+recoverable bundle under the lock. Verify `doctor`, source counts, period totals,
+accounts, receivables and budgets, then point `LAZY_LEDGER_FILE` at the intended
+path. Keep the backup and migration receipt. No live ledger is migrated merely
+because the skill was updated.
+
+For an interrupted commit, load the ledger through the core so `pending.json`
+finishes all targets. For a later reversal, use a forward metadata migration or
+an explicit Git restore preview; snapshot current data first. Do not overwrite
+new transactions with an old filesystem backup. Without Git, work from the saved
+bundle in an isolated path, reconcile later operations, and validate before
+switching. Optional-field migration retries return the original receipt.

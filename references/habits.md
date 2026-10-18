@@ -21,7 +21,7 @@ the document but inactive rules must not fill fields. Deleting a confirmed rule
 removes permission to apply it; observations cannot regrant that permission.
 
 `habits` and `preferences.usage_profile` remain compatibility caches in the
-ledger during the staged refactor. `habit list` computes an observation view
+ledger for compatibility. `habit list` computes an observation view
 without saving. `habit rebuild` explicitly refreshes it. `habit memory` creates
 a legacy derived Markdown export; that file is never the authority for rules.
 Observations may suggest a question, but must not overwrite the profile.
@@ -29,4 +29,6 @@ Observations may suggest a question, but must not overwrite the profile.
 For old files, `migrate` previews adoption of an independent profile;
 `migrate --apply` saves a bundle backup first. Manual phrase rules and merchant
 preferences are retained. A legacy default account is not automatically
-confirmed because older versions supplied one without asking.
+confirmed because older versions supplied one without asking. Existing derived
+`<stem>-memory.md` is backed up and retained as explicitly unconfirmed prose; it
+does not grant fixed-price or execution permissions.

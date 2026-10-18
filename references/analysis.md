@@ -14,3 +14,8 @@ Use the same metrics for dialogue, graphs and reports. Suggestions follow the
 profile's communication preference or an explicit request. Never change records,
 classification rules or budgets as a side effect of analysis. Send ambiguous
 items to the review workflow with supporting transaction IDs.
+
+Month-to-date comparisons use the same elapsed days of the preceding month;
+explicit full-month queries compare full months. Report coverage alongside any
+comparison. Identify one-off items from evidence or user labels before treating
+them as routine changes; a larger category total alone does not prove a new habit.

@@ -1,5 +1,6 @@
 """CLI adapter for context, profile, migration and optional Git history."""
 import json
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -29,39 +30,22 @@ def context(path, task):
             "needs_setup": ["git_preference"] if ledger.get("git_preference", "undecided") == "undecided" else []}
 
 
-def migrate(path, apply=False):
-    with ledger_lock(path):
-        ledger = repository.load(path, create=False)
-        result = {"from": ledger["schema_version"], "to": SCHEMA_VERSION, "applied": False,
-                  "notes": ["Unknown fields are preserved", "Legacy default account requires user confirmation",
-                            "Old inferred prices are observations only", "Historical written-off rows retain legacy date semantics"]}
-        if ledger["schema_version"] == SCHEMA_VERSION and ledger.profile_token is not None:
-            result["needed"] = False
-            return result
-        if not apply:
-            return result
-        backup = profile.runtime_dir(path) / "backups" / ("migration-" + uuid.uuid4().hex)
-        backup.mkdir(parents=True)
-        for name, source in {"ledger.json": Path(path), "user-profile.md": profile.profile_path(path),
-                             "runtime.json": profile.runtime_dir(path) / "runtime.json"}.items():
-            if source.exists():
-                write_text_secure(backup / name, source.read_text(encoding="utf-8"))
-        if ledger.profile_token is None:
-            rules = profile.empty_profile()
-            fields = profile.confirmed_fields(ledger)
-            fields.pop("account_id")  # old defaults have no evidence of user confirmation
-            rules.update(fields)
-            ledger.profile_override = rules
-            ledger["preferences"]["default_account_id"] = None
-        ledger["schema_version"] = SCHEMA_VERSION
-        ledger.runtime["schema_version"] = SCHEMA_VERSION
-        repository.save(path, ledger)
-        result.update(applied=True, backup=str(backup), revision=ledger["revision"])
-        return result
+from ..services.migrations import migrate_core as migrate
 
 
 def dispatch(args):
     try:
+        if args.command == "history" and args.history_command in {"inspect", "clone", "remote"}:
+            from ..services import remotes
+            if args.history_command == "remote":
+                result = remotes.provision(args.ledger, args.repository, create=args.create, apply=args.apply)
+            elif args.history_command == "inspect":
+                result = remotes.inspect(args.source)
+            else:
+                result = remotes.restore(args.ledger, args.source, expected_id=args.expected_ledger_id,
+                    expected_commit=args.expected_commit, mode=args.mode, private_confirmed=args.private_remote_confirmed)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return
         if args.command == "history" and args.history_command == "sync":
             resolution = json.loads(Path(args.resolution).read_text()) if args.resolution else None
             print(json.dumps(history.sync(args.ledger, resolution), ensure_ascii=False, indent=2))
@@ -102,7 +86,7 @@ def dispatch(args):
                 action = args.history_command
                 if action == "configure":
                     ledger = repository.load(args.ledger, create=False)
-                    result = history.configure(args.ledger, args.mode, args.remote, args.private_remote_confirmed)
+                    result = history.configure(args.ledger, args.mode, args.remote, args.private_remote_confirmed, args.sync_mode)
                     ledger["git_preference"] = args.mode
                     repository.save(args.ledger, ledger)
                     result["history"] = getattr(ledger, "history_status", None)
@@ -110,12 +94,12 @@ def dispatch(args):
                     result = history.list_history(args.ledger)
                 elif action == "save":
                     result = history.record(args.ledger)
-                elif action == "restore":
-                    result = history.restore(args.ledger, args.commit, args.apply)
+                elif action in {"restore", "diff"}:
+                    result = history.restore(args.ledger, args.commit, getattr(args, "apply", False))
                 else:
                     result = history.sync(args.ledger)
             print(json.dumps(result, ensure_ascii=False, indent=2))
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
         raise SystemExit(str(exc)) from exc
 
 
@@ -141,9 +125,22 @@ def add_commands(sub):
     p.add_argument("--type", choices=["string", "number", "boolean", "object", "array"], required=True)
     p.add_argument("--description", required=True)
     group = sub.add_parser("history", help="Optional isolated Git history").add_subparsers(dest="history_command", required=True)
+    p = leaf(group, "remote", "Inspect or explicitly create/connect a private GitHub repository")
+    p.add_argument("--repository", required=True)
+    p.add_argument("--create", action="store_true")
+    p.add_argument("--apply", action="store_true")
+    p = leaf(group, "inspect", "Inspect a portable remote ledger before recovery")
+    p.add_argument("--source", required=True)
+    p = leaf(group, "clone", "Install a validated ledger on a new device; never overwrite")
+    p.add_argument("--source", required=True)
+    p.add_argument("--expected-ledger-id")
+    p.add_argument("--expected-commit")
+    p.add_argument("--mode", choices=["off", "local", "remote"], default="local")
+    p.add_argument("--private-remote-confirmed", action="store_true")
     p = leaf(group, "configure", "Choose local history or a confirmed private remote")
     p.add_argument("--mode", choices=["off", "local", "remote"], required=True)
     p.add_argument("--remote", default=None)
+    p.add_argument("--sync-mode", choices=["manual", "after-write"], default="manual")
     p.add_argument("--private-remote-confirmed", action="store_true")
     leaf(group, "list", "List recent snapshots")
     leaf(group, "save", "Retry recording the current saved state")
@@ -152,3 +149,6 @@ def add_commands(sub):
     p = leaf(group, "restore", "Preview restoration; applying creates a new commit")
     p.add_argument("--commit", required=True)
     p.add_argument("--apply", action="store_true")
+
+    p = leaf(group, "diff", "Preview financial differences against a saved commit")
+    p.add_argument("--commit", required=True)

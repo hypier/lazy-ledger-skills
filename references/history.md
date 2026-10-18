@@ -4,19 +4,26 @@ At ledger creation ask once: no Git, local history, or private remote backup.
 `init --git-mode undecided` records without initializing/uploading a repository.
 `off` records refusal; `local` creates local history. Honor an existing choice.
 
-Enable later with `history configure --mode local`. For remote mode, use the
-host/provider to check the actual target and private visibility, then run:
+Enable later with `history configure --mode local`. For GitHub, preview an
+existing repository with `history remote --repository OWNER/NAME`. Add `--create`
+to preview creation; `--create --apply` creates a private repository using the
+host's authenticated `gh`. `--apply` connects the inspected repository. The
+service checks its actual private/archive status and, for a nonempty repository,
+its main branch, portable files and ledger identity. Creation/connection never
+uploads; run `history sync` when remote backup is authorized.
 
-```sh
-ledger history configure --mode remote --remote URL --private-remote-confirmed
-ledger history sync
-```
+For another provider, use the host/provider to verify the actual private target,
+then `history configure --mode remote --remote URL --private-remote-confirmed`.
+That flag records a completed visibility check; it is not a provider API check.
+Credentials stay in the host's `gh`/Git configuration, never in a remote URL.
 
-The flag records the caller's completed visibility check; the CLI does not create
-repositories or verify provider visibility. Use an empty private remote or this
-ledger's remote and host credentials, never credentials in a URL. Sync runs in
-the foreground only. Configuring a remote does not itself upload. `--mode off`
-stops snapshots/sync without deleting history; `local` stops remote sync.
+Synchronization defaults to manual. When the user explicitly chooses automatic
+sync, configure the verified remote with `--sync-mode after-write`. CLI/HTTP writes
+queue retry intent locally and attempt sync after releasing the business lock.
+Offline failures retain that intent; the next eligible CLI call retries, or use
+`history sync`. Direct Python service users call `history.flush_auto_sync` after
+their transaction. No resident scheduler is installed. `--mode off` stops both
+snapshots and sync without deleting history; `local` stops uploads.
 
 The isolated repository is `<stem>-runtime/history/.git`, bound to the ledger ID.
 Only `ledger.json`, `user-profile.md`, `runtime.json` are versioned. The runtime
@@ -46,8 +53,12 @@ choices within the user's correction authorization. Head changes invalidate the
 plan. There is no last-write-wins or force push. Duplicate authoritative sources,
 inconsistent settlements, profile/account conflicts and incompatible schema
 changes fail validation; correct the relevant device records or migrate first.
-Identical-source rows independently created with different IDs currently need
-that explicit reconciliation rather than an automatic identity rewrite.
+Authoritative same-source rows created with different IDs are aligned to one
+canonical identity. Identical facts merge once and combine provenance; differing
+facts produce a row conflict. `identity_aliases` preserves old IDs, and active
+refund/settlement references are rewritten. Historical audit receipts remain
+unchanged. A later correction can address either ID; undo of a pre-merge operation
+may require a coordinated correction if the affected row/provenance changed.
 
 `context` returns local sync status. Remote success is reported only after
 checking the pushed commit at the remote; a newer local edit remains pending.
@@ -63,8 +74,29 @@ that later rows leave the current view but remain in history. Profile and runtim
 are restored together, while device permissions stay local. Use `proposal undo`
 for a targeted operation reversal that preserves unrelated newer rows.
 
-On a new device, clone into a separate working location, inspect the three
-portable files and ledger identity, and explicitly configure local/remote mode.
-Validate and enable converters again on that device. Portable user preferences
-never authorize new-device uploads or code execution. Automated provider setup
-and new-device onboarding are not implemented.
+On a new device, use `history inspect --source URL` to verify the portable
+snapshot and obtain its ledger ID and commit. Then use:
+
+```sh
+ledger history clone --ledger /new/location/book.json --source URL \
+  --expected-ledger-id LEDGER_ID --expected-commit COMMIT
+```
+
+The destination must be new. Restore validates before installation and records a
+recovery journal before moving the runtime into place. If interrupted, the next
+core load completes the bundle. Local-only mode is the default; remote mode
+requires explicit current-device confirmation. No clone command uploads.
+Validate and enable converters on that device before executing them.
+
+`history diff --commit SHA` shows current/historical counts, periods, account
+balances, receivables, source identities and budgets. `history restore` uses the
+same preview. Archived reports, source attachments and device permissions are
+explicitly listed as outside clone recovery. User-entered ledger evidence is
+versioned intact, including paths a user put in an attachment/note; local runtime
+configuration and credentials are excluded. Inspect the intended scope before
+the first upload, and never describe the snapshot as a complete device backup.
+
+GitHub commands follow the official [repo create](https://cli.github.com/manual/gh_repo_create)
+and [repo view](https://cli.github.com/manual/gh_repo_view) interfaces. Provider
+creation is exercised with a substitute provider response in automated tests;
+real repository creation requires an authorized target and host authentication.

@@ -11,7 +11,7 @@ Use this workflow for a long WeChat/bank bill screenshot or any image containing
   --json
 ```
 
-The JSON includes `markdown`, parsed `rows`, the TSV path, page-header monthly totals, and whether a wider original replaced the supplied image. For an Alipay or bank screenshot, pass `--account 支付宝 --method alipay --bill-label 支付宝账单` (or the matching account/method) so rows are not all filed under WeChat.
+The JSON includes `markdown`, parsed `rows`, the TSV path, page-header monthly totals, and whether a wider original replaced the supplied image. Built-in OCR uses macOS Vision. Pass a known `--account` separately from the payment `--method` and `--bill-label`. A channel does not identify the funding account; absent accounts stay unassigned. The TSV preserves the image hash and original row index.
 
 If it exits with `ocr_too_sparse`, ask for the album/Finder original. Do not guess from a thumbnail.
 
@@ -36,21 +36,19 @@ Stop after the table. Import only after the user replies with an explicit confir
 
 ## 4. Apply After Confirmation
 
-1. Copy the current ledger to a temporary preview.
-2. Apply approved existing-row updates to the preview.
-3. Import the reviewed new-row TSV:
+Use the shared plan/commit workflow after confirmation:
 
-```bash
-"$LEDGER_SKILL_DIR/scripts/ledger" import-tsv \
-  --ledger /tmp/lazy-ledger-preview.json \
-  --input ./wechat-bill-rows.tsv
+```sh
+ledger import prepare --input ./wechat-bill-rows.tsv --confirmed-image
+ledger import commit --input saved-import-plan.json
 ```
 
-Use `--allow-duplicate` only when the reviewed TSV intentionally contains a valid same-merchant repeat or an expense/refund pair.
-
-4. Validate preview counts, IDs, categories, totals, and duplicate audit.
-5. Create a real backup and ensure the live ledger is still the version that was previewed.
-6. Apply the same updates and import once to the real ledger.
+Save the exact ready plan returned by `prepare`. Use `--links` for approved
+existing-row associations and `--distinct` for explicitly confirmed separate
+purchases. The core validates a copy, checks source totals and full context,
+then commits once with a replay receipt. The compatibility `import-tsv` entry
+uses this same service and also requires `--confirmed-image` for image rows.
+Never add that flag before visible confirmation.
 
 ## 5. Verify And Clean Up
 
@@ -66,7 +64,7 @@ Refresh `habit memory` after a large import. If the local app is running, verify
 
 ## Parsing Heuristics
 
-- `+`, `退款`, or `已全额退款`: `refund`; strip only a visible trailing refund label from the merchant.
+- A positive refund row is `refund`; a positive receipt is otherwise income. An original expense labelled refunded remains a separate source fact for review. Never infer a missing original expense from a refund.
 - `转账-来自…` / 红包 received: `income`.
 - `转账-转给…`: usually `expense` + 人情, not an own-account transfer.
 - 提现到 the user's bank account: `transfer`.

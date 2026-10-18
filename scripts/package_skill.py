@@ -129,7 +129,8 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
 
     required = {"scripts/ledger_core/domain/model.py", "scripts/ledger_core/domain/metrics.py",
                 "scripts/ledger_core/storage/repository.py", "scripts/ledger_core/services/profile.py",
-                "scripts/ledger_core/adapters/runtime_cli.py", "assets/ledger-bill-canvas.html"}
+                "scripts/ledger_core/adapters/runtime_cli.py", "scripts/ledger_core/services/reports.py", "scripts/ledger_core/services/remotes.py",
+                "scripts/ledger_core/adapters/api.py"}
     missing_packaged = sorted(required - set(included))
     if missing_packaged:
         raise ValidationError("Required runtime files filtered from package: " + ", ".join(missing_packaged))

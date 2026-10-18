@@ -23,8 +23,9 @@ Automatic advance settlement additionally requires explicit repayment/reimbursem
 
 ## Persisted Review Queue
 
-`review refresh` reconciles persisted findings with current evidence. `review next`
+Financial writes persist actionable findings. `review refresh` reconciles persisted findings with current evidence. `review next`
 is read-only. `review resolve --id TX --code CODE --note ...` records a decision;
+For ledger/account findings use the full finding key as `--id` and omit `--code`.
 `--status waiting|dismissed|snoozed|open` supports other lifecycle states. Snoozing
 requires a future `--until YYYY-MM-DD`. The same resolved or dismissed evidence
 stays quiet; changed evidence reopens the item and preserves the previous decision.
