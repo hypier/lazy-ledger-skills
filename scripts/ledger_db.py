@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-COLLECTIONS = ("transactions", "accounts", "budgets", "categories", "habits", "bills")
+COLLECTIONS = ("transactions", "accounts", "budgets", "categories", "habits", "bills", "review_queue")
 STORE_KIND = "lazy-ledger-docs"
 STORE_VERSION = 1
 

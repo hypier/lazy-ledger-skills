@@ -23,6 +23,49 @@ Store a positive `amount`; reports apply direction from `type`.
 
 Keep a fully refunded purchase as one `expense` plus one `refund`.
 
+Decide the economic event once, then let `type` and `category` follow from it. They are not
+independent: an income-only category such as `收入` on an `expense` row is a contradiction,
+and `doctor` reports it as `category_type_mismatch`.
+
+### Reimbursement, advance, and loan
+
+Money that is expected back must not be counted as ordinary spending:
+
+- Reimbursement arriving (`报销回来`, `报销了`, `报销到账`) is `income`; it settles an earlier
+  advance rather than creating new spending.
+- Paying out first (`垫付`, `代付`, `借出`, `借给`) leaves the account as `expense`, but the
+  money is owed back. Record it as an advance (`--advance`, or the verb is enough) and keep it
+  out of ordinary spending totals; do not silently treat it as a normal purchase.
+- A reimbursement request is not income and an advance is not a finished expense. Preserve
+  the distinction until the money actually moves back.
+
+Advances carry a state on the row, so they can be queried and closed in a later session:
+
+| State | Meaning | Counts as spending? |
+| --- | --- | --- |
+| `open` | Owed back, still outstanding | No |
+| `settled` | Paid back | Yes, once reimbursed |
+| `written_off` | Will not be repaid | Yes |
+
+- `advance list` shows what is still owed; add `--all` to include closed rows.
+- A reimbursement equal to exactly one open advance settles it automatically, and the income
+  row links back with `relation: reimbursement`. If several advances match, nothing is
+  settled — ask the user instead of guessing.
+- When the user gives up on the money, `advance writeoff` turns it into real spending.
+- `--not-mine` records a row that is not the user's own spending (代付, 帮朋友垫一下) without
+  putting it in totals. It is the plain-language form of excluding a row from totals.
+
+### Own-account transfers
+
+Only movement between the user's own accounts is `transfer`:
+
+- `还信用卡`, `提现`, `转到`, `转入`, `内部划转`, or an explicit route such as
+  `从微信转100到支付宝`.
+- 提现 moves money to a bank account: `微信提现500` is a transfer from 微信零钱 to 银行卡.
+  A transfer needs both sides, so pass `--to-account` when the destination is not implied.
+- Paying another person (`转账给妈妈`, `转给小王`) is `expense`, not a transfer, even though
+  the word 转账 appears.
+
 ## Date And Time
 
 - No date: current local time.

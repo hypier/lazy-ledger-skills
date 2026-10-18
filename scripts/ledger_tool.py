@@ -79,10 +79,18 @@ ACCOUNT_ALIASES = {
     "借记卡": "bank",
     "储蓄卡": "bank",
 }
-TRANSFER_ROUTE_RE = re.compile(
-    r"(?:从)?(微信零钱|微信支付|微信|支付宝余额|支付宝|余额宝|现金账户|现金|信用卡|银行卡|借记卡|储蓄卡)"
-    r"\s*(?:转到|转给|转入|->|→|到)\s*"
+_ACCOUNT_TOKEN = (
     r"(微信零钱|微信支付|微信|支付宝余额|支付宝|余额宝|现金账户|现金|信用卡|银行卡|借记卡|储蓄卡)"
+)
+TRANSFER_ROUTE_RE = re.compile(
+    r"(?:从)?"
+    + _ACCOUNT_TOKEN
+    # The verb may be followed directly by the connector ("转到"), or an amount
+    # may sit between them ("从微信转100到支付宝").
+    + r"\s*(?:转账|转到|转给|转入|转|->|→)"
+    + r"\s*(?:\d+(?:\.\d{1,2})?\s*元?\s*)?"
+    + r"(?:到|至|进|给)?\s*"
+    + _ACCOUNT_TOKEN
 )
 REQUIRED_TX_FIELDS = {
     "id",
@@ -143,6 +151,25 @@ TYPE_KEYWORDS = {
     "refund": ["退款", "退回", "返现"],
     "transfer": ["还信用卡"],
 }
+# Reimbursement income phrases. The literal "报销到账" was the only recognised
+# form, so the far more common "报销回来"/"报销了" fell through to expense and
+# silently inflated spending.
+REIMBURSE_INCOME_KEYWORDS = ("报销到账", "报销回来", "报销了", "报销打款", "报销入账", "公司报销")
+# Advance/loan language marks money expected back, so it must not be counted as
+# ordinary spending even though cash leaves the account.
+ADVANCE_KEYWORDS = ("垫付", "垫钱", "代付", "代垫", "借出", "借给", "应收")
+# Categories whose meaning is inherently income. Used by the type/category
+# consistency invariant in doctor_report().
+INCOME_ONLY_CATEGORIES = {"收入", "红包收入"}
+# Advance state: money paid out that is expected back (垫付/代付/借出).
+VALID_ADVANCE_STATES = ("open", "settled", "written_off")
+NO_ITEMIZED_PREFIXES = ("外卖", "打车", "超市", "买菜", "海淘", "网购", "订单")
+# Receiving a red packet is income; sending one is 人情 spending. The verb
+# decides, so both directions are not collapsed into one rule.
+RED_PACKET_INCOME_KEYWORDS = ("收到红包", "收红包", "红包收到", "领到红包", "抢到红包")
+RED_PACKET_EXPENSE_KEYWORDS = ("发红包", "红包给", "给红包", "发了红包", "包了红包")
+# Own-account movement verbs that indicate a transfer rather than spending.
+TRANSFER_VERBS = ("还信用卡", "提现", "转到", "转入", "内部划转", "还款", "还花呗", "还白条")
 TYPE_LINE_MAP = {"支出": "expense", "收入": "income", "退款": "refund", "转账": "transfer"}
 METHOD_KEYWORDS = {
     "wechat": ["微信支付", "微信"],
@@ -415,6 +442,7 @@ def empty_ledger(currency="CNY"):
         "budgets": [],
         "habits": [],
         "bills": [],
+        "review_queue": [],
         "store": STORE_KIND,
         "store_version": STORE_VERSION,
         "preferences": {"merchant_categories": {}, "merchant_aliases": {}, "default_account_id": "acc_wechat"},
@@ -496,6 +524,26 @@ def infer_transfer_route(text):
                 source = alias
                 break
         return source, "信用卡"
+    if "提现" in text:
+        # Withdrawing moves money to a bank account. Capture an explicit
+        # destination ("提现到银行卡") and treat the rest as the source, so the
+        # destination account is not mistaken for the source.
+        destination = None
+        destination_match = re.search(r"提现\s*(?:到|至|进)\s*" + _ACCOUNT_TOKEN, text)
+        remainder = text
+        if destination_match:
+            destination = destination_match.group(1)
+            remainder = text[: destination_match.start()] + " " + text[destination_match.end() :]
+        else:
+            remainder = text.replace("提现", " ")
+        source = None
+        for alias in sorted(ACCOUNT_ALIASES, key=len, reverse=True):
+            if alias in remainder:
+                source = alias
+                break
+        if destination is None and "银行卡" in remainder:
+            destination = "银行卡"
+        return source, destination or "银行卡"
     return None
 
 
@@ -702,6 +750,7 @@ def normalize_ledger(data, currency="CNY"):
     data.setdefault("budgets", [])
     data.setdefault("habits", [])
     data.setdefault("bills", [])
+    data.setdefault("review_queue", [])
     data["store"] = STORE_KIND
     data.setdefault("store_version", STORE_VERSION)
     ledger_preferences(data)
@@ -716,6 +765,8 @@ def normalize_ledger(data, currency="CNY"):
         data["habits"] = []
     if not isinstance(data["bills"], list):
         data["bills"] = []
+    if not isinstance(data["review_queue"], list):
+        data["review_queue"] = []
     return data
 
 
@@ -1344,25 +1395,69 @@ def learn_habits_from_transaction(ledger, tx):
     return updated
 
 
-def infer_type(text):
+def classify_event(text):
+    """Decide the economic event once, then derive type and category together.
+
+    Returns (tx_type, category, flags, confidence). Type and category used to be
+    inferred independently, which allowed contradictory rows such as
+    ``type=expense`` with ``category=收入``. Deciding the event as a unit keeps
+    the two consistent by construction.
+
+    flags may contain ``advance`` (money expected back) and ``reimburse``.
+    """
+    if any(keyword in text for keyword in REIMBURSE_INCOME_KEYWORDS):
+        # Reimbursement arriving is income, and it settles an earlier advance.
+        return "income", "收入", {"reimburse": True}, 0.95
+    if any(keyword in text for keyword in RED_PACKET_INCOME_KEYWORDS):
+        return "income", "红包", {}, 0.9
+    if any(keyword in text for keyword in RED_PACKET_EXPENSE_KEYWORDS):
+        return "expense", "红包", {}, 0.9
+    if any(keyword in text for keyword in ADVANCE_KEYWORDS):
+        # Advance/loan: cash leaves now but is owed back, so it must not count
+        # as ordinary spending.
+        return "expense", "其他", {"advance": True}, 0.7
+    # An explicit route between two of the user's own accounts is a transfer,
+    # even when the wording is "转100到" rather than the literal "还信用卡".
+    if infer_transfer_route(text):
+        return "transfer", "转账", {}, 0.9
     for tx_type, keywords in TYPE_KEYWORDS.items():
         if any(keyword in text for keyword in keywords):
-            return tx_type
-    return "expense"
+            if tx_type == "income":
+                return tx_type, ("红包" if "红包" in text else "收入"), {}, 1.0
+            if tx_type == "transfer":
+                return tx_type, "转账", {}, 1.0
+            return tx_type, None, {}, 1.0
+    if any(verb in text for verb in TRANSFER_VERBS):
+        return "transfer", "转账", {}, 0.8
+    tx_type = "expense"
+    for category in CATEGORY_KEYWORDS:
+        if category in text:
+            return tx_type, category, {}, 1.0
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        if any(keyword in text for keyword in keywords):
+            # A category-only cue such as "报销" without arrival language is an
+            # advance awaiting settlement, not a finished expense.
+            if category in INCOME_ONLY_CATEGORIES:
+                return tx_type, "其他", {"advance": True}, 0.7
+            return tx_type, category, {}, 1.0
+    return tx_type, "其他", {}, 1.0
+
+
+def infer_type(text):
+    tx_type, _category, _flags, _confidence = classify_event(text)
+    return tx_type
 
 
 def infer_category(text, tx_type="expense"):
+    _event_type, category, _flags, _confidence = classify_event(text)
+    if category is None:
+        category = "其他"
     if tx_type == "income":
-        if "红包" in text:
-            return "红包"
-        return "收入"
-    for category in CATEGORY_KEYWORDS:
-        if category in text:
-            return category
-    for category, keywords in CATEGORY_KEYWORDS.items():
-        if any(keyword in text for keyword in keywords):
-            return category
-    return "其他"
+        return "红包" if "红包" in text else "收入"
+    # Never let a type/category mismatch leak out through this legacy helper.
+    if category in INCOME_ONLY_CATEGORIES and tx_type != "income":
+        return "其他"
+    return category
 
 
 def infer_method(text):
@@ -1488,6 +1583,9 @@ def infer_merchant(cleaned_text, category, original_text=""):
     text = re.sub(r"[，,。；;:：()（）\[\]【】]", " ", text)
     parts = [part.strip() for part in text.split() if part.strip()]
     parts = [part for part in parts if part != category]
+    # A single leftover character is a fragment of the original phrase (给, 的,
+    # 买), not a merchant name; prefer the fallback list over it.
+    parts = [part for part in parts if len(part) > 1]
     if parts:
         return parts[0]
     for merchant in FALLBACK_MERCHANTS:
@@ -1594,9 +1692,9 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
     date_token = extract_date_token(raw_text)
     date_text_removed = raw_text.replace(date_token, " ", 1) if date_token else raw_text
     amount, amount_removed = extract_amount(date_text_removed)
-    tx_type = infer_type(raw_text)
+    tx_type, event_category, event_flags, _event_confidence = classify_event(raw_text)
     merchant = infer_merchant(amount_removed, infer_category(raw_text, tx_type), raw_text)
-    category = preferred_category(ledger, merchant, infer_category(raw_text, tx_type))
+    category = preferred_category(ledger, merchant, event_category or infer_category(raw_text, tx_type))
     if tx_type == "expense" and re.search(r"(?:转账-?转给|转账给|转给)", raw_text):
         category = "人情往来"
     method = infer_method(raw_text)
@@ -1640,6 +1738,8 @@ def parse_text_transaction(text, ledger=None, currency="CNY", source="text", con
         proposal["method"] = method
     if account:
         proposal["account"] = account
+    if event_flags.get("advance"):
+        proposal["advance"] = "open"
     apply_habit_to_proposal(proposal, habit, amount_from_habit=amount_from_habit)
     apply_usage_defaults(proposal, ledger)
     return apply_account_fields(proposal, ledger)
@@ -1768,10 +1868,17 @@ def merge_overrides(proposal, args):
         merged["source"] = args.source
     if args.confidence is not None:
         merged["confidence"] = args.confidence
-    if getattr(args, "exclude_from_totals", False):
+    if getattr(args, "exclude_from_totals", False) or getattr(args, "not_mine", False):
         merged["excluded_from_totals"] = True
     if getattr(args, "include_in_totals", False):
         merged.pop("excluded_from_totals", None)
+    if getattr(args, "advance", None):
+        merged["advance"] = args.advance
+    elif getattr(args, "not_mine", False):
+        # Fronting money for someone else is not a receivable in the ledger's
+        # sense: it is simply not the user's spending, so it must not also be
+        # listed as an open advance.
+        merged.pop("advance", None)
     return merged
 
 
@@ -1798,6 +1905,7 @@ def build_transaction_payload(
     related_transaction_id=None,
     relation=None,
     excluded_from_totals=False,
+    advance=None,
 ):
     if amount_value is None:
         raise SystemExit("Amount is required unless --text includes one")
@@ -1867,7 +1975,61 @@ def build_transaction_payload(
         tx["relation"] = relation
     if excluded_from_totals:
         tx["excluded_from_totals"] = True
+    # Advance state: money paid out that is expected back. Stored as a first
+    # class field so it can be queried and settled, rather than living only in
+    # the parser's transient flags.
+    advance_state = normalize_advance(advance)
+    if advance_state:
+        tx["advance"] = advance_state
     return tx
+
+
+def normalize_advance(value):
+    """Coerce an advance state value; return None when there is no state."""
+    if value is None or value is False or value == "":
+        return None
+    if value is True:
+        return "open"
+    state = str(value).strip().lower()
+    if state not in VALID_ADVANCE_STATES:
+        raise SystemExit(f"Advance state must be one of: {', '.join(VALID_ADVANCE_STATES)}")
+    return state
+
+
+def advance_settled_amount(tx):
+    return round(sum(safe_amount(item.get("amount")) for item in tx.get("advance_settlements") or [] if isinstance(item, dict)), 2)
+
+
+def advance_remaining(tx):
+    return round(safe_amount(tx.get("amount")) - advance_settled_amount(tx), 2)
+
+
+def apply_advance_settlement(advance_tx, income_tx):
+    """Record that an income row settled an earlier advance.
+
+    The advance keeps its original amount and gains a settlement entry, so the
+    audit trail is preserved and repeated reimbursements accumulate.
+    """
+    if not advance_tx or not income_tx:
+        return None
+    settlements = advance_tx.setdefault("advance_settlements", [])
+    if not isinstance(settlements, list):
+        settlements = []
+        advance_tx["advance_settlements"] = settlements
+    if any(isinstance(item, dict) and item.get("transaction_id") == income_tx.get("id") for item in settlements):
+        return None
+    settlements.append(
+        {
+            "transaction_id": income_tx.get("id"),
+            "amount": safe_amount(income_tx.get("amount")),
+            "occurred_at": income_tx.get("occurred_at"),
+        }
+    )
+    remaining = advance_remaining(advance_tx)
+    advance_tx["advance"] = "settled" if remaining <= 0.009 else "open"
+    income_tx["relation"] = "reimbursement"
+    income_tx["related_transaction_id"] = advance_tx.get("id")
+    return advance_tx.get("id")
 
 
 def payload_from_proposal(ledger, proposal, args, tx_id=None):
@@ -1893,6 +2055,7 @@ def payload_from_proposal(ledger, proposal, args, tx_id=None):
         related_transaction_id=filled.get("related_transaction_id"),
         relation=filled.get("relation"),
         excluded_from_totals=bool(filled.get("excluded_from_totals")),
+        advance=filled.get("advance"),
         tx_id=tx_id,
     )
 
@@ -1942,6 +2105,8 @@ def add_transaction(args):
                 args.occurred_at,
                 getattr(args, "exclude_from_totals", False),
                 getattr(args, "include_in_totals", False),
+                getattr(args, "not_mine", False),
+                getattr(args, "advance", None),
             ]
         ):
             proposals = [merge_overrides(item, args) for item in proposals]
@@ -1964,7 +2129,8 @@ def add_transaction(args):
                 "to_account": getattr(args, "to_account", None),
                 "related_transaction_id": getattr(args, "related_transaction_id", None),
                 "relation": getattr(args, "relation", None),
-                "excluded_from_totals": getattr(args, "exclude_from_totals", False),
+                "excluded_from_totals": getattr(args, "exclude_from_totals", False) or getattr(args, "not_mine", False),
+                "advance": getattr(args, "advance", None),
             }
         ]
     added = []
@@ -1998,10 +2164,19 @@ def add_transaction(args):
         added.append(tx)
     ledger["transactions"].sort(key=tx_sort_key, reverse=True)
     refresh_usage_profile(ledger, force=True)
+    # Link refunds that now have a confident counterpart, so the relation is
+    # persisted rather than merely suppressing a warning.
+    refund_links = link_unmatched_refunds(ledger, ledger["transactions"], added)
+    # Settle an open advance when the reimbursement that pays it back arrives.
+    advance_settlements = settle_advances(ledger, ledger["transactions"], added)
     save_ledger(args.ledger, ledger)
     write_habit_memory(args.ledger, ledger, force=False)
     month = month_key(added[0].get("occurred_at")) if added else month_key(now_iso())
     payload = {"added": added, "count": len(added), "month": month_snapshot(ledger, month)}
+    if refund_links:
+        payload["refund_links"] = refund_links
+    if advance_settlements:
+        payload["advance_settlements"] = advance_settlements
     used = [item.get("_habit") for item in proposals if item.get("_habit")]
     if used:
         payload["used_habits"] = used
@@ -2290,6 +2465,11 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
             invalid_count += 1
             continue
         amount = safe_amount(tx.get("amount"))
+        # An open advance is money owed back, not spending. It is kept out of
+        # the expense total until it is settled (or written off).
+        if tx_type == "expense" and tx.get("advance") == "open":
+            type_counts["advance"] += 1
+            continue
         type_counts[tx_type] += 1
         if tx_type in totals:
             totals[tx_type] += amount
@@ -2486,6 +2666,53 @@ def detect_recurring(transactions, today=None, lookback_months=8):
     return rows[:12]
 
 
+def match_refund_to_expense(refund, expenses):
+    """Return the expense a refund most likely reverses, or None.
+
+    Deterministic single-candidate match within 90 days on a matching amount and
+    a compatible merchant. Returns None when nothing matches; callers decide
+    whether an ambiguous result should be surfaced instead of linked.
+    """
+    refund_day = tx_day(refund)
+    try:
+        refund_amount = float(refund.get("amount") or 0)
+        refund_date = datetime.strptime(refund_day, "%Y-%m-%d").date() if refund_day else None
+    except (TypeError, ValueError):
+        return None
+    if not refund_date:
+        return None
+    refund_merchant = normalized_text(refund.get("merchant") or "")
+    candidates = []
+    for expense in expenses:
+        expense_day = tx_day(expense)
+        if not expense_day:
+            continue
+        try:
+            expense_date = datetime.strptime(expense_day, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if expense_date > refund_date or (refund_date - expense_date).days > 90:
+            continue
+        expense_amount = safe_amount(expense.get("amount"))
+        amount_ok = abs(expense_amount - refund_amount) < 0.01 or (
+            expense_amount and abs(expense_amount - refund_amount) / expense_amount < 0.05
+        )
+        if not amount_ok:
+            continue
+        expense_merchant = normalized_text(expense.get("merchant") or "")
+        merchant_ok = (
+            not refund_merchant
+            or not expense_merchant
+            or refund_merchant in expense_merchant
+            or expense_merchant in refund_merchant
+        )
+        if merchant_ok:
+            candidates.append(expense)
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
 def unmatched_refunds(transactions, period_rows):
     expenses = [
         tx
@@ -2498,45 +2725,44 @@ def unmatched_refunds(transactions, period_rows):
             continue
         if refund.get("related_transaction_id"):
             continue
-        refund_day = tx_day(refund)
-        try:
-            refund_amount = float(refund.get("amount") or 0)
-            refund_date = datetime.strptime(refund_day, "%Y-%m-%d").date() if refund_day else None
-        except (TypeError, ValueError):
-            refund_amount = 0.0
-            refund_date = None
-        refund_merchant = normalized_text(refund.get("merchant") or "")
-        matched = False
-        for expense in expenses:
-            expense_day = tx_day(expense)
-            if not refund_date or not expense_day:
-                continue
-            try:
-                expense_date = datetime.strptime(expense_day, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if expense_date > refund_date or (refund_date - expense_date).days > 90:
-                continue
-            expense_amount = safe_amount(expense.get("amount"))
-            amount_ok = abs(expense_amount - refund_amount) < 0.01 or (
-                expense_amount and abs(expense_amount - refund_amount) / expense_amount < 0.05
-            )
-            expense_merchant = normalized_text(expense.get("merchant") or "")
-            merchant_ok = (
-                not refund_merchant
-                or not expense_merchant
-                or refund_merchant in expense_merchant
-                or expense_merchant in refund_merchant
-            )
-            if amount_ok and merchant_ok:
-                matched = True
-                break
-        if not matched:
-            rows.append(compact_candidate(refund))
+        if match_refund_to_expense(refund, expenses) is not None:
+            # A confident match exists, so it is not "unmatched"; the caller
+            # links it automatically instead of asking the user.
+            continue
+        rows.append(compact_candidate(refund))
     return rows[:8]
 
 
+def link_unmatched_refunds(ledger, transactions, period_rows):
+    """Attach confident refund->expense relations in place.
+
+    Previously a confident match only suppressed the warning and left
+    related_transaction_id empty, so refunds were never actually linked. Linking
+    is reversible and does not change type, amount, account, or date, which is
+    the same risk class the skill already applies automatically.
+    """
+    expenses = [
+        tx
+        for tx in transactions
+        if isinstance(tx, dict) and not tx.get("excluded_from_totals") and tx.get("type") == "expense"
+    ]
+    linked = []
+    for refund in period_rows:
+        if not isinstance(refund, dict) or refund.get("type") != "refund":
+            continue
+        if refund.get("related_transaction_id"):
+            continue
+        expense = match_refund_to_expense(refund, expenses)
+        if expense is None or not expense.get("id"):
+            continue
+        refund["related_transaction_id"] = expense["id"]
+        refund["relation"] = "refund"
+        linked.append({"refund_id": refund.get("id"), "expense_id": expense.get("id")})
+    return linked
+
+
 def pending_reimbursements(transactions):
+    """Advances still owed back, whether tagged or stored as advance state."""
     rows = []
     for tx in transactions:
         if not isinstance(tx, dict) or tx.get("excluded_from_totals") or tx.get("type") != "expense":
@@ -2544,9 +2770,63 @@ def pending_reimbursements(transactions):
         tags = tx_tags(tx)
         if tags & REIMBURSED_TAGS:
             continue
+        if tx.get("advance") == "open":
+            rows.append(compact_candidate(tx))
+            continue
         if tags & REIMBURSE_TAGS:
             rows.append(compact_candidate(tx))
     return rows[:12]
+
+
+def open_advances(transactions):
+    return [
+        tx
+        for tx in transactions
+        if isinstance(tx, dict) and tx.get("type") == "expense" and tx.get("advance") == "open"
+    ]
+
+
+def match_income_to_advance(income, advances):
+    """Return the single open advance an income row most likely settles."""
+    income_day = tx_day(income)
+    income_amount = safe_amount(income.get("amount"))
+    if not income_day or not income_amount:
+        return None
+    candidates = []
+    for advance in advances:
+        advance_day = tx_day(advance)
+        if not advance_day or advance_day > income_day:
+            continue
+        if abs(advance_remaining(advance) - income_amount) < 0.01:
+            candidates.append(advance)
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def settle_advances(ledger, transactions, income_rows):
+    """Settle open advances with matching reimbursement income rows.
+
+    Kept separate from refund linking because the evidence is different: a
+    reimbursement is an income row equal to the outstanding advance amount.
+    """
+    linked = []
+    if not income_rows:
+        return linked
+    advances = open_advances(transactions)
+    for income in income_rows:
+        if not isinstance(income, dict) or income.get("type") != "income":
+            continue
+        if income.get("related_transaction_id"):
+            continue
+        advance = match_income_to_advance(income, advances)
+        if advance is None:
+            continue
+        if apply_advance_settlement(advance, income):
+            linked.append({"income_id": income.get("id"), "advance_id": advance.get("id")})
+            if advance.get("advance") != "open":
+                advances = [row for row in advances if row is not advance]
+    return linked
 
 
 def month_trend(transactions, end_date=None, months=6):
@@ -3246,7 +3526,13 @@ def update_command(args):
         tx["related_transaction_id"] = args.related_transaction_id
     if getattr(args, "relation", None) is not None:
         tx["relation"] = args.relation
-    excluded = True if getattr(args, "exclude_from_totals", False) else False if getattr(args, "include_in_totals", False) else None
+    excluded = (
+        True
+        if getattr(args, "exclude_from_totals", False) or getattr(args, "not_mine", False)
+        else False
+        if getattr(args, "include_in_totals", False)
+        else None
+    )
     if excluded is not None:
         if excluded:
             tx["excluded_from_totals"] = True
@@ -3421,6 +3707,23 @@ def doctor_report(ledger):
         tx_category = tx.get("category")
         if tx_category and (not isinstance(tx_category, str) or tx_category not in known_category_names(ledger)):
             add_issue(issues, "unknown_category", "Unknown category", tx, value=tx_category)
+        # Accounting invariant: an income-only category on a non-income row means
+        # the event was classified inconsistently and would distort totals
+        # silently. Flag it instead of reporting a clean ledger.
+        if (
+            isinstance(tx_category, str)
+            and tx_category in INCOME_ONLY_CATEGORIES
+            and tx_type in VALID_TYPES
+            and tx_type != "income"
+        ):
+            add_issue(
+                issues,
+                "category_type_mismatch",
+                f"Category {tx_category} requires type=income but the row is {tx_type}",
+                tx,
+                category=tx_category,
+                type=tx_type,
+            )
         tx_method = tx.get("method")
         if tx_method not in (None, "") and (not isinstance(tx_method, str) or tx_method not in VALID_METHODS):
             add_issue(issues, "invalid_method", "Invalid payment method", tx, value=tx_method)
@@ -3817,6 +4120,192 @@ def category_set_command(args):
     print(json.dumps({"category": payload}, ensure_ascii=False, indent=2))
 
 
+def build_review_queue(ledger):
+    """Derive the review queue from current ledger state.
+
+    Items are keyed by finding type + transaction id so repeated runs are
+    idempotent, and a resolved item is not recreated by a later scan.
+    """
+    transactions = [tx for tx in ledger.get("transactions") or [] if isinstance(tx, dict)]
+    resolved = {item.get("key") for item in ledger.get("review_queue") or [] if isinstance(item, dict)}
+    items = []
+
+    def add(code, tx, detail, action):
+        key = f"{code}:{tx.get('id')}"
+        if key in resolved:
+            return
+        if any(item["key"] == key for item in items):
+            return
+        items.append(
+            {
+                "key": key,
+                "code": code,
+                "transaction_id": tx.get("id"),
+                "occurred_at": tx.get("occurred_at"),
+                "amount": tx.get("amount"),
+                "merchant": tx.get("merchant"),
+                "note": tx.get("note"),
+                "detail": detail,
+                "action": action,
+                "status": "open",
+            }
+        )
+
+    for tx in transactions:
+        category = tx.get("category")
+        tx_type = tx.get("type")
+        if isinstance(category, str) and category in INCOME_ONLY_CATEGORIES and tx_type != "income":
+            add("category_type_mismatch", tx, f"分类 {category} 需要收入类型，当前是 {tx_type}", "修正类型或分类")
+        if tx_type == "expense" and tx.get("advance") == "open" and not tx.get("tags"):
+            continue
+        confidence = tx.get("confidence")
+        try:
+            low = confidence is not None and float(confidence) < 0.85
+        except (TypeError, ValueError):
+            low = True
+        if low and tx_type == "expense":
+            add("low_confidence", tx, f"置信度 {confidence}，分类 {category}", "确认分类")
+    for refund in unmatched_refunds(transactions, transactions):
+        source = next((tx for tx in transactions if tx.get("id") == refund.get("id")), None)
+        if source:
+            add("unmatched_refund", source, "没有找到可对应的原单", "指定原单或确认是独立退款")
+    return items
+
+
+@mutating
+def review_refresh_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    items = build_review_queue(ledger)
+    queue = [item for item in ledger.get("review_queue") or [] if isinstance(item, dict)]
+    known = {item.get("key") for item in queue}
+    queue.extend(item for item in items if item["key"] not in known)
+    ledger["review_queue"] = queue
+    save_ledger(args.ledger, ledger)
+    open_items = [item for item in queue if item.get("status") == "open"]
+    if args.json:
+        print(json.dumps({"added": len(items), "open": open_items, "open_count": len(open_items)}, ensure_ascii=False, indent=2))
+        return
+    print(f"新增 {len(items)} 项待复核，当前共 {len(open_items)} 项。")
+    for item in open_items[:10]:
+        print(f"- [{item.get('code')}] {item.get('transaction_id')} · {item.get('detail')}")
+
+
+def review_next_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    items = build_review_queue(ledger)
+    queue = [item for item in ledger.get("review_queue") or [] if isinstance(item, dict) and item.get("status") == "open"]
+    combined = items + [item for item in queue if item.get("key") not in {new["key"] for new in items}]
+    priority = {"category_type_mismatch": 0, "unmatched_refund": 1, "low_confidence": 2}
+    combined.sort(key=lambda item: (priority.get(item.get("code"), 9), item.get("occurred_at") or ""))
+    if args.json:
+        payload = {"item": combined[0] if combined else None, "remaining": len(combined)}
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    if not combined:
+        print("没有待复核项。")
+        return
+    item = combined[0]
+    print(f"[{item.get('code')}] {item.get('transaction_id')} · {item.get('detail')}")
+    print(f"建议: {item.get('action')}（共 {len(combined)} 项待处理）")
+
+
+@mutating
+def review_resolve_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    _index, tx = find_transaction(ledger, args.id)
+    resolved_key = f"{args.code}:{tx.get('id')}"
+    queue = [item for item in ledger.get("review_queue") or [] if isinstance(item, dict)]
+    if not any(item.get("key") == resolved_key for item in queue):
+        queue.append(
+            {
+                "key": resolved_key,
+                "code": args.code,
+                "transaction_id": tx.get("id"),
+                "status": "open",
+            }
+        )
+    for item in queue:
+        if item.get("key") == resolved_key:
+            item["status"] = "resolved"
+            item["resolution"] = args.note or ""
+            item["resolved_at"] = now_iso()
+    ledger["review_queue"] = queue
+    save_ledger(args.ledger, ledger)
+    print(json.dumps({"resolved": resolved_key, "note": args.note or ""}, ensure_ascii=False, indent=2))
+
+
+def advance_list_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    rows = [
+        tx
+        for tx in ledger["transactions"]
+        if isinstance(tx, dict) and tx.get("advance") in VALID_ADVANCE_STATES
+    ]
+    if not getattr(args, "all", False):
+        rows = [tx for tx in rows if tx.get("advance") == "open"]
+    items = [
+        {
+            **compact_candidate(tx),
+            "advance": tx.get("advance"),
+            "remaining": advance_remaining(tx),
+            "settled": advance_settled_amount(tx),
+        }
+        for tx in rows
+    ]
+    if getattr(args, "json", False):
+        print(json.dumps({"advances": items, "count": len(items)}, ensure_ascii=False, indent=2))
+        return
+    if not items:
+        print("没有待收的垫付款。")
+        return
+    lines = [f"待收垫付 {len(items)} 笔，合计 {format_money(sum(item['remaining'] for item in items), ledger.get('currency'))}"]
+    for item in items:
+        date = (item.get("occurred_at") or "")[:10]
+        label = item.get("merchant") or item.get("note") or item.get("id")
+        lines.append(
+            f"- {date} {label} 待收 {format_money(item['remaining'], ledger.get('currency'))} · {item.get('id')}"
+        )
+    print("\n".join(lines))
+
+
+@mutating
+def advance_settle_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    _index, advance = find_transaction(ledger, args.id)
+    if advance.get("advance") not in VALID_ADVANCE_STATES:
+        raise SystemExit(f"Transaction {args.id} is not an advance")
+    by_id = args.by
+    if by_id:
+        _income_index, income = find_transaction(ledger, by_id)
+        if income.get("type") != "income":
+            raise SystemExit(f"Transaction {by_id} is not income")
+        if apply_advance_settlement(advance, income) is None:
+            raise SystemExit(f"Transaction {by_id} is already recorded as settling this advance")
+    else:
+        advance["advance"] = "settled"
+    advance["updated_at"] = now_iso()
+    save_ledger(args.ledger, ledger)
+    payload = compact_candidate(advance)
+    payload["advance"] = advance.get("advance")
+    payload["remaining"] = advance_remaining(advance)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+@mutating
+def advance_writeoff_command(args):
+    ledger = load_ledger(args.ledger, create=True)
+    _index, advance = find_transaction(ledger, args.id)
+    if advance.get("advance") not in VALID_ADVANCE_STATES:
+        raise SystemExit(f"Transaction {args.id} is not an advance")
+    # Writing off means the money is gone, so it becomes ordinary spending.
+    advance["advance"] = "written_off"
+    advance["updated_at"] = now_iso()
+    save_ledger(args.ledger, ledger)
+    payload = compact_candidate(advance)
+    payload["advance"] = "written_off"
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 @mutating
 def habit_list_command(args):
     ledger = load_ledger(args.ledger, create=True)
@@ -4179,6 +4668,10 @@ def add_common_tx_flags(parser, *, require_type=False, source_default=None, incl
     parser.add_argument("--remember", action="store_true", help="Save an explicit merchant preference")
     parser.add_argument("--exclude-from-totals", action="store_true", help="Keep the row but exclude it from financial totals")
     parser.add_argument("--include-in-totals", action="store_true", help="Override a learned exclusion and count the row in totals")
+    # Plain-language aliases, so the agent does not have to speak in storage terms.
+    parser.add_argument("--not-mine", action="store_true", help="Not my spending: keep the row but leave it out of totals")
+    parser.add_argument("--advance", nargs="?", const="open", choices=list(VALID_ADVANCE_STATES), default=None,
+                        help="Money expected back (垫付/借出). Defaults to open")
 
 
 def add_filter_flags(parser, *, limit=None, json_flag=False, compare=False):
@@ -4302,6 +4795,40 @@ def build_parser():
     p_cat_set.add_argument("--icon", default=None)
     p_cat_set.add_argument("--parent", default=None)
     p_cat_set.set_defaults(func=category_set_command)
+
+    p_review = sub.add_parser("review", help="Persisted review queue for data-quality findings")
+    rev = p_review.add_subparsers(dest="review_command", required=True)
+    p_rev_refresh = rev.add_parser("refresh", help="Scan the ledger and add new findings to the queue")
+    p_rev_refresh.add_argument("--ledger", required=True)
+    p_rev_refresh.add_argument("--json", action="store_true")
+    p_rev_refresh.set_defaults(func=review_refresh_command)
+    p_rev_next = rev.add_parser("next", help="Show the highest-priority open finding")
+    p_rev_next.add_argument("--ledger", required=True)
+    p_rev_next.add_argument("--json", action="store_true")
+    p_rev_next.set_defaults(func=review_next_command)
+    p_rev_resolve = rev.add_parser("resolve", help="Mark a finding as handled")
+    p_rev_resolve.add_argument("--ledger", required=True)
+    p_rev_resolve.add_argument("--id", required=True)
+    p_rev_resolve.add_argument("--code", required=True)
+    p_rev_resolve.add_argument("--note", default=None)
+    p_rev_resolve.set_defaults(func=review_resolve_command)
+
+    p_adv = sub.add_parser("advance", help="List, settle, or write off money owed back")
+    adv = p_adv.add_subparsers(dest="advance_command", required=True)
+    p_adv_list = adv.add_parser("list", help="Show advances still owed")
+    p_adv_list.add_argument("--ledger", required=True)
+    p_adv_list.add_argument("--all", action="store_true", help="Include settled and written-off advances")
+    p_adv_list.add_argument("--json", action="store_true")
+    p_adv_list.set_defaults(func=advance_list_command)
+    p_adv_settle = adv.add_parser("settle", help="Mark an advance as paid back")
+    p_adv_settle.add_argument("--ledger", required=True)
+    p_adv_settle.add_argument("--id", required=True)
+    p_adv_settle.add_argument("--by", default=None, help="Transaction id of the repayment income row")
+    p_adv_settle.set_defaults(func=advance_settle_command)
+    p_adv_writeoff = adv.add_parser("writeoff", help="Give up on an advance that will not be repaid")
+    p_adv_writeoff.add_argument("--ledger", required=True)
+    p_adv_writeoff.add_argument("--id", required=True)
+    p_adv_writeoff.set_defaults(func=advance_writeoff_command)
 
     p_habit = sub.add_parser("habit", help="Summarize usage habits from the ledger")
     hab = p_habit.add_subparsers(dest="habit_command", required=True)

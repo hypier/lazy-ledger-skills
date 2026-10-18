@@ -2,7 +2,7 @@
 name: lazy-ledger
 description: Maintain a local JSON personal ledger. Use when recording or correcting transactions, reconciling WeChat/Alipay/bank/credit-card statements without duplicates, managing accounts/categories/budgets, summarizing or generating monthly bills, or opening the localhost ledger UI.
 metadata:
-  version: 1.2.0
+  version: 1.4.0
 ---
 
 # Lazy Ledger
@@ -23,6 +23,8 @@ Treat each message as an intent and evidence problem before choosing a command. 
 ## Proactive review loop
 
 AI bookkeeping is also an ongoing conversation about data quality. After a write, import, correction, or query that exposes relevant rows, look for actionable issues with `audit` or `doctor` and explain only findings that matter to the user's question. Typical findings include likely duplicates, missing accounts, implausible amounts or dates, low-confidence classifications, unmatched refunds, and expenses that look like transfers or reimbursements.
+
+Persist the review itself with `review refresh / next / resolve` so findings survive across calls instead of being recomputed and re-asked each turn. A resolved item stays resolved; a later refresh does not resurrect it.
 
 Analyze findings before involving the user. When source references, timing, amount, merchant, and transaction type make the intended result clear, apply a reversible field update automatically and report it — but only when the change does not alter the transaction type, amount, account, date, or relations. Ask before those financial-meaning changes. Always surface findings where multiple reasonable interpretations remain, the repair changes financial meaning, or deletion/merging is proposed. Group unresolved findings that have the same repair type and evidence pattern into one confirmation question. Within that group, show each affected row and one proposed action. Handle groups sequentially: ask one confirmation question, wait for the answer, apply only that group, rerun the relevant check, and then present the next highest-priority group.
 
@@ -61,6 +63,10 @@ These cover the majority of requests. Run them directly without loading a refere
 | Find a row before correcting it | `ledger find --text "昨天 星巴克"` |
 | Correct one field by ID | `ledger update --id tx_20260707_ab12cd34 --category 咖啡茶饮` |
 | Delete by ID | `ledger delete --id tx_20260707_ab12cd34 --yes` |
+| Money owed back to the user | `ledger advance list` |
+| Someone paid them back | `ledger advance settle --id tx_...` |
+| Give up on money owed | `ledger advance writeoff --id tx_...` |
+| What needs review next | `ledger review next` |
 | Accounts and balances | `ledger account list --json` |
 | Budget progress | `ledger budget list` |
 | Data health and duplicate check | `ledger audit --json` |
@@ -92,6 +98,10 @@ Read only the references needed for the current request.
 ## Accounting Invariants
 
 - Store positive `amount`; `type` determines direction. Own-account movement is `transfer` and is excluded from income/expense. A row marked `excluded_from_totals` is omitted from income/expense/net/budget reports while still affecting the real balance of its account.
+- Decide the economic event once; `type` and `category` follow from it and must stay consistent. An income-only category on an `expense` row is a contradiction that `doctor` reports as `category_type_mismatch`.
+- Reimbursement arriving (`报销回来`, `报销了`, `报销到账`) is `income`. An advance or loan (`垫付`, `代付`, `借出`) leaves the account but is owed back: store it with `advance: open`, which keeps it out of spending totals until it is `settled` or `written_off`. Use `--not-mine` for money that was never the user's spending.
+- An advance is settled by the reimbursement that pays it back, not by a manual guess. A reimbursement matching exactly one open advance settles it automatically and links the income row with `relation: reimbursement`; when several match, ask instead of picking one.
+- Only movement between the user's own accounts is `transfer`. Paying another person is `expense`, even when the wording contains 转账.
 - Keep the actual funding account separate from the payment channel. A WeChat payment funded by a named bank card belongs to that bank account with `payment_channel: wechat`.
 - Use specific bank and credit-card accounts when the source identifies them; do not collapse them into a generic bank-card account.
 - Preserve authoritative source references and statement attachments. Never delete or merge rows only because date and amount match.

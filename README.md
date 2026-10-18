@@ -13,6 +13,7 @@
 ## 已落地
 
 - 记账：多笔文本、支付渠道、实付优先、微信/支付宝堆叠粘贴、商户习惯 / 别名、从流水总结使用画像，并定期写入 `{ledger-stem}-memory.md` 给助手读
+- 语义正确性：经济事件一次性判定并派生 `type` / `category`，两者不再各推各的。`报销回来 / 报销了 / 报销到账` 记为收入，`垫付 / 代付 / 借出` 记 `advance: open` 并排除在日常支出之外，报销到账且金额与唯一一笔未结垫付相符时自动核销，`还信用卡 / 提现 / 从微信转100到支付宝` 识别为转账，而 `转账给某人` 仍是支出。`doctor` 新增 `category_type_mismatch` 校验，历史脏数据不再静默通过
 - 长截图导入：`ledger shot prepare` 切片 + 本机 OCR → 先出核对表，用户确认后再 `import-tsv`
 - 展示：`show` 对话摘要、对比上期、待复核 / 偏大支出；HTML 月历热力、商户排行、每日支出、筛选导出
 - 智能报表：本季 / 今年、按日均推算月底或全年、周期账识别、待报销、未对上的退款、月度走势、账本观察
@@ -20,7 +21,10 @@
 - 预算：按月总额或分类限额、模板可每月复用、`show` 和页面显示剩余 / 超支 / 预计超支
 - 本地页面：四个 Tab（记账 / 报表 / 月度账单 / 账本）。报表用 SVG 饼图、折线、柱状图；月度账单由助手写成文章，并另存为每月一份 Canvas HTML（`{ledger-stem}-bill-YYYY-MM.html`）
 - 备份：`backup` 复制一份带日期的 JSON
-- 文档库：`data/ledgers/default/ledger.json` 作为本地 JSON document store（collections：transactions / accounts / budgets / categories / habits / bills），带文件锁
+- 退款关联：唯一确定的退款（90 天内、金额相符、商户相容）在写入时自动挂回原单，记 `related_transaction_id` + `relation: refund`；有多个候选时不猜，留给用户决定
+- 应收垫付：`advance list / settle / writeoff` 管理垫付的三种状态（open / settled / written_off）。未结垫付不计入支出，核销后计入，坏账后转为真实支出——同一笔钱在不同阶段算得清楚
+- 待复核队列：`review refresh / next / resolve` 把低置信度、分类矛盾、未对上退款等发现持久化到账本的 `review_queue`，复核可以跨多次调用继续，已解决的项不会被下次扫描复活
+- 文档库：`data/ledgers/default/ledger.json` 作为本地 JSON document store（collections：transactions / accounts / budgets / categories / habits / bills / review_queue），带文件锁
 
 ## 工程约定
 
@@ -33,5 +37,5 @@
 
 ## 规划中的功能
 
+- `open` 垫付与 `--not-mine` 的语义在报表上仍分开展示（前者是应收，后者根本不是我花的）
 - 微信 / 支付宝官方 CSV 一键导入
-- 退款自动挂回原单
