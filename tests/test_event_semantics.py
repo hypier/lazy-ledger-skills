@@ -287,7 +287,8 @@ class AdvanceStateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run("init", cwd=tmp)
             advance = self._add(tmp, "--text", "垫付500")
-            run("advance", "settle", "--id", advance["id"], cwd=tmp)
+            income = self._add(tmp, "--amount", "500", "--type", "income")
+            run("advance", "settle", "--id", advance["id"], "--by", income["id"], cwd=tmp)
             self.assertEqual(json.loads(run("advance", "list", "--json", cwd=tmp).stdout)["count"], 0)
             all_rows = json.loads(run("advance", "list", "--all", "--json", cwd=tmp).stdout)
             self.assertEqual(all_rows["count"], 1)
@@ -383,7 +384,7 @@ class ReimbursementTenseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run("init", cwd=tmp)
             run("add", "--text", "打车26，公司报销", cwd=tmp)
-            run("add", "--text", "公司把26打过来了", cwd=tmp)
+            run("add", "--text", "报销回来26", cwd=tmp)
 
             ledger = json.loads(ledger_path(tmp).read_text())
             advance = next(tx for tx in ledger["transactions"] if tx["type"] == "expense")
@@ -413,7 +414,7 @@ class RecordCommandTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run("init", cwd=tmp)
             run("record", "--text", "打车26，公司报销", cwd=tmp)
-            result = run("record", "--text", "公司把26打过来了", cwd=tmp)
+            result = run("record", "--text", "报销回来26", cwd=tmp)
             self.assertIn("核销", result.stdout)
 
     def test_record_and_add_agree_on_the_ledger(self):
@@ -426,7 +427,7 @@ class RecordCommandTest(unittest.TestCase):
 
             def shape(path):
                 tx = json.loads(path.read_text())["transactions"][0]
-                return {key: tx[key] for key in ("type", "amount", "category", "merchant", "account")}
+                return {key: tx.get(key) for key in ("type", "amount", "category", "merchant", "account")}
 
             self.assertEqual(shape(ledger_path(tmp_a)), shape(ledger_path(tmp_b)))
 

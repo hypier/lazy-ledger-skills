@@ -8,7 +8,7 @@ Read [bookkeeping-rules.md](bookkeeping-rules.md) for field inference and [habit
 |---|---|
 | One or several clear text items | `add --text` immediately |
 | Parseable but worth checking | `parse --text`, then add |
-| Missing amount without a stable habit | Ask for the amount |
+| Missing amount without an active user-confirmed fixed-price rule | Ask for the amount |
 | Type could change totals | Ask whether it is expense, income, refund, or own-account transfer |
 | One receipt or one-purchase image | Extract visible fields and `add --source image` |
 | Several visible rows or a long screenshot | Follow [image-batch-import.md](image-batch-import.md) |

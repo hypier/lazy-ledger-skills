@@ -38,11 +38,12 @@ def read_frontmatter(path: Path) -> dict:
     return dict(SCALAR_RE.findall(match.group(1)))
 
 
-def load_ignore_patterns() -> list[str]:
-    if not IGNORE_FILE.exists():
+def load_ignore_patterns(skill_dir=SKILL_DIR) -> list[str]:
+    ignore_file = skill_dir / ".skillignore"
+    if not ignore_file.exists():
         raise ValidationError(".skillignore is missing; refusing to package runtime data")
     patterns = []
-    for raw in IGNORE_FILE.read_text(encoding="utf-8").splitlines():
+    for raw in ignore_file.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line and not line.startswith("#"):
             patterns.append(line)
@@ -111,7 +112,7 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
     if not wrapper.stat().st_mode & 0o111:
         raise ValidationError("scripts/ledger is not executable; run: chmod +x scripts/ledger")
 
-    patterns = load_ignore_patterns()
+    patterns = load_ignore_patterns(skill_dir)
     included = []
     for path in sorted(skill_dir.rglob("*")):
         if not path.is_file():
@@ -125,6 +126,13 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
 
     if not included:
         raise ValidationError("no files left to package; check .skillignore")
+
+    required = {"scripts/ledger_core/domain/model.py", "scripts/ledger_core/domain/metrics.py",
+                "scripts/ledger_core/storage/repository.py", "scripts/ledger_core/services/profile.py",
+                "scripts/ledger_core/adapters/runtime_cli.py", "assets/ledger-bill-canvas.html"}
+    missing_packaged = sorted(required - set(included))
+    if missing_packaged:
+        raise ValidationError("Required runtime files filtered from package: " + ", ".join(missing_packaged))
 
     # Guard against accidentally shipping a real ledger.
     leaked = [rel for rel in included if re.search(r"^lazy-ledger.*\.json$", rel)]

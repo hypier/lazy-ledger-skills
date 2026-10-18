@@ -1,48 +1,63 @@
 # Lazy Ledger
 
-本文件记录这个 skill 后续要补的能力，方便按同一方向继续迭代。
+以智能管家为主的本地记账 skill：用户提供事实，管家负责入账、对账、预算、分析和报告。
+当前分支实现 3.0 的账务基础及提案、导入、扩展、同步和报告流程，保留旧 CLI 并逐步移出单体业务代码。
+完整范围及未完成阶段见 [执行计划](product-design-audit/execution-plan-2026-10.md)。
 
-## 目标
+## 本轮实现
 
-把本地 JSON 记账做成**以助手为主、用户只提供数据**的个人财务小管家：
+- 共享领域内核：十进制金额、余额、汇总、预算与收支判定；存储不再反向依赖 CLI。
+- 独立用户画像：每次加载账本读取 `user-profile.md`。已确认规则与统计观察分开；无默认付款账户，不根据余额换账户，不从两次重复价格推定固定金额。
+- 一致写入：文件锁、修订与读指纹检查、画像/能力冲突检查、可恢复多文件事务、行变更记录；add/record 支持幂等键。
+- 结算：明确还款证据、实际收入关联、部分收回、剩余金额在核销当期计损失；相关分录拒绝单独破坏性修改。
+- 统一上下文：`context`、`profile show/apply`、`schema show/register`、`migrate`。
+- 可选 Git：账本独立仓库、本地快照、显式远程配置、前台同步、独立记录三方合并、冲突选择与整本恢复；网络等待不占用账本写锁。
+- 通用提案：校验后一次提交、字段来源、幂等回执和定向撤销；旧提案不能覆盖新数据。
+- 导入对账：微信/支付宝 CSV 与规范化 TSV、来源交易号去重、跨来源关联、笔数/金额核对；歧义先进入计划。
+- 用户扩展：代码独立存放、版本登记、样例验证、摘要绑定和本机启用；macOS OS 沙箱运行，输出仍须经核心提案提交。
+- 结构演进：可选字段改名/类型转换的预览、备份、指标一致性检查与可恢复提交。
+- 复核状态：待处理、待补充、解决、忽略、暂缓；按证据重开，通知回执去重。
+- 展示按需：无模板的 Markdown/JSON/静态 HTML 报告，归档保存数据快照和依据；旧三个视图仅为兼容入口。
+- 专业职责按任务加载，普通记账无需多 agent 并行。
 
-- 用户说一句话，助手负责读出意图、判断会计口径、写账、解释结果
-- 记账时更懂用户习惯，不用每笔都确认
-- 主动发现问题（记重了、漏了、分类漂了），一次只提最要紧的那一条
-- 对话里能看懂账，页面里能改账
-- 数据用文档库保存，不引入 SQL
+## 使用与开发
 
-## 已落地
+```sh
+export LAZY_LEDGER_FILE=/path/to/personal/ledger.json
+scripts/ledger init --git-mode undecided
+scripts/ledger context --task record
+scripts/ledger record --text "午饭28" --operation-id unique-request-id
+scripts/ledger show --range this-month
+scripts/ledger history configure --mode local
+scripts/ledger history list
+```
 
-- 记账：多笔文本、支付渠道、实付优先、微信/支付宝堆叠粘贴、商户习惯 / 别名、从流水总结使用画像，并定期写入 `{ledger-stem}-memory.md` 给助手读
-- 语义正确性：经济事件一次性判定并派生 `type` / `category`，两者不再各推各的。`报销回来 / 报销了 / 报销到账` 记为收入，`垫付 / 代付 / 借出` 记 `advance: open` 并排除在日常支出之外，报销到账且金额与唯一一笔未结垫付相符时自动核销，`还信用卡 / 提现 / 从微信转100到支付宝` 识别为转账，而 `转账给某人` 仍是支出。`doctor` 新增 `category_type_mismatch` 校验，历史脏数据不再静默通过
-- 长截图导入：`ledger shot prepare` 切片 + 本机 OCR → 先出核对表，用户确认后再 `import-tsv`
-- 展示：`show` 对话摘要、对比上期、待复核 / 偏大支出；HTML 月历热力、商户排行、每日支出、筛选导出
-- 智能报表：本季 / 今年、按日均推算月底或全年、周期账识别、待报销、未对上的退款、月度走势、账本观察
-- 账户：默认五账户、转账从哪到哪、余额 = 期初 ± 流水、`account list/add/update`；本地页面可改期初和默认账户
-- 预算：按月总额或分类限额、模板可每月复用、`show` 和页面显示剩余 / 超支 / 预计超支
-- 本地页面：四个 Tab（记账 / 报表 / 月度账单 / 账本）。报表用 SVG 饼图、折线、柱状图；月度账单由助手写成文章，并另存为每月一份 Canvas HTML（`{ledger-stem}-bill-YYYY-MM.html`）
-- 备份：`backup` 复制一份带日期的 JSON
-- 退款关联：唯一确定的退款（90 天内、金额相符、商户相容）在写入时自动挂回原单，记 `related_transaction_id` + `relation: refund`；有多个候选时不猜，留给用户决定
-- 应收垫付：`advance list / settle / writeoff` 管理垫付的三种状态（open / settled / written_off）。未结垫付不计入支出，核销后计入，坏账后转为真实支出——同一笔钱在不同阶段算得清楚
-- 待复核队列：`review refresh / next / resolve` 把低置信度、分类矛盾、未对上退款等发现持久化到账本的 `review_queue`，复核可以跨多次调用继续，已解决的项不会被下次扫描复活
-- 管家入口：`record` 语义化记账（回复带「为什么这么记」和本月总额变化）、`insight` 主动发现、`brief` 今日简报、`digest` 可直接转发的周期汇报；管家模块为 `scripts/ledger_voice.py`（措辞）、`ledger_insight.py`（发现）、`ledger_advice.py`（建议）、`ledger_brief.py`（简报与汇报），均为只读或纯格式化，不改账本
-- 归账两轴：每笔按 `nature`（spending / earning / transfer / not_mine / advance）和 `settlement`（none / pending / settled / written_off）两个正交维度判定，`counts_as` 是唯一的「算不算支出」判据，替代原先散落在 `summarize` 里的多个 if
-- 报销时态：`打车26，公司报销` 是垫付（钱已花出、公司会还），`公司把26打过来了` 才是收入。区分"期待报销"和"报销到账"，避免刚花的钱被记成收入
-- 大额支出归账：默认账户余额不够时改记到能付得起的账户（`LARGE_EXPENSE_THRESHOLD = 2000`），并在回复里说明改到了哪个账户；用户明确说了账户、或者是垫付时，不擅自改
-- 新发现检测：疑似记重（同额同商户 48 小时内）、可能漏记的周期支出（连续 3 个月后中断）、同一商户分类漂移
-- 文档库：`data/ledgers/default/ledger.json` 作为本地 JSON document store（collections：transactions / accounts / budgets / categories / habits / bills / review_queue），带文件锁
+创建账本时由管家询问 Git 选择；未回答时不初始化 Git、不上传。
+远程设置需要明确目标及已核验的私有可见性；不自动创建仓库。
+账本使用 `<文件名主体>-runtime/` 隔离画像、能力和本机设置。
+正式账本应放在 skill 安装目录以外。
 
-## 工程约定
+```sh
+python3 -m unittest discover -s tests -p 'test_*.py'
+python3 scripts/package_skill.py --validate-only
+python3 scripts/package_skill.py /tmp/ledger-package
+```
 
-- 统一入口：`scripts/ledger`。它自己解析 skill 目录并补 `--ledger`，所以文档和调用都写 `ledger add --text "..."` 这种短命令，不重复写解释器路径。未知子命令原样转发给 `ledger_tool.py`，新增 CLI 动词不用改封装。
-- 账本路径：环境变量 `LAZY_LEDGER_FILE` 优先，其次是 `LAZY_LEDGER_HOME/ledgers/default/ledger.json`，否则使用工作目录下的 `./data/ledgers/default/ledger.json`。`ledger which` 可打印当前解析结果。
-- 每个账本实例独立保存正式数据：`ledgers/<name>/ledger.json`；备份放在同目录的 `backups/`；记忆和月度账单 HTML 以账本文件名为前缀放在账本旁边，避免多个账本互相覆盖。
-- 打包：`python3 scripts/package_skill.py [--validate-only] [输出目录]`。先校验 frontmatter、目录名一致性、reference 链接是否存在、入口可执行，再按 `.skillignore` 过滤输出到 `dist/lazy-ledger.skill`。和通用打包脚本不同的是它会读 `.skillignore`，避免把账本数据打进分发包。
-- 运行时数据（账本 JSON、备份、`*-memory.md`、生成的报表 HTML/CSV、TSV）既不进 git 也不进分发包，规则集中在 `.gitignore` 和 `.skillignore`，两处的运行时数据段落应保持一致。
-- 测试：`python3 -m unittest discover -s tests -p "test_*.py"`。
+测试使用临时合成账本；HTTP 测试需要本机监听权限。分发校验应覆盖实际
+解压后的运行，不能只依赖 frontmatter 与文件存在检查。
 
-## 规划中的功能
+## 边界与后续工作
 
-- `open` 垫付与 `--not-mine` 的语义在报表上仍分开展示（前者是应收，后者根本不是我花的）
-- 微信 / 支付宝官方 CSV 一键导入
+扩展运行目前仅支持 macOS `sandbox-exec`，没有可用隔离器就拒绝执行；不安装
+第三方依赖。动态字段迁移限于不影响账务口径的 `x_` 元数据。同步遇到相同来源
+但不同记录 ID 时拒绝重复合并，需要先显式对账；远程建仓、自动核验私有可见性、
+新设备自动引导和后台调度尚未实现。源附件、报告和本机授权不在 Git 快照范围。
+
+旧 CLI 中仍有业务流程需要继续迁入服务层，旧 HTML 只保留兼容用途。
+不同银行/XLSX/PDF 格式及更多截图样例仍需单独适配。完整阶段状态见执行计划，
+不将这些兼容路径视为全部重构完成。
+
+本轮验证：199 项回归，198 通过、1 项缺少原有截图样例跳过；包含 HTTP、
+真实 macOS 隔离、双设备本地远程同步，以及移除 HTML 资源后的安装包端到端流程。
+最终导入边界修正后，43 项相关流程定向复验全部通过；远程快照账户校验
+补充后，7 项历史恢复/同步复验全部通过。

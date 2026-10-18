@@ -363,14 +363,14 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("星巴克", html)
             self.assertNotIn("__LEDGER_DATA__", html)
 
-    def test_add_assigns_default_and_named_accounts(self):
+    def test_add_keeps_unknown_account_and_preserves_named_account(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
             added = json.loads(
                 run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 星巴克 38").stdout
             )["added"][0]
-            self.assertEqual(added["account"], "微信零钱")
-            self.assertEqual(added["account_id"], "acc_wechat")
+            self.assertNotIn("account", added)
+            self.assertNotIn("account_id", added)
             cash = json.loads(
                 run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 现金 午饭 20").stdout
             )["added"][0]
@@ -488,12 +488,8 @@ class LedgerToolTest(unittest.TestCase):
                     "这月午饭比较固定，没有乱花。",
                 ).stdout
             )
-            html_path = Path(saved["file"])
-            self.assertTrue(html_path.exists())
-            self.assertEqual(html_path.name, "ledger-bill-2026-08.html")
-            html = html_path.read_text(encoding="utf-8")
-            self.assertIn("<canvas", html)
-            self.assertIn("这月午饭比较固定", html)
+            self.assertNotIn("file", saved)
+            self.assertFalse((ledger.parent / "ledger-bill-2026-08.html").exists())
             self.assertNotIn("file", json.loads(ledger.read_text(encoding="utf-8"))["bills"][0])
             shown = run_tool("bill", "show", "--ledger", str(ledger), "--month", "2026-08")
             self.assertIn("这月午饭比较固定", shown.stdout)
@@ -562,7 +558,7 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("accounts", data)
             self.assertIn("habits", data)
 
-    def test_repeated_lunch_fills_amount_silently(self):
+    def test_repeated_price_is_observation_not_permission_to_fill_amount(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
             run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 午饭 16")
@@ -570,13 +566,12 @@ class LedgerToolTest(unittest.TestCase):
             payload = json.loads(run_tool("habit", "list", "--ledger", str(ledger), "--json").stdout)
             profile = payload["profile"]
             self.assertIn("午饭", profile["summary"])
-            lunch = next(item for item in profile["stable_amounts"] if item["phrase"] == "午饭")
-            self.assertEqual(lunch["amount"], 16.0)
-            parsed = json.loads(run_tool("parse", "--ledger", str(ledger), "--text", "午饭").stdout)
-            self.assertEqual(parsed["amount"], 16.0)
-            self.assertEqual(parsed["category"], "外食")
-            added = json.loads(run_tool("add", "--ledger", str(ledger), "--text", "午饭").stdout)
-            self.assertEqual(added["added"][0]["amount"], 16.0)
+            self.assertFalse(any(item["phrase"] == "午饭" for item in profile["stable_amounts"]))
+            parsed = run_tool("parse", "--ledger", str(ledger), "--text", "午饭", check=False)
+            self.assertNotEqual(parsed.returncode, 0)
+            result = run_tool("add", "--ledger", str(ledger), "--text", "午饭", check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(len(json.loads(ledger.read_text())["transactions"]), 2)
 
     def test_habit_memory_markdown_is_written_beside_ledger(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -599,6 +594,7 @@ class LedgerToolTest(unittest.TestCase):
             run_tool("add", "--ledger", str(ledger), "--amount", "10", "--merchant", "商户一", "--account", "银行卡")
             run_tool("add", "--ledger", str(ledger), "--amount", "20", "--merchant", "商户二", "--account", "银行卡")
 
+            run_tool("account", "update", "--ledger", str(ledger), "--id", "acc_wechat", "--default")
             run_tool("habit", "memory", "--ledger", str(ledger))
             data = json.loads(ledger.read_text(encoding="utf-8"))
             defaults = data["preferences"]["usage_profile"]["defaults"]

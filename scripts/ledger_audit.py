@@ -250,7 +250,11 @@ def main():
     if not 0 <= args.merchant_threshold <= 1:
         raise SystemExit("--merchant-threshold must be between 0 and 1")
 
-    ledger = json.loads(args.ledger.read_text(encoding="utf-8"))
+    from ledger_core.storage.repository import load
+    try:
+        ledger = load(args.ledger, create=False)
+    except (ValueError, OSError) as exc:
+        raise SystemExit(str(exc)) from exc
     report = audit(ledger, window_days=args.window_days, threshold=args.merchant_threshold)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))

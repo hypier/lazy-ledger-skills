@@ -6,7 +6,7 @@ Use these rules to infer transaction fields. Workflows live in [record.md](recor
 
 Write the obvious transaction directly. Ask only when:
 
-- No amount is present and no stable habit applies.
+- No amount is present and no active user-confirmed fixed-price rule applies.
 - Several amounts could be the actual total.
 - The row could be income, refund, or own-account transfer instead of expense.
 - A correction target is ambiguous.
@@ -81,7 +81,7 @@ Only movement between the user's own accounts is `transfer`:
 - `一共` / `合计` / `总计` with several numbers: use the labeled total.
 - Multiple independently labeled items: split them.
 - Otherwise, ask which amount is the transaction total.
-- Fill a missing amount only from the stable-amount section of the current habit portrait.
+- Fill a missing amount only from an active, explicitly confirmed fixed-price rule in user-profile.md. A statistical habit portrait is not authorization.
 
 ## Category
 
@@ -118,7 +118,7 @@ Examples:
 - WeChat payment funded by 招商银行信用卡(1080): method `card`, that credit account, payment channel `wechat`.
 - Credit-card repayment: transfer from the funding account to the credit account.
 
-Prefer a specifically named account over generic `银行卡` or `信用卡`. When an ordinary text entry omits the account, use the current habit default.
+Prefer a specifically named account over generic `银行卡` or `信用卡`. When an ordinary text entry omits the account, use an explicitly confirmed profile default, or leave the account unassigned. Never choose an account based on its balance.
 
 Tags: `报销` / `对公` -> `报销`; `出差` / `差旅` -> `出差`; `订阅` -> `订阅`.
 
@@ -130,8 +130,8 @@ For imported data, do not rely on this heuristic alone. Authoritative source IDs
 
 ## Summary Math
 
-- Expense total: `expense` only.
-- Income total: `income` only.
+- Expense total: rows for which the core `counts_as(row, "expense")` is true; advances and exclusions are not ordinary consumption.
+- Income total: rows for which `counts_as(row, "income")` is true; advance repayments are not earnings.
 - Refund total: `refund` only.
 - Net: income + refund - expense.
 - Transfers are listed but excluded from income/expense.

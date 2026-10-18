@@ -60,37 +60,20 @@ def _send(handler, status, payload=None, body=None, content_type="application/js
 
 
 def _invoke(func, args):
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    out = io.StringIO()
-    err = io.StringIO()
     try:
-        with redirect_stdout(out), redirect_stderr(err):
-            func(args)
+        result = func.result(args)
+        return 200, result if result is not None else {"ok": True}
     except SystemExit as exc:
-        code = exc.code
-        stderr = err.getvalue().strip()
-        stdout = out.getvalue().strip()
-        if code == 2:
-            try:
-                return 409, json.loads(stderr)
-            except json.JSONDecodeError:
-                return 409, {"error": stderr or "likely_duplicate"}
-        message = code if isinstance(code, str) else (stderr or stdout or "request_failed")
-        return 400, {"error": message}
-    text = out.getvalue().strip()
-    if not text:
-        return 200, {"ok": True}
-    try:
-        return 200, json.loads(text)
-    except json.JSONDecodeError:
-        return 200, {"ok": True, "output": text}
+        return (409 if exc.code == 2 else 400), {"error": str(exc.code)}
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
 
 
 def _add_args(ledger_path, body):
     return SimpleNamespace(
         ledger=str(ledger_path),
+        operation_id=body.get("operation_id"),
+        expected_revision=body.get("expected_revision"),
         text=body.get("text"),
         amount=body.get("amount"),
         type=body.get("type"),
@@ -192,14 +175,10 @@ def make_handler(ledger_path):
                 return
             if path == "/api/ledger":
                 ledger = tool.load_ledger(ledger_path, create=True)
-                if tool.seed_habits_if_needed(ledger):
-                    tool.save_ledger(ledger_path, ledger)
                 _send(self, 200, ledger)
                 return
             if path == "/api/habits":
                 ledger = tool.load_ledger(ledger_path, create=True)
-                if tool.seed_habits_if_needed(ledger):
-                    tool.save_ledger(ledger_path, ledger)
                 _send(self, 200, tool.habits_payload(ledger))
                 return
             if path == "/api/summary":

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime
 from collections import defaultdict
+from ledger_core.domain.semantics import counts_as
 
 # Severity ordering used when the caller only wants the top few findings.
 SEVERITY = {"alert": 0, "warn": 1, "info": 2, "praise": 3}
@@ -59,15 +60,7 @@ def _amount(transaction):
 
 
 def _counts(transaction):
-    """Transactions that represent real spending by the user."""
-    if transaction.get("type") != "expense":
-        return False
-    if transaction.get("excluded_from_totals"):
-        return False
-    # An unreimbursed advance is owed back, so it is not spending.
-    if transaction.get("advance") == "open":
-        return False
-    return True
+    return counts_as(transaction, "expense")
 
 
 def _month_bounds(today, offset=0):
@@ -457,7 +450,7 @@ def find_negative_balances(balances, currency="CNY"):
     # account_balances() returns a list of non-archived account records.
     records = balances.values() if isinstance(balances, dict) else balances
     for record in records:
-        if not isinstance(record, dict) or record.get("archived"):
+        if not isinstance(record, dict) or record.get("archived") or record.get("opening_confirmed") is False or record.get("type") == "credit":
             continue
         balance = record.get("balance")
         if not isinstance(balance, (int, float)) or balance >= 0:
@@ -469,7 +462,7 @@ def find_negative_balances(balances, currency="CNY"):
                 "account": record.get("name"),
                 "message": (
                     f"{record.get('name')} 的余额算出来是 {format_money(balance, currency)}，"
-                    "真实账户不可能是负的。"
+                    "请核对期初与已记录流水。"
                 ),
                 "evidence": {"balance": round(float(balance), 2)},
                 "action": "多半是有支出记到了这个账户、但期初余额没填。补一下期初或调整账户。",

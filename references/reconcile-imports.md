@@ -2,6 +2,38 @@
 
 Use this workflow for official WeChat/Alipay exports, bank statements, credit-card statements, or any request to check duplicates across sources. For long screenshots, use [image-batch-import.md](image-batch-import.md) to produce the reviewed rows, then apply the matching model below.
 
+## Built-in plan and commit
+
+Start with `context --task import`. For supported WeChat/Alipay CSV exports or
+normalized CSV/TSV, run `import prepare --input statement.csv`. Use `--provider
+bank` for normalized bank data, `--account ACCOUNT` only when known, and
+`--expected-count` / `--expected-total` for explicit source control totals.
+The latter is the sum of parsed positive row amounts, not net spending.
+
+The plan lists new/existing/linked/excluded rows, ambiguities, parse failures and
+control-total mismatches. It preserves file hash, original cells, source line,
+transaction ID and field evidence. `ready: false` cannot commit. Unknown statuses
+and expense rows marked refunded need review; they are not silently converted
+into refund income. Unsupported XLSX/PDF layouts require an appropriate parser
+or a validated converter; this is not a universal bank-format parser.
+
+Same-source transaction IDs prevent repeated imports; distinct authoritative
+IDs preserve real repeat purchases. A cross-source candidate needs explicit
+linkage: `--links links.json` maps source line strings to existing transaction
+IDs. Or use `--distinct LINE` for a confirmed separate purchase. Neither choice
+is inferred from equal amounts alone. Source discrepancies must be resolved or
+an explicitly scoped new source prepared before proceeding.
+
+Save the returned JSON plan and run `import commit --input plan.json`. It binds
+the ledger/profile/runtime context and performs one validated core commit.
+Repeating the same ready proposal is idempotent; preparing the same imported
+file creates no new transactions. The plan is also saved under
+`work/imports/<file_hash>.json`. Coverage states whether totals were checked;
+even reconciled file totals do not prove the whole ledger is complete.
+
+Images still use the macOS OCR workflow and visible row confirmation, followed
+by normalized candidate input. Never claim OCR works on unsupported platforms.
+
 ## Authority Model
 
 Match evidence in this order:

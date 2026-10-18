@@ -53,7 +53,7 @@ When the user wants a custom one-off appearance, edit a copy of the generated fi
 
 ## Monthly Canvas Bill
 
-`bill save` writes a separate self-contained HTML file beside the ledger:
+`bill save` only stores the narrative. An explicit `bill render --month YYYY-MM` writes a self-contained HTML file beside the ledger:
 
 ```text
 {ledger-stem}-bill-YYYY-MM.html
