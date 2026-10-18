@@ -1,4 +1,5 @@
-"""Compatibility command output adapters."""
+"""Command output adapters shared by the CLI and local HTTP service."""
+from ledger_core.domain import money
 import csv
 import functools
 import io
@@ -17,7 +18,7 @@ from ledger_core.services.findings import active_insights as build_findings
 from ledger_voice import compose_record
 
 from ledger_core.domain.vocabulary import (VALID_ADVANCE_STATES)
-from ledger_core.services.analysis import (build_summary, collect_open_items, filter_from_args, filter_transactions, format_money, month_snapshot, render_show, resolve_period)
+from ledger_core.services.analysis import build_summary, collect_open_items, filter_from_args, filter_transactions, month_snapshot, render_show, resolve_period
 from ledger_core.services.common import advance_remaining, advance_settled_amount, coerce_tags, load_ledger, load_optional_ledger, mutating, safe_amount, tx_sort_key
 from ledger_core.services.habits import habits_payload
 from ledger_core.services.inspections import (build_review_queue, doctor_report)
@@ -572,7 +573,7 @@ def advance_list_command(args):
         return
     open_items = [item for item in items if item["advance"] == "open"]
     lines = [
-        f"待收垫付 {len(open_items)} 笔，合计 {format_money(sum(item['remaining'] for item in open_items), ledger.get('currency'))}"
+        f"待收垫付 {len(open_items)} 笔，合计 {money.format_money(sum(item['remaining'] for item in open_items), ledger.get('currency'))}"
     ]
     states = {"open": "待收", "settled": "已收回", "written_off": "已核销"}
     for item in items:
@@ -580,9 +581,9 @@ def advance_list_command(args):
         label = item.get("merchant") or item.get("note") or item.get("id")
         state = states.get(item["advance"], item["advance"])
         if item["advance"] == "open":
-            detail = f"待收 {format_money(item['remaining'], ledger.get('currency'))}"
+            detail = f"待收 {money.format_money(item['remaining'], ledger.get('currency'))}"
         else:
-            detail = f"{state} {format_money(item['settled'], ledger.get('currency'))}"
+            detail = f"{state} {money.format_money(item['settled'], ledger.get('currency'))}"
         lines.append(f"- {date} {label} {detail} · {item.get('id')}")
     print("\n".join(lines))
 

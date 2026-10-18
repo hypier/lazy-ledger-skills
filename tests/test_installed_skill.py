@@ -19,6 +19,8 @@ class InstalledSkillTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             archive, included = package(ROOT, folder / "dist")
+            self.assertNotIn("scripts/ledger_db.py", included)
+            self.assertNotIn("scripts/ledger_core/adapters/api.py", included)
             self.assertTrue(all(not item.startswith("assets/") or item.startswith("assets/openui/") for item in included))
             self.assertFalse(any("-runtime/" in item or item.startswith("tests/") for item in included))
             with zipfile.ZipFile(archive) as bundle:
@@ -26,6 +28,20 @@ class InstalledSkillTest(unittest.TestCase):
             installed = folder / "installed" / "lazy-ledger"
             ledger = folder / "personal" / "book.json"
             env = {k: v for k,v in os.environ.items() if k != "PYTHONPATH"}
+            api_check = subprocess.run([sys.executable, "-c", """
+import importlib.util
+import ledger_tool
+from ledger_core.storage.documents import DocumentStore
+from ledger_core.domain.money import format_money
+from ledger_core.services.interpretation import classify_event_detailed
+assert importlib.util.find_spec('ledger_db') is None
+assert importlib.util.find_spec('ledger_core.adapters.api') is None
+assert not hasattr(ledger_tool, 'load_ledger')
+assert not hasattr(ledger_tool, 'add_transaction')
+assert format_money(12.5) == '¥12.50'
+assert classify_event_detailed('工资到账100')['type'] == 'income'
+"""], cwd=installed / "scripts", env=env, text=True, capture_output=True)
+            self.assertEqual(api_check.returncode, 0, api_check.stderr)
             def run(*args):
                 result = subprocess.run([sys.executable, str(installed / "scripts/ledger_tool.py"), *args, "--ledger", str(ledger)], cwd=folder,
                                         env=env, text=True, capture_output=True)

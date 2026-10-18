@@ -669,7 +669,7 @@ def _scripts_on_path():
 class DocumentStoreTest(unittest.TestCase):
     def test_insert_update_remove_persist(self):
         _scripts_on_path()
-        from ledger_db import STORE_KIND, DocumentNotFound, DocumentStore
+        from ledger_core.storage.documents import STORE_KIND, DocumentNotFound, DocumentStore
 
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "ledger.json"

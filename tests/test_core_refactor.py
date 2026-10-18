@@ -12,7 +12,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import ledger_tool as tool
+import ledger_tool as cli
+from ledger_core.domain.model import empty_ledger
+from ledger_core.services.analysis import month_trend
 from ledger_core.adapters.runtime_cli import context, migrate
 from ledger_core.domain.metrics import account_balances, budget_progress, summarize
 from ledger_core.domain.money import decimal_amount
@@ -28,7 +30,7 @@ class CoreTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.path = self.root / "family.json"
-        self.parser = tool.build_parser()
+        self.parser = cli.build_parser()
         self.run_cmd("init")
 
     def run_cmd(self, *args, path=None):
@@ -165,7 +167,7 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(august["totals"]["expense"], 0)
         pack = self.run_cmd("bill", "show", "--month", "2026-08", "--json")
         self.assertEqual(sum(day["amount"] for day in pack["facts"]["daily_expense"]), 0)
-        self.assertEqual(tool.month_trend(ledger["transactions"], end_date=date(2026, 10, 31), months=6)[-1]["expense"], 60.05)
+        self.assertEqual(month_trend(ledger["transactions"], end_date=date(2026, 10, 31), months=6)[-1]["expense"], 60.05)
         self.assertEqual(october["totals"]["expense"], 60.05)
         self.run_cmd("budget", "set", "--month", "2026-10", "--amount", "100")
         october = self.run_cmd("summary", "--month", "2026-10", "--json")
@@ -232,7 +234,7 @@ class CoreTest(unittest.TestCase):
 
     def test_migration_preview_backup_and_unknown_field_preservation(self):
         legacy = self.root / "legacy.json"
-        data = tool.empty_ledger(); data.update(schema_version=1, x_custom={"hello": "world"})
+        data = empty_ledger(); data.update(schema_version=1, x_custom={"hello": "world"})
         data["preferences"]["default_account_id"] = "acc_wechat"
         atomic_write_json(legacy, data)
         before = legacy.read_bytes()

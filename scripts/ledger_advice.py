@@ -11,10 +11,10 @@ loudly is worse than one that stays quiet.
 """
 
 from __future__ import annotations
+from ledger_core.domain import money
 
 from collections import defaultdict
 
-from ledger_insight import format_money
 
 # Below this many counted rows in the month, hold the advice. Statistics on a
 # handful of purchases describe the handful, not the person.
@@ -31,7 +31,7 @@ MIN_CAP_RATIO = 0.5
 
 
 def _money(amount, currency):
-    return format_money(amount or 0, currency)
+    return money.format_money(amount or 0, currency)
 
 
 def _month_rows(transactions, month):

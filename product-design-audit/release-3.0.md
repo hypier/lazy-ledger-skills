@@ -5,7 +5,7 @@
 ## 实现与兼容
 
 `scripts/ledger` → `ledger_tool.py` 参数分发 → adapters 输出适配 → services 业务 → domain 口径、storage 事务。
-HTTP 调用相同的返回值服务，不捕获 CLI stdout。原 `ledger_db.py` 与 Python API 导出保留兼容入口；旧函数的业务实现已移入核心模块。
+HTTP 调用相同的返回值服务，不捕获 CLI stdout。3.0 初版曾保留 `ledger_db.py` 与 Python API 兼容导出；2026-10-18 已移除，CLI、HTTP 和测试均直接引用核心模块。当前 Python 调用路径见 README 的开发说明。
 
 `add/record/update/delete`、账户、分类、习惯、预算、垫付、导入、复核与月报入口保留。`import-tsv` 接入共享导入计划，权威来源重复执行不再增账。图片来源必须使用已获用户核对的 `--confirmed-image`。`render`、`bill render`、`serve` 输出新报告；旧编辑页面、画布导出和 `--template` 退休，旧历史报告文件不删除。
 

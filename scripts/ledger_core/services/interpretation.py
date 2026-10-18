@@ -99,19 +99,12 @@ def classify_event_detailed(text):
     return decide("unknown_spending", "expense", "其他", {}, 0.6, "fallback", "no keyword matched")
 
 
-def classify_event(text):
-    """Backwards-compatible tuple form of :func:`classify_event_detailed`."""
-    decision = classify_event_detailed(text)
-    return decision["type"], decision["category"], decision["flags"], decision["confidence"]
-
-
 def infer_type(text):
-    tx_type, _category, _flags, _confidence = classify_event(text)
-    return tx_type
+    return classify_event_detailed(text)["type"]
 
 
 def infer_category(text, tx_type="expense"):
-    _event_type, category, _flags, _confidence = classify_event(text)
+    category = classify_event_detailed(text)["category"]
     if category is None:
         category = "其他"
     if tx_type == "income":

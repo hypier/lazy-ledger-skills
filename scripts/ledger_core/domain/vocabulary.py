@@ -266,11 +266,3 @@ METHOD_LABELS = {
 TYPE_LABELS = {"expense": "支出", "income": "收入", "refund": "退款", "transfer": "转账"}
 
 CHINESE_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
-
-VIEWER_PRIVATE_FIELDS = (
-    "attachment",
-    "wechat_transaction_id",
-    "credit_statement_ref",
-    "bank_statement_ref",
-)
-

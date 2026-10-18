@@ -34,14 +34,6 @@ def tx_sort_key(tx):
     return str(tx.get("occurred_at") or "") if isinstance(tx, dict) else ""
 
 
-def parse_bool(value):
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return False
-    return str(value).strip().lower() in {"1", "true", "yes", "y", "是"}
-
-
 def mutating(func):
     """Hold the ledger lock across a command's read-modify-write cycle."""
 

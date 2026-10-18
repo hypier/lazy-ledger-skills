@@ -1,5 +1,5 @@
 """Report composition and output formatting."""
-import json
+from ledger_core.domain import money
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -9,8 +9,8 @@ from ledger_core.domain.model import ledger_preferences
 from ledger_core.domain.metrics import tx_day, month_key, category_parent_map
 from ledger_core.domain.semantics import counts_as
 
-from ledger_core.domain.vocabulary import (METHOD_LABELS, VIEWER_PRIVATE_FIELDS)
-from ledger_core.services.analysis import (build_summary, format_money, format_pct)
+from ledger_core.domain.vocabulary import METHOD_LABELS
+from ledger_core.services.analysis import build_summary, format_pct
 from ledger_core.services.common import (last_day_of_month, local_today, safe_amount, validate_month)
 from ledger_core.services.habits import (ledger_stem)
 
@@ -154,7 +154,7 @@ def render_bill_pack(pack, currency="CNY"):
         [
             "还没有文字结论。用下面的事实写完后执行 `bill save`。",
             "",
-            f"支出 {format_money(totals.get('expense') or 0, currency)} · 收入 {format_money(totals.get('income') or 0, currency)} · 共 {facts.get('count') or 0} 笔",
+            f"支出 {money.format_money(totals.get('expense') or 0, currency)} · 收入 {money.format_money(totals.get('income') or 0, currency)} · 共 {facts.get('count') or 0} 笔",
         ]
     )
     comparison = facts.get("comparison") or {}
@@ -179,15 +179,6 @@ def default_bill_html_path(ledger_path, month):
     return target
 
 
-def bill_canvas_payload(pack):
-    return {
-        "month": pack.get("month"),
-        "currency": pack.get("currency", "CNY"),
-        "facts": pack.get("facts") or {},
-        "bill": pack.get("bill"),
-    }
-
-
 def attach_bill_file(pack, ledger_path):
     month = pack.get("month")
     path = default_bill_html_path(ledger_path, month)
@@ -198,15 +189,6 @@ def attach_bill_file(pack, ledger_path):
         "exists": path.exists(),
     }
     return attached
-
-
-def write_bill_html(pack, output_path, template_path=None):
-    from .reports import html_document
-    if template_path:
-        raise ValueError("Fixed templates are retired; use report build and a verified renderer")
-    output = Path(output_path)
-    write_text_secure(output, html_document(render_bill_pack(pack)))
-    return output.resolve()
 
 
 def render_bill_html(ledger, ledger_path, month=None, output_path=None, template_path=None):
@@ -238,14 +220,3 @@ def format_list_row(tx):
         f"{tx.get('id')} | {date} | {tx.get('type')} | {tx.get('category')} | "
         f"{amount:.2f} | {merchant} | {account}{dest} | {method} | {note}"
     )
-
-
-def viewer_ledger_data(ledger):
-    # A static report may be shared. Keep the visual data, but do not embed
-    # local attachment paths or authoritative statement references.
-    data = json.loads(json.dumps(ledger, ensure_ascii=False))
-    for tx in data.get("transactions") or []:
-        if isinstance(tx, dict):
-            for field in VIEWER_PRIVATE_FIELDS:
-                tx.pop(field, None)
-    return data

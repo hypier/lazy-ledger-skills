@@ -11,14 +11,14 @@ mutates the ledger.
 """
 
 from __future__ import annotations
+from ledger_core.domain import money
 
-import datetime
 
-from ledger_insight import SEVERITY, format_money
+from ledger_insight import SEVERITY
 
 
 def _money(amount, currency):
-    return format_money(amount or 0, currency)
+    return money.format_money(amount or 0, currency)
 
 
 def headline(period_data, ledger, currency, findings, open_items):
@@ -217,21 +217,6 @@ def render_brief(period_data, ledger, currency, findings, open_items, limit=4, a
         lines.extend(advice_lines)
 
     return lines
-
-
-def morning_greeting(now=None):
-    """A short, warm opener; the butler does not start every message cold."""
-    now = now or datetime.datetime.now()
-    hour = now.hour
-    if hour < 6:
-        return "这么晚还没睡。"
-    if hour < 11:
-        return "早上好。"
-    if hour < 14:
-        return "中午好。"
-    if hour < 19:
-        return "下午好。"
-    return "晚上好。"
 
 
 def period_story(period_data, currency, findings=None):

@@ -12,7 +12,8 @@ SCRIPTS = ROOT / "scripts"
 WRAPPER = SCRIPTS / "ledger"
 
 sys.path.insert(0, str(SCRIPTS))
-import ledger_tool  # noqa: E402
+from ledger_core.domain.model import empty_ledger  # noqa: E402
+from ledger_core.services.habits import affordable_account  # noqa: E402
 
 
 def run(*args, cwd, check=True):
@@ -85,7 +86,7 @@ class LargeExpenseAccountTest(unittest.TestCase):
 
 class AffordabilityHelperTest(unittest.TestCase):
     def test_picks_the_richest_account(self):
-        ledger = ledger_tool.empty_ledger()
+        ledger = empty_ledger()
         for account in ledger["accounts"]:
             if account["id"] == "acc_wechat":
                 account["opening_balance"] = 500
@@ -93,14 +94,14 @@ class AffordabilityHelperTest(unittest.TestCase):
                 account["opening_balance"] = 9000
             if account["id"] == "acc_alipay":
                 account["opening_balance"] = 3000
-        best = ledger_tool.affordable_account(ledger, 4000)
+        best = affordable_account(ledger, 4000)
         self.assertEqual(best["name"], "银行卡")
 
     def test_returns_none_when_nothing_can_cover_it(self):
-        ledger = ledger_tool.empty_ledger()
+        ledger = empty_ledger()
         for account in ledger["accounts"]:
             account["opening_balance"] = 10
-        self.assertIsNone(ledger_tool.affordable_account(ledger, 4000))
+        self.assertIsNone(affordable_account(ledger, 4000))
 
 
 if __name__ == "__main__":

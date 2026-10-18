@@ -198,10 +198,6 @@ def sort_habits(habits):
     )
 
 
-def visible_habits(ledger, limit=8):
-    return sort_habits([habit for habit in ensure_habits(ledger) if is_shortcut_habit(habit)])[:limit]
-
-
 def _mode(values):
     counted = Counter(value for value in values if value)
     if not counted:

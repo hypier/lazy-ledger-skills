@@ -1,9 +1,9 @@
 """Period queries, evidence matching and analysis projections."""
+from ledger_core.domain import money
 import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from ledger_core.domain.model import default_currency
-from ledger_core.domain.money import format_money
 from ledger_core.domain.metrics import account_balances, budget_progress, summarize, tx_day, month_key, compact_candidate, category_parent_map
 from ledger_core.domain.semantics import counts_as
 from ledger_core.services.findings import active_insights as build_findings
@@ -628,14 +628,14 @@ def build_insight_lines(data, currency="CNY"):
     if pace.get("budget_limit") is not None and not pace.get("complete"):
         if pace.get("on_track") is False:
             lines.append(
-                f"按现在日均，月底大约 {format_money(pace.get('projected_expense'), currency)}，可能超预算。"
+                f"按现在日均，月底大约 {money.format_money(pace.get('projected_expense'), currency)}，可能超预算。"
             )
         elif pace.get("projected_remaining", 0) > 0:
             lines.append(
-                f"按现在日均，月底大约还能剩 {format_money(pace.get('projected_remaining'), currency)}。"
+                f"按现在日均，月底大约还能剩 {money.format_money(pace.get('projected_remaining'), currency)}。"
             )
     elif pace and pace.get("scope") == "year" and not pace.get("complete") and expense:
-        lines.append(f"按现在日均，今年大约会花 {format_money(pace.get('projected_expense'), currency)}。")
+        lines.append(f"按现在日均，今年大约会花 {money.format_money(pace.get('projected_expense'), currency)}。")
     missing = [item for item in data.get("recurring") or [] if item.get("missing_this_month")]
     if missing:
         names = "、".join(item["label"] for item in missing[:3])
@@ -643,7 +643,7 @@ def build_insight_lines(data, currency="CNY"):
     pending = data.get("pending_reimbursement") or []
     if pending:
         total = sum(float(item.get("amount") or 0) for item in pending)
-        lines.append(f"待报销 {len(pending)} 笔，共 {format_money(total, currency)}。")
+        lines.append(f"待报销 {len(pending)} 笔，共 {money.format_money(total, currency)}。")
     unmatched = data.get("unmatched_refunds") or []
     if unmatched:
         lines.append(f"有 {len(unmatched)} 笔退款对不上近期支出。")
@@ -667,8 +667,8 @@ def render_show(data, currency="CNY"):
     lines = [
         f"## {period.get('label') or '全部'}",
         "",
-        f"支出 **{format_money(totals['expense'], currency)}** · 收入 {format_money(totals['income'], currency)} · 退款 {format_money(totals['refund'], currency)} · 净额 **{format_money(totals['net'], currency)}**",
-        f"共 {data['count']} 笔 · 日均支出 {format_money(data['daily_average'], currency)}",
+        f"支出 **{money.format_money(totals['expense'], currency)}** · 收入 {money.format_money(totals['income'], currency)} · 退款 {money.format_money(totals['refund'], currency)} · 净额 **{money.format_money(totals['net'], currency)}**",
+        f"共 {data['count']} 笔 · 日均支出 {money.format_money(data['daily_average'], currency)}",
     ]
     comparison = data.get("comparison")
     if comparison:
@@ -680,10 +680,10 @@ def render_show(data, currency="CNY"):
         if pace.get("budget_limit") is not None:
             status = "预计不超" if pace.get("on_track") else "预计超支"
             lines.append(
-                f"按日均推算月底 {format_money(pace['projected_expense'], currency)} · {status}"
+                f"按日均推算月底 {money.format_money(pace['projected_expense'], currency)} · {status}"
             )
         elif pace.get("scope") == "year":
-            lines.append(f"按日均推算全年 {format_money(pace['projected_expense'], currency)}")
+            lines.append(f"按日均推算全年 {money.format_money(pace['projected_expense'], currency)}")
     if data.get("findings"):
         lines.extend(["", "### 值得一说"])
         for finding in data["findings"]:
@@ -697,7 +697,7 @@ def render_show(data, currency="CNY"):
     if data.get("month_trend") and len(data.get("by_month") or {}) >= 2:
         lines.extend(["", "### 月度支出"])
         for item in data["month_trend"]:
-            lines.append(f"- {item['month']} {format_money(item['expense'], currency)}")
+            lines.append(f"- {item['month']} {money.format_money(item['expense'], currency)}")
     if data.get("recurring"):
         lines.extend(["", "### 周期账"])
         cadence_label = {"monthly": "每月", "weekly": "每周", "biweekly": "每两周"}
@@ -705,60 +705,60 @@ def render_show(data, currency="CNY"):
             status = "这月还没记" if item.get("missing_this_month") else ("这月已记" if item.get("recorded_this_month") else "")
             extra = f" · {status}" if status else ""
             lines.append(
-                f"- {item['label']} {format_money(item['typical_amount'], currency)} · {cadence_label.get(item['cadence'], item['cadence'])}{extra}"
+                f"- {item['label']} {money.format_money(item['typical_amount'], currency)} · {cadence_label.get(item['cadence'], item['cadence'])}{extra}"
             )
     if data["by_category"]:
         lines.extend(["", "### 分类支出"])
         for category, amount in data["by_category"].items():
             share = (amount / totals["expense"] * 100) if totals["expense"] else 0
-            lines.append(f"- {category} {format_money(amount, currency)} ({share:.0f}%)")
+            lines.append(f"- {category} {money.format_money(amount, currency)} ({share:.0f}%)")
     if data.get("top_merchants"):
         lines.extend(["", "### 商户"])
         for item in data["top_merchants"][:5]:
-            lines.append(f"- {item['merchant']} {format_money(item['amount'], currency)}")
+            lines.append(f"- {item['merchant']} {money.format_money(item['amount'], currency)}")
     if data.get("by_method"):
         lines.extend(["", "### 支付渠道"])
         for method, amount in list(data["by_method"].items())[:5]:
             label = METHOD_LABELS.get(method, method)
-            lines.append(f"- {label} {format_money(amount, currency)}")
+            lines.append(f"- {label} {money.format_money(amount, currency)}")
     if data.get("accounts"):
         lines.extend(["", "### 账户"])
         for item in data["accounts"]:
-            lines.append(f"- {item['name']} {format_money(item['balance'], currency)}")
+            lines.append(f"- {item['name']} {money.format_money(item['balance'], currency)}")
     if data.get("budgets"):
         lines.extend(["", "### 预算"])
         for item in data["budgets"]:
             status = "超支" if item["over"] else "剩余"
             lines.append(
-                f"- {item['category']} {format_money(item['limit'], currency)} · 已花 {format_money(item['spent'], currency)} · {status} {format_money(abs(item['remaining']), currency)}"
+                f"- {item['category']} {money.format_money(item['limit'], currency)} · 已花 {money.format_money(item['spent'], currency)} · {status} {money.format_money(abs(item['remaining']), currency)}"
             )
     if data.get("pending_reimbursement"):
         lines.extend(["", "### 待报销"])
         for item in data["pending_reimbursement"][:5]:
             date = (item.get("occurred_at") or "")[:10]
             lines.append(
-                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} {format_money(item.get('amount'), currency)}"
+                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} {money.format_money(item.get('amount'), currency)}"
             )
     if data.get("unmatched_refunds"):
         lines.extend(["", "### 未对上的退款"])
         for item in data["unmatched_refunds"][:5]:
             date = (item.get("occurred_at") or "")[:10]
             lines.append(
-                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} {format_money(item.get('amount'), currency)}"
+                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} {money.format_money(item.get('amount'), currency)}"
             )
     if data.get("outliers"):
         lines.extend(["", "### 偏大支出"])
         for item in data["outliers"][:5]:
             date = (item.get("occurred_at") or "")[:10]
             lines.append(
-                f"- {date} {item.get('merchant') or item.get('category')} {format_money(item.get('amount'), currency)}"
+                f"- {date} {item.get('merchant') or item.get('category')} {money.format_money(item.get('amount'), currency)}"
             )
     if data.get("needs_review"):
         lines.extend(["", "### 待复核"])
         for item in data["needs_review"][:5]:
             date = (item.get("occurred_at") or "")[:10]
             lines.append(
-                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} · {item.get('category')} {format_money(item.get('amount'), currency)}"
+                f"- {date} {item.get('merchant') or item.get('note') or item.get('id')} · {item.get('category')} {money.format_money(item.get('amount'), currency)}"
             )
     if data["count"] == 0 and not data.get("accounts") and not data.get("budgets"):
         return f"{period.get('label') or '这段时间'}没有记账。"
@@ -843,7 +843,7 @@ def collect_open_items(ledger, currency="CNY"):
                 "priority": 1,
                 "kind": "advance_open",
                 "transaction_id": advance.get("id"),
-                "say": f"{label} 的 {format_money(remaining, currency)} 还没收回{age}。",
+                "say": f"{label} 的 {money.format_money(remaining, currency)} 还没收回{age}。",
                 "do": "收到就用 advance settle 销掉；要不回来就用 advance writeoff，别一直挂着。",
                 "command": f"ledger advance settle --id {advance.get('id')}",
             }
@@ -857,7 +857,7 @@ def collect_open_items(ledger, currency="CNY"):
                 "kind": "unmatched_refund",
                 "say": (
                     f"{refund.get('occurred_at', '')[:10]} 的退款 "
-                    f"{format_money(refund.get('amount'), currency)} 还没对上原始支出。"
+                    f"{money.format_money(refund.get('amount'), currency)} 还没对上原始支出。"
                 ),
                 "do": "告诉我它退的是哪一笔，我挂回去。",
                 "command": f"ledger update --id {refund.get('id')} --related-id <原支出id>",

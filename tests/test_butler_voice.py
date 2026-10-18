@@ -18,7 +18,6 @@ SCRIPTS = ROOT / "scripts"
 WRAPPER = SCRIPTS / "ledger"
 
 sys.path.insert(0, str(SCRIPTS))
-import ledger_tool  # noqa: E402
 import ledger_voice  # noqa: E402
 from ledger_advice import build_advice  # noqa: E402
 

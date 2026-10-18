@@ -132,7 +132,7 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
     required = {"scripts/ledger_core/domain/model.py", "scripts/ledger_core/domain/metrics.py",
                 "scripts/ledger_core/storage/repository.py", "scripts/ledger_core/services/profile.py",
                 "scripts/ledger_core/adapters/runtime_cli.py", "scripts/ledger_core/services/reports.py", "scripts/ledger_core/services/remotes.py",
-                "scripts/ledger_core/adapters/api.py", "scripts/ledger_core/services/generative_ui.py",
+                "scripts/ledger_core/adapters/commands.py", "scripts/ledger_core/storage/documents.py", "scripts/ledger_core/services/generative_ui.py",
                 "assets/openui/catalog.json", "assets/openui/renderer.js", "assets/openui/renderer.css",
                 "assets/openui/build.json", "assets/openui/THIRD_PARTY_LICENSES.txt",
                 "assets/openui/validate.cjs", "assets/openui/generation.json", "scripts/ledger_core/services/ui_generation.py", "scripts/ledger_core/services/preview.py"}
