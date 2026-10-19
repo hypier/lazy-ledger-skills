@@ -139,7 +139,10 @@ def project(report, layout=None, *, refs=None):
             evidence = report["evidence"].get(key)
             if evidence is None:
                 evidence = list(dict.fromkeys(i for ids in report["evidence"].values() for i in ids))
-            datasets[ref] = {"label": LABELS[ref], "value": money(report["metrics"]["totals"][key]), "evidence": evidence}
+            datasets[ref] = {"label": report["metrics"].get("income_basis", {}).get("label", LABELS[ref]) if key == "income" else LABELS[ref], "value": money(report["metrics"]["totals"][key]), "evidence": evidence}
+            if key == "income" and report["metrics"].get("income_basis"):
+                datasets[ref]["raw_value"] = money(report["metrics"]["raw_totals"]["income"])
+                datasets[ref]["contributions"] = report["metrics"]["income_evidence"]
         elif ref in {"by_category", "by_day", "by_income_merchant", "by_income_day"}:
             values = report["metrics"].get(ref)
             if values is None:

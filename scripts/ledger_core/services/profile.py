@@ -49,6 +49,9 @@ def validate(profile):
         presentation = profile['presentation']
         if not isinstance(presentation,dict) or presentation.get('density','normal') not in {'compact','normal','detailed'}:
             raise ValueError('Presentation density must be compact, normal or detailed')
+    if "reporting" in profile:
+        from .reporting_basis import validate as validate_reporting
+        validate_reporting(profile["reporting"])
     from ..domain.money import decimal_amount
     phrases = set()
     for habit in profile["habits"]:

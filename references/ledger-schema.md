@@ -52,3 +52,17 @@ The recoverable transaction bundle includes the ledger, profile and runtime
 manifest. Git history adds an optional snapshot of those three portable files.
 Local machine permissions and remote configuration do not travel in the bundle.
 See [history.md](history.md) for supported sync and restore behavior.
+
+## Household member attribution
+
+Register optional `x_member` (string) before writing member labels. It describes
+the member to whom a transaction belongs, not its merchant or payment account.
+`summarize` exposes `by_income_member` using the same income eligibility rules
+as overall totals; missing attribution appears as `未标注`, never inferred from
+account names. Internal transfers and excluded receipts remain outside income.
+`summary`, `show` and list filters accept `--member` for exact explicit labels;
+account balances still describe whole accounts, not member assets. This is an
+optional grouping/filter over existing semantics, not a new income type or a
+change to historical totals. Family membership and coverage belong in the user
+profile; importing some member income does not establish complete household
+spending or balances.

@@ -26,9 +26,13 @@ def from_ledger(ledger, *, start, end, history_state=None):
     period = {"label": f"{start} 至 {end}", "start": start, "end": end,
               "month": start[:7] if start[:7] == end[:7] else None}
     metrics = summarize(rows, period=period, category_parents=category_parent_map(ledger))
+    from . import reporting_basis
+    reporting_basis.apply(metrics, rows, ledger.profile)
     metrics["budgets"] = budget_progress(ledger, rows, period)
     metrics["accounts"] = account_balances(ledger)
     evidence = {kind: [r["id"] for r in rows if counts_as(r, kind)] for kind in ("expense", "income", "refund")}
+    if metrics.get("income_evidence") is not None:
+        evidence["income"] = [e["transaction_id"] for e in metrics["income_evidence"]]
     report = {"version": 1, "id": "report_" + uuid.uuid4().hex, "generated_at": now_iso(),
               "context": context_token(ledger), "currency": ledger["currency"], "period": period,
               "metrics": metrics, "evidence": evidence, "transactions": rows,
@@ -85,6 +89,10 @@ def render(report, format="markdown", *, layout=None):
              f"已记录收入 {totals['income']:.2f}，支出 {totals['expense']:.2f}，退款 {totals['refund']:.2f}，净额 {totals['net']:.2f}。",
              f"覆盖 {report['coverage']['recorded_rows']} 条流水，其中 {report['coverage']['unassigned_rows']} 条未指定账户。",
              "以上为已记录数据，不代表全部实际收支；账户期初未确认时，余额仅作流水核对。", "", "## 金额依据", ""]
+    if report["metrics"].get("income_basis"):
+        lines.insert(4, "收入口径：" + report["metrics"]["income_basis"]["label"] + "；原流水收入 " + str(report["metrics"]["raw_totals"]["income"]) + "，仅供核对，不重复相加。")
+        lines.extend(["### 收入加项与扣减", ""])
+        lines.extend(f"- {e['transaction_id']} · {e['label']} · {e['contribution']:+.2f}" for e in report["metrics"]["income_evidence"])
     for kind, label in (("expense", "支出"), ("income", "收入"), ("refund", "退款")):
         lines.append(f"- {label}依据：" + ("、".join(report["evidence"][kind]) or "无"))
     if report["metrics"]["budgets"]:

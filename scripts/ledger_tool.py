@@ -45,6 +45,7 @@ def add_filter_flags(parser, *, limit=None, json_flag=False, compare=False):
     parser.add_argument("--category", default=None)
     parser.add_argument("--method", default=None, choices=sorted(vocabulary.VALID_METHODS))
     parser.add_argument("--account", default=None, help="Filter by account id or name")
+    parser.add_argument("--member", default=None, help="Filter by explicitly recorded x_member; does not infer account ownership")
     if json_flag:
         parser.add_argument("--json", action="store_true")
     if compare:

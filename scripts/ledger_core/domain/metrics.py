@@ -256,6 +256,7 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
     totals = {"expense": Decimal(0), "income": Decimal(0), "refund": Decimal(0), "transfer": Decimal(0)}
     by_category = defaultdict(Decimal)
     by_merchant = defaultdict(Decimal)
+    by_income_member = defaultdict(Decimal)
     by_income_merchant = defaultdict(Decimal)
     by_income_day = defaultdict(Decimal)
     by_day = defaultdict(Decimal)
@@ -301,6 +302,8 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
         if not isinstance(category_value, str) or not category_value:
             category_value = "其他"
         if tx_type == "income":
+            member = tx.get("x_member")
+            by_income_member[member if isinstance(member, str) and member.strip() else "未标注"] += amount
             by_income_merchant[merchant_value if merchant_value != "未填商户" else "未填来源"] += amount
             by_income_day[tx_day(tx) or "未知"] += amount
         if tx_type == "expense":
@@ -350,6 +353,7 @@ def summarize(transactions, period=None, previous_transactions=None, previous_pe
         "totals": totals,
         "by_category": dict(sorted(by_category.items(), key=lambda item: item[1], reverse=True)),
         "by_merchant": dict(sorted(by_merchant.items(), key=lambda item: item[1], reverse=True)),
+        "by_income_member": {key: round(value, 2) for key, value in sorted(by_income_member.items())},
         "by_income_merchant": {
             key: round(value, 2)
             for key, value in sorted(by_income_merchant.items(), key=lambda item: item[1], reverse=True)

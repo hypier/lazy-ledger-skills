@@ -21,11 +21,14 @@ def month_snapshot(ledger, month):
     ]
     period = {"label": month, "start": f"{month}-01" if month else None, "end": None, "month": month}
     data = summarize(rows, period=period, category_parents=category_parent_map(ledger))
+    from .reporting_basis import apply
+    apply(data, rows, getattr(ledger, "profile", {}))
     data["budgets"] = budget_progress(ledger, rows, period)
     return {
         "key": month,
         "count": data["count"],
         "totals": data["totals"],
+        **({"raw_totals": data["raw_totals"], "income_basis": data["income_basis"]} if "income_basis" in data else {}),
         "daily_average": data["daily_average"],
         "budgets": data["budgets"],
     }
@@ -202,11 +205,14 @@ def filter_transactions(
     end=None,
     account=None,
     category_parents=None,
+    member=None,
 ):
     rows = []
     q = (query or "").lower()
     for tx in transactions:
         if not isinstance(tx, dict):
+            continue
+        if member is not None and tx.get("x_member") != member:
             continue
         day = tx_day(tx)
         if month and month_key(tx.get("occurred_at")) != month:
@@ -261,6 +267,7 @@ def filter_from_args(transactions, args, category_parents=None):
         start=period["start"],
         end=period["end"],
         account=getattr(args, "account", None),
+        member=getattr(args, "member", None),
         category_parents=category_parents,
     )
     return rows, period
@@ -670,6 +677,8 @@ def render_show(data, currency="CNY"):
         f"支出 **{money.format_money(totals['expense'], currency)}** · 收入 {money.format_money(totals['income'], currency)} · 退款 {money.format_money(totals['refund'], currency)} · 净额 **{money.format_money(totals['net'], currency)}**",
         f"共 {data['count']} 笔 · 日均支出 {money.format_money(data['daily_average'], currency)}",
     ]
+    if data.get("income_basis"):
+        lines.append(f"收入口径：{data['income_basis']['label']}；原流水收入 {money.format_money(data['raw_totals']['income'], currency)}，仅供核对，不能与所得相加。")
     comparison = data.get("comparison")
     if comparison:
         lines.append(
@@ -773,9 +782,12 @@ def build_summary(ledger, args, default_range=None):
         start=getattr(args, "start", None),
         end=getattr(args, "end", None),
     )
+    from . import reporting_basis
+    report_profile = getattr(ledger, "profile", {})
+    attributed = reporting_basis.attributed_rows(ledger["transactions"], report_profile)
     category_parents = category_parent_map(ledger)
     rows = filter_transactions(
-        ledger["transactions"],
+        attributed,
         query=getattr(args, "query", None),
         tx_type=getattr(args, "type", None),
         category=getattr(args, "category", None),
@@ -783,6 +795,7 @@ def build_summary(ledger, args, default_range=None):
         start=period["start"],
         end=period["end"],
         account=getattr(args, "account", None),
+        member=getattr(args, "member", None),
         category_parents=category_parents,
     )
     previous_rows = None
@@ -791,7 +804,7 @@ def build_summary(ledger, args, default_range=None):
         previous_info = previous_period(period)
         if previous_info:
             previous_rows = filter_transactions(
-                ledger["transactions"],
+                attributed,
                 query=getattr(args, "query", None),
                 tx_type=getattr(args, "type", None),
                 category=getattr(args, "category", None),
@@ -799,9 +812,11 @@ def build_summary(ledger, args, default_range=None):
                 start=previous_info["start"],
                 end=previous_info["end"],
                 account=getattr(args, "account", None),
+                member=getattr(args, "member", None),
                 category_parents=category_parents,
             )
     data = summarize(rows, period=period, previous_transactions=previous_rows, previous_period_info=previous_info, category_parents=category_parents)
+    reporting_basis.apply(data, rows, report_profile, previous_rows=previous_rows)
     data["coverage"] = {"complete":False, "basis":"recorded transactions only; gaps in source coverage can affect comparisons"}
     data["accounts"] = account_balances(ledger)
     data["budgets"] = budget_progress(ledger, rows, period)
