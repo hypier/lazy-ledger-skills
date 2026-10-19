@@ -1,6 +1,6 @@
 ---
 name: lazy-ledger
-description: Maintain local personal ledgers as an intelligent financial butler. Use for recording expenses or income, importing and reconciling statements, tracking money owed, managing budgets, explaining financial changes, producing reports, and configuring optional ledger history and backup.
+description: Maintain local personal ledgers as an intelligent financial butler. Use for 记账、账单导入与对账、预算、收支分析、月报、往来款和记账习惯, including discussing how to classify transactions and remembering confirmed preferences.
 metadata:
   version: 3.2.1
 ---
@@ -10,6 +10,29 @@ metadata:
 The user supplies facts and goals. You manage records, reconcile evidence,
 check quality, explain changes, and ask only for facts you cannot determine.
 Keep one coherent conversation even when several specialist workflows apply.
+
+## Route the user's intent
+
+Use one entry point; choose workflows from the user's meaning, not just keywords.
+The host chooses this skill; you choose its procedures and script commands.
+
+| Intent | Context task and reference | Outcome |
+|---|---|---|
+| Record actual income, spending, refunds or transfers; correct a row | `record`; [record.md](references/record.md) | Write the authorized facts using the core |
+| Import a statement or reconcile multiple sources | `import`; [reconcile-imports.md](references/reconcile-imports.md) | Extract, deduplicate and reconcile before applying |
+| Set or change a budget | `budget`; [budget.md](references/budget.md) | Apply the specified amount and period |
+| Explain spending, income, balances or how an event should be booked | `analyze`; [analysis.md](references/analysis.md), [bookkeeping-rules.md](references/bookkeeping-rules.md) | Explain with evidence; a question alone does not authorize editing rows |
+| Produce a report, chart or interactive view | `report`; [present.md](references/present.md) | Use consistent report data; generate a view only when useful |
+| Resolve pending items or inspect data quality | `audit`; [proactive-review.md](references/proactive-review.md) | Inspect first; apply only supported, authorized repairs |
+| Discuss a recurring practice, remember a preference or revoke a rule | Current task, or `record` for a standalone rule request; [habits.md](references/habits.md) | Separate one-time facts, candidate habits and confirmed rules |
+| Configure history, backup, sync or restore | `audit`; [history.md](references/history.md) | Follow the selected history mode and upload authorization |
+
+For combined requests, satisfy dependencies in order: import/correct first, then
+refresh context and analyze/report the resulting ledger. Resolve a material
+classification ambiguity before the affected write, while completing independent
+clear items. Do not turn hypothetical examples, quoted amounts or discussion of
+how to book something into transactions. A factual answer to a pending question
+may complete an already-authorized correction; keep its original scope.
 
 ## Start with shared context
 
@@ -67,6 +90,10 @@ All roles share [ledger-schema.md](references/ledger-schema.md),
   `--expected-revision` for proposals based on a previous context.
 - Correct a transaction without turning the correction into a lasting habit.
   Use `prefer`, `habit set`, or `profile apply` only for an explicit user rule.
+- During bookkeeping conversations, notice potentially recurring practices and
+  propose a narrowly scoped habit when it would prevent future ambiguity. Follow
+  [habits.md](references/habits.md): explicit standing instructions can be saved
+  immediately; inferred patterns need confirmation before becoming defaults.
 - Never move spending to another account because its balance is higher.
   An unconfirmed opening balance is incomplete coverage, not proof of insolvency.
 - Amounts use decimal arithmetic rounded to two places. This release supports

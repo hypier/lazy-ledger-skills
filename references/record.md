@@ -6,7 +6,8 @@ Read [bookkeeping-rules.md](bookkeeping-rules.md) for field inference and [habit
 
 | Input | Action |
 |---|---|
-| One or several clear text items | `add --text` immediately |
+| A request to record one or several clear actual events | `record --text`; use `add --text` when structured output is needed |
+| Hypothetical example or “这种账怎么记” without a write request | Explain the treatment; do not add a row |
 | Parseable but worth checking | `parse --text`, then add |
 | Missing amount without an active user-confirmed fixed-price rule | Ask for the amount |
 | Type could change totals | Ask whether it is expense, income, refund, or own-account transfer |
@@ -36,6 +37,11 @@ Useful overrides include `--type`, `--category`, `--merchant`, `--method`, `--ac
 If `add` exits with `likely_duplicate`, show the candidate and ask whether both are real. Use `--allow-duplicate` only after confirmation.
 
 When correcting a just-recorded row, locate it with the conversation context or `find`, then update only the requested field. Do not turn that correction into a permanent merchant preference unless the user says to remember the rule.
+
+If the explanation suggests a recurring practice, follow [habits.md](habits.md)
+to propose a scoped habit. Keep the current correction separate from permission
+to remember it. A clear “以后都这样记” authorizes saving that rule; “这次这样记”
+does not. Check existing confirmed and pending notes before suggesting it again.
 
 ## One Receipt Or Image
 
