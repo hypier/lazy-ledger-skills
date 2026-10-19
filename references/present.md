@@ -17,6 +17,14 @@ payload; include period, currency and coverage. Do not invent another financial
 aggregation algorithm inside a template. Refresh data before publishing a
 previously generated view. State whether an artifact is a snapshot.
 
+When `metrics.income_basis` is present, use the core's `totals.income` and
+`totals.net` as the primary figures and disclose that basis. Keep `raw_totals`
+as a separate reconciliation reference. Explain income using signed
+`income_evidence` contributions; ordinary income-type transactions alone omit
+adjustments based on transfers and excluded work payments. Do not apply the
+profile adjustment a second time in a view. Month/member views must use the same
+core rules. An unlabelled expense is not implicitly owned by a specific member.
+
 The `render`, `bill render` and `serve` compatibility entries now use the shared
 report service, documented in [html-report.md](html-report.md). All three old
 HTML assets were removed. The runtime manifest legitimately lists zero templates.

@@ -64,6 +64,36 @@ scope, supporting user statement or transaction references, date and status
 executable defaults; retain only information relevant to bookkeeping. Do not
 rewrite the derived `observations.json` cache to store conversational decisions.
 
+When reorganizing an accumulated profile, separate current agreements, one-time
+facts, superseded history, and unresolved questions. Preserve the original
+confirmation evidence, but mark historical rules as inactive rather than leaving
+contradictory defaults side by side. Backup preferences must distinguish a
+configured remote, manual/automatic sync, and the last actual upload.
+
+## Optional income reporting basis
+
+An explicitly confirmed income calculation can use the optional `reporting`
+profile object (version `1`): `income_label` and `income_adjustments`. Each
+adjustment has a unique `id`, `label`, explicit `member`, `sign` (+1 receipts or
+refunds, -1 expenses), and `match` conditions. Conditions require `type` and
+`category`; optional keys are `account_id`, `to_account_id`, and
+`excluded_from_totals`. Every match condition must hold; matching any
+`not_match` condition excludes the event. Non-transfer adjustments must match
+`excluded_from_totals: true`; ordinary counted income/expense/refund cannot be
+counted again. Overlapping rules and conflicting member attribution are errors.
+
+Use this only for an agreed reporting projection, never to invent cash events.
+The summary and report services retain `raw_totals`, expose the selected
+`income_basis`, and provide signed `income_evidence` referencing original IDs.
+Their main `totals.income` and `totals.net` use the configured basis. Ordinary
+transaction type filters still select actual event types: a type-filtered income
+list alone does not contain transfer-based additions or expense-based deductions.
+`income_count` counts ordinary income rows; `income_evidence_count` counts the
+contributing rows. Use the signed evidence to explain the main income total.
+Member filters include only recorded attribution and explicit reporting-rule
+attribution; they cannot infer ownership of unlabelled spending. Absent this
+configuration, existing metrics are unchanged.
+
 Once confirmed, use the existing structured profile fields and `profile apply`,
 `prefer` or `habit set` for rules the core supports. Preserve all unrelated
 fields and prose, use the current profile token, then reload context. Record the
