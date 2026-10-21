@@ -2,6 +2,46 @@
 
 Use this workflow for official WeChat/Alipay exports, bank statements, credit-card statements, or any request to check duplicates across sources. For long screenshots, use [image-batch-import.md](image-batch-import.md) to produce the reviewed rows, then apply the matching model below.
 
+## Built-in plan and commit
+
+Start with `context --task import`. For supported WeChat/Alipay CSV exports or
+normalized CSV/TSV, run `import prepare --input statement.csv`. Use `--provider
+bank` for normalized bank data, `--account ACCOUNT` only when known, and
+`--expected-count` / `--expected-total` for explicit source control totals.
+The latter is the sum of parsed positive row amounts, not net spending.
+
+Built-in bank CSV uses `交易日期,摘要,支出金额,收入金额,余额,流水号` with
+exactly one positive debit/credit per row. Credit CSV uses
+`消费日期,交易说明,入账金额,交易性质,交易号`; supported event labels are
+消费/退款/还款, with repayment requiring two confirmed accounts. These are
+explicit supported layouts, not a claim to parse every bank export. XLSX/PDF
+and other layouts use a verified host parser or registered converter to produce
+normalized candidates; reject unknown headers rather than guess.
+
+The plan lists new/existing/linked/excluded rows, ambiguities, parse failures and
+control-total mismatches. It preserves file hash, original cells, source line,
+transaction ID and field evidence. `ready: false` cannot commit. Unknown statuses
+and expense rows marked refunded need review; they are not silently converted
+into refund income. Unsupported XLSX/PDF layouts require an appropriate parser
+or a validated converter; this is not a universal bank-format parser.
+
+Same-source transaction IDs prevent repeated imports; distinct authoritative
+IDs preserve real repeat purchases. A cross-source candidate needs explicit
+linkage: `--links links.json` maps source line strings to existing transaction
+IDs. Or use `--distinct LINE` for a confirmed separate purchase. Neither choice
+is inferred from equal amounts alone. Source discrepancies must be resolved or
+an explicitly scoped new source prepared before proceeding.
+
+Save the returned JSON plan and run `import commit --input plan.json`. It binds
+the ledger/profile/runtime context and performs one validated core commit.
+Repeating the same ready proposal is idempotent; preparing the same imported
+file creates no new transactions. The plan is also saved under
+`work/imports/<file_hash>.json`. Coverage states whether totals were checked;
+even reconciled file totals do not prove the whole ledger is complete.
+
+Images still use the macOS OCR workflow and visible row confirmation, followed
+by normalized candidate input. Never claim OCR works on unsupported platforms.
+
 ## Authority Model
 
 Match evidence in this order:
@@ -19,7 +59,7 @@ Common evidence fields:
 - Credit card: `credit_statement_ref`, `credit_statement_month`, `credit_statement_post_date`, `credit_statement_description`.
 - Derived rows: `derived_ref` plus a note explaining the derivation.
 
-Preserve source text and attachment paths. Keep transaction time in `occurred_at`; keep posting date in its statement-specific field.
+Preserve source text and attachment paths. Keep transaction time in `occurred_at`; keep posting date in source cells or a registered optional field.
 
 ## Account And Channel Reconciliation
 
@@ -42,9 +82,9 @@ Preserve source text and attachment paths. Keep transaction time in `occurred_at
 
 4. Build deterministic source references. Match each source row to at most one ledger row and each ledger row to at most one source row.
 5. Run a semantic classification pass before import: consult the habit portrait and merchant preferences, normalize merchant/description text, and assign the most specific configured category. `其他` is allowed only when evidence is insufficient. Group only materially ambiguous type/account/category decisions for user confirmation. A screenshot still requires explicit table confirmation; an official statement import may proceed when the user's request already authorizes it and source validation is complete.
-6. Apply first to a temporary ledger copy. Verify expected additions, updates, balances, source-reference uniqueness, and rerun behavior.
-7. Create a real backup, recheck that the live ledger has not changed, then apply once to the real ledger.
-8. Run `audit --json`, `doctor --json`, the relevant `show --month ... --compare`, and `habit memory` after a large import. Verify `/api/ledger` only when the local service is running.
+6. Inspect the `import prepare` plan, including original evidence and exclusions. Its proposal is validated on a copy and bound to the ledger/profile/runtime version.
+7. Save the exact ready plan and use `import commit --input plan.json`. Changed context invalidates it; repeated submission returns the receipt.
+8. Run `audit --json`, `doctor --json` and the relevant period summary after a large import. Review findings are persisted automatically. Refresh observations explicitly if needed.
 
 ## Duplicate Decisions
 

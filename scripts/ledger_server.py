@@ -10,16 +10,17 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, unquote, urlparse
 
+from ledger_core.adapters import commands
+from ledger_core.services import analysis
+from ledger_core.services import common
+from ledger_core.services import habits
+from ledger_core.services import interpretation
+from ledger_core.services import presentation
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
-APP_HTML = SKILL_DIR / "assets" / "ledger-app.html"
 
-
-def _tool():
-    import ledger_tool
-
-    return ledger_tool
 
 
 MAX_BODY_BYTES = 5_000_000
@@ -60,37 +61,22 @@ def _send(handler, status, payload=None, body=None, content_type="application/js
 
 
 def _invoke(func, args):
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    out = io.StringIO()
-    err = io.StringIO()
     try:
-        with redirect_stdout(out), redirect_stderr(err):
-            func(args)
+        result = func.result(args)
+        from ledger_core.services.history import flush_auto_sync
+        flush_auto_sync(args.ledger)
+        return 200, result if result is not None else {"ok": True}
     except SystemExit as exc:
-        code = exc.code
-        stderr = err.getvalue().strip()
-        stdout = out.getvalue().strip()
-        if code == 2:
-            try:
-                return 409, json.loads(stderr)
-            except json.JSONDecodeError:
-                return 409, {"error": stderr or "likely_duplicate"}
-        message = code if isinstance(code, str) else (stderr or stdout or "request_failed")
-        return 400, {"error": message}
-    text = out.getvalue().strip()
-    if not text:
-        return 200, {"ok": True}
-    try:
-        return 200, json.loads(text)
-    except json.JSONDecodeError:
-        return 200, {"ok": True, "output": text}
+        return (409 if exc.code == 2 else 400), {"error": str(exc.code)}
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
 
 
 def _add_args(ledger_path, body):
     return SimpleNamespace(
         ledger=str(ledger_path),
+        operation_id=body.get("operation_id"),
+        expected_revision=body.get("expected_revision"),
         text=body.get("text"),
         amount=body.get("amount"),
         type=body.get("type"),
@@ -171,39 +157,40 @@ def make_handler(ledger_path):
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
             query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
-            tool = _tool()
             if path in {"/", "/settings"}:
-                _send(self, 200, body=APP_HTML.read_bytes(), content_type="text/html; charset=utf-8")
+                from ledger_core.services import reports
+                from datetime import date
+                ledger = common.load_ledger(ledger_path, create=True)
+                days = [tx["occurred_at"][:10] for tx in ledger["transactions"]]
+                start, end = (min(days), max(days)) if days else (date.today().isoformat(), date.today().isoformat())
+                report = reports.from_ledger(ledger, start=start, end=end)
+                _send(self, 200, body=reports.render(report, "html").encode(), content_type="text/html; charset=utf-8")
                 return
             if path == "/bill" or path.startswith("/bill/"):
                 month = None if path == "/bill" else path.rsplit("/", 1)[-1]
                 if month:
                     try:
-                        tool.validate_month(month)
+                        common.validate_month(month)
                     except SystemExit:
                         _send(self, 404, {"error": "not_found"})
                         return
-                ledger = tool.load_ledger(ledger_path, create=True)
-                _pack, html_path = tool.render_bill_html(ledger, ledger_path, month)
+                ledger = common.load_ledger(ledger_path, create=True)
+                _pack, html_path = presentation.render_bill_html(ledger, ledger_path, month)
                 _send(self, 200, body=html_path.read_bytes(), content_type="text/html; charset=utf-8")
                 return
             if path == "/api/health":
                 _send(self, 200, {"ok": True, "ledger": str(ledger_path.resolve())})
                 return
             if path == "/api/ledger":
-                ledger = tool.load_ledger(ledger_path, create=True)
-                if tool.seed_habits_if_needed(ledger):
-                    tool.save_ledger(ledger_path, ledger)
+                ledger = common.load_ledger(ledger_path, create=True)
                 _send(self, 200, ledger)
                 return
             if path == "/api/habits":
-                ledger = tool.load_ledger(ledger_path, create=True)
-                if tool.seed_habits_if_needed(ledger):
-                    tool.save_ledger(ledger_path, ledger)
-                _send(self, 200, tool.habits_payload(ledger))
+                ledger = common.load_ledger(ledger_path, create=True)
+                _send(self, 200, habits.habits_payload(ledger))
                 return
             if path == "/api/summary":
-                ledger = tool.load_ledger(ledger_path, create=True)
+                ledger = common.load_ledger(ledger_path, create=True)
                 args = SimpleNamespace(
                     month=query.get("month"),
                     range=query.get("range") or None,
@@ -217,12 +204,12 @@ def make_handler(ledger_path):
                     compare=query.get("compare") in {"1", "true", "yes"},
                 )
                 default_range = None if (args.month or args.start or args.end or args.range) else "this-month"
-                _send(self, 200, tool.build_summary(ledger, args, default_range=default_range))
+                _send(self, 200, analysis.build_summary(ledger, args, default_range=default_range))
                 return
             if path == "/api/bill":
-                ledger = tool.load_ledger(ledger_path, create=True)
+                ledger = common.load_ledger(ledger_path, create=True)
                 try:
-                    payload = tool.build_bill_pack(ledger, query.get("month"))
+                    payload = presentation.build_bill_pack(ledger, query.get("month"))
                 except SystemExit as exc:
                     _send(self, 400, {"error": exc.code or "invalid_month"})
                     return
@@ -236,7 +223,6 @@ def make_handler(ledger_path):
                 return
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
-            tool = _tool()
             try:
                 body = _read_json(self)
             except (json.JSONDecodeError, ValueError):
@@ -247,13 +233,13 @@ def make_handler(ledger_path):
                 if not text:
                     _send(self, 400, {"error": "Text is required"})
                     return
-                ledger = tool.load_optional_ledger(ledger_path)
-                proposals = tool.parse_text_transactions(text, ledger=ledger)
+                ledger = common.load_optional_ledger(ledger_path)
+                proposals = interpretation.parse_text_transactions(text, ledger=ledger)
                 payload = proposals[0] if len(proposals) == 1 else {"count": len(proposals), "proposals": proposals}
                 _send(self, 200, payload)
                 return
             if path == "/api/transactions":
-                status, payload = _invoke(tool.add_transaction, _add_args(ledger_path, body))
+                status, payload = _invoke(commands.add_transaction, _add_args(ledger_path, body))
                 _send(self, status, payload)
                 return
             if path == "/api/accounts":
@@ -265,7 +251,7 @@ def make_handler(ledger_path):
                     id=body.get("id"),
                     default=bool(body.get("default")),
                 )
-                status, payload = _invoke(tool.account_add_command, args)
+                status, payload = _invoke(commands.account_add_command, args)
                 _send(self, status, payload)
                 return
             if path == "/api/budgets":
@@ -275,7 +261,7 @@ def make_handler(ledger_path):
                     month=body.get("month"),
                     category=body.get("category"),
                 )
-                status, payload = _invoke(tool.budget_set_command, args)
+                status, payload = _invoke(commands.budget_set_command, args)
                 _send(self, status, payload)
                 return
             if path == "/api/habits":
@@ -293,7 +279,7 @@ def make_handler(ledger_path):
                     pin=bool(body.get("pin")),
                     unpin=bool(body.get("unpin")),
                 )
-                status, payload = _invoke(tool.habit_set_command, args)
+                status, payload = _invoke(commands.habit_set_command, args)
                 _send(self, status, payload)
                 return
             if path == "/api/bills":
@@ -303,7 +289,7 @@ def make_handler(ledger_path):
                     title=body.get("title"),
                     body=body.get("body"),
                 )
-                status, payload = _invoke(tool.bill_save_command, args)
+                status, payload = _invoke(commands.bill_save_command, args)
                 _send(self, status, payload)
                 return
             if path == "/api/categories":
@@ -314,7 +300,7 @@ def make_handler(ledger_path):
                     parent=body.get("parent"),
                     old_name=None,
                 )
-                status, payload = _invoke(tool.category_set_command, args)
+                status, payload = _invoke(commands.category_set_command, args)
                 _send(self, status, payload)
                 return
             _send(self, 404, {"error": "not_found"})
@@ -325,14 +311,13 @@ def make_handler(ledger_path):
                 return
             parsed = urlparse(self.path)
             parts = [part for part in parsed.path.split("/") if part]
-            tool = _tool()
             try:
                 body = _read_json(self)
             except (json.JSONDecodeError, ValueError):
                 _send(self, 400, {"error": "invalid_json"})
                 return
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "transactions":
-                status, payload = _invoke(tool.update_command, _update_args(ledger_path, parts[2], body))
+                status, payload = _invoke(commands.update_command, _update_args(ledger_path, parts[2], body))
                 _send(self, status, payload)
                 return
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "accounts":
@@ -346,7 +331,7 @@ def make_handler(ledger_path):
                     unarchive=bool(body.get("unarchive")),
                     default=bool(body.get("default")),
                 )
-                status, payload = _invoke(tool.account_update_command, args)
+                status, payload = _invoke(commands.account_update_command, args)
                 _send(self, status, payload)
                 return
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "habits":
@@ -364,7 +349,7 @@ def make_handler(ledger_path):
                     pin=bool(body.get("pin")),
                     unpin=bool(body.get("unpin")),
                 )
-                status, payload = _invoke(tool.habit_set_command, args)
+                status, payload = _invoke(commands.habit_set_command, args)
                 _send(self, status, payload)
                 return
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "categories":
@@ -375,7 +360,7 @@ def make_handler(ledger_path):
                     icon=body.get("icon"),
                     parent=body.get("parent"),
                 )
-                status, payload = _invoke(tool.category_set_command, args)
+                status, payload = _invoke(commands.category_set_command, args)
                 _send(self, status, payload)
                 return
             _send(self, 404, {"error": "not_found"})
@@ -386,20 +371,19 @@ def make_handler(ledger_path):
                 return
             parsed = urlparse(self.path)
             parts = [part for part in parsed.path.split("/") if part]
-            tool = _tool()
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "transactions":
                 args = SimpleNamespace(ledger=str(ledger_path), id=parts[2], yes=True)
-                status, payload = _invoke(tool.delete_command, args)
+                status, payload = _invoke(commands.delete_command, args)
                 _send(self, status, payload)
                 return
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "budgets":
                 args = SimpleNamespace(ledger=str(ledger_path), id=parts[2])
-                status, payload = _invoke(tool.budget_delete_command, args)
+                status, payload = _invoke(commands.budget_delete_command, args)
                 _send(self, status, payload)
                 return
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "habits":
                 args = SimpleNamespace(ledger=str(ledger_path), id=parts[2], phrase=None)
-                status, payload = _invoke(tool.habit_delete_command, args)
+                status, payload = _invoke(commands.habit_delete_command, args)
                 _send(self, status, payload)
                 return
             _send(self, 404, {"error": "not_found"})

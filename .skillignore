@@ -15,6 +15,8 @@ htmlcov/
 .venv/
 .workbuddy/
 
+*-runtime/
+
 # Runtime data — a ledger, backup, or report must never enter the package
 data/
 backups/
@@ -23,7 +25,7 @@ memory/
 lazy-ledger*.json
 *-memory.md
 lazy-ledger-bill-*.html
-*-bill-*.html
+*-bill-20*.html
 lazy-ledger-report.html
 lazy-ledger*.csv
 *-bill-rows.tsv
@@ -36,3 +38,5 @@ lazy-ledger*.csv
 README.md
 tests/
 product-design-audit/
+frontend/
+node_modules/

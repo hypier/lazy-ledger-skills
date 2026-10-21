@@ -20,7 +20,8 @@ SCRIPTS = ROOT / "scripts"
 WRAPPER = SCRIPTS / "ledger"
 
 sys.path.insert(0, str(SCRIPTS))
-import ledger_tool  # noqa: E402
+from ledger_core.domain import model  # noqa: E402
+from ledger_core.services import common, interpretation  # noqa: E402
 
 
 def ledger_path(cwd):
@@ -47,7 +48,9 @@ class EventClassificationTest(unittest.TestCase):
     def test_reimbursement_phrases_are_income(self):
         for text in ("报销回来300", "报销了500", "报销打款200", "报销到账150"):
             with self.subTest(text=text):
-                tx_type, category, _flags, _confidence = ledger_tool.classify_event(text)
+                event = interpretation.classify_event_detailed(text)
+                tx_type = event["type"]
+                category = event["category"]
                 self.assertEqual(tx_type, "income", text)
                 self.assertEqual(category, "收入", text)
 
@@ -68,7 +71,9 @@ class EventClassificationTest(unittest.TestCase):
     def test_advance_language_is_not_income_and_is_flagged(self):
         for text in ("垫付800", "借给小王200", "代付500"):
             with self.subTest(text=text):
-                tx_type, _category, flags, _confidence = ledger_tool.classify_event(text)
+                event = interpretation.classify_event_detailed(text)
+                tx_type = event["type"]
+                flags = event["flags"]
                 # Cash leaves the account, but the money is owed back.
                 self.assertEqual(tx_type, "expense", text)
                 self.assertTrue(flags.get("advance"), text)
@@ -77,12 +82,16 @@ class EventClassificationTest(unittest.TestCase):
         # Receiving red packets was previously always recorded as an expense.
         for text in ("收到红包200", "收红包88", "抢到红包50"):
             with self.subTest(text=text):
-                tx_type, category, _flags, _confidence = ledger_tool.classify_event(text)
+                event = interpretation.classify_event_detailed(text)
+                tx_type = event["type"]
+                category = event["category"]
                 self.assertEqual(tx_type, "income", text)
                 self.assertEqual(category, "红包", text)
         for text in ("发红包200", "给妈妈发红包500"):
             with self.subTest(text=text):
-                tx_type, category, _flags, _confidence = ledger_tool.classify_event(text)
+                event = interpretation.classify_event_detailed(text)
+                tx_type = event["type"]
+                category = event["category"]
                 self.assertEqual(tx_type, "expense", text)
                 self.assertEqual(category, "红包", text)
 
@@ -91,18 +100,18 @@ class RepaymentDetectionTest(unittest.TestCase):
     def test_credit_repayment_phrases_are_transfers(self):
         for text in ("还花呗", "还白条", "信用卡还款", "还信用卡2000"):
             with self.subTest(text=text):
-                self.assertEqual(ledger_tool.infer_type(text), "transfer", text)
+                self.assertEqual(interpretation.infer_type(text), "transfer", text)
 
 
 class TransferDetectionTest(unittest.TestCase):
     def test_common_transfer_phrases(self):
         for text in ("还信用卡2000", "微信提现500", "从微信转100到支付宝", "从银行卡转500到微信"):
             with self.subTest(text=text):
-                self.assertEqual(ledger_tool.infer_type(text), "transfer", text)
+                self.assertEqual(interpretation.infer_type(text), "transfer", text)
 
     def test_route_tolerates_amount_between_accounts(self):
         self.assertEqual(
-            ledger_tool.infer_transfer_route("从微信转100到支付宝"),
+            common.infer_transfer_route("从微信转100到支付宝"),
             ("微信", "支付宝"),
         )
 
@@ -110,14 +119,14 @@ class TransferDetectionTest(unittest.TestCase):
         # Money to a person is spending, not movement between the user's accounts.
         for text in ("转账给妈妈500", "微信转给小王100"):
             with self.subTest(text=text):
-                self.assertEqual(ledger_tool.infer_type(text), "expense", text)
+                self.assertEqual(interpretation.infer_type(text), "expense", text)
 
     def test_withdrawal_resolves_both_accounts(self):
-        self.assertEqual(ledger_tool.infer_transfer_route("微信提现500"), ("微信", "银行卡"))
-        self.assertEqual(ledger_tool.infer_transfer_route("支付宝提现1000"), ("支付宝", "银行卡"))
+        self.assertEqual(common.infer_transfer_route("微信提现500"), ("微信", "银行卡"))
+        self.assertEqual(common.infer_transfer_route("支付宝提现1000"), ("支付宝", "银行卡"))
         # An explicit destination must not be mistaken for the source.
-        self.assertEqual(ledger_tool.infer_transfer_route("微信提现到银行卡"), ("微信", "银行卡"))
-        self.assertEqual(ledger_tool.infer_transfer_route("提现到银行卡500"), (None, "银行卡"))
+        self.assertEqual(common.infer_transfer_route("微信提现到银行卡"), ("微信", "银行卡"))
+        self.assertEqual(common.infer_transfer_route("提现到银行卡500"), (None, "银行卡"))
 
     def test_withdrawal_records_as_transfer(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -287,7 +296,8 @@ class AdvanceStateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run("init", cwd=tmp)
             advance = self._add(tmp, "--text", "垫付500")
-            run("advance", "settle", "--id", advance["id"], cwd=tmp)
+            income = self._add(tmp, "--amount", "500", "--type", "income")
+            run("advance", "settle", "--id", advance["id"], "--by", income["id"], cwd=tmp)
             self.assertEqual(json.loads(run("advance", "list", "--json", cwd=tmp).stdout)["count"], 0)
             all_rows = json.loads(run("advance", "list", "--all", "--json", cwd=tmp).stdout)
             self.assertEqual(all_rows["count"], 1)
@@ -332,7 +342,8 @@ class ReviewQueueTest(unittest.TestCase):
             run("init", cwd=tmp)
             tx = json.loads(run("add", "--text", "星巴克 咖啡38", "--confidence", "0.6", cwd=tmp).stdout)["added"][0]
             refreshed = json.loads(run("review", "refresh", "--json", cwd=tmp).stdout)
-            self.assertEqual(refreshed["added"], 1)
+            self.assertEqual(refreshed["added"], 0)  # detected and persisted by the write
+            self.assertEqual(refreshed["open_count"], 1)
 
             # A fresh command still sees the queued item, proving persistence.
             nxt = json.loads(run("review", "next", "--json", cwd=tmp).stdout)
@@ -351,9 +362,9 @@ class LedgerCompatTest(unittest.TestCase):
     """Older ledgers gain the new collections without losing data."""
 
     def test_normalize_adds_review_queue(self):
-        ledger = ledger_tool.empty_ledger()
+        ledger = model.empty_ledger()
         ledger.pop("review_queue", None)
-        normalized = ledger_tool.normalize_ledger(ledger)
+        normalized = model.normalize_ledger(ledger)
         self.assertEqual(normalized["review_queue"], [])
 
 
@@ -368,14 +379,18 @@ class ReimbursementTenseTest(unittest.TestCase):
     def test_expectation_is_an_advance_not_income(self):
         for text in ("打车26，公司报销", "公司报销的车费128", "这个月要报销400"):
             with self.subTest(text=text):
-                tx_type, _category, flags, _confidence = ledger_tool.classify_event(text)
+                event = interpretation.classify_event_detailed(text)
+                tx_type = event["type"]
+                flags = event["flags"]
                 self.assertEqual(tx_type, "expense", text)
                 self.assertTrue(flags.get("advance"), text)
 
     def test_arrival_language_is_income(self):
         for text in ("公司把26打过来了", "报销回来26", "报销到账300", "公司打给我26", "报销了500"):
             with self.subTest(text=text):
-                tx_type, category, _flags, _confidence = ledger_tool.classify_event(text)
+                event = interpretation.classify_event_detailed(text)
+                tx_type = event["type"]
+                category = event["category"]
                 self.assertEqual(tx_type, "income", text)
                 self.assertEqual(category, "收入", text)
 
@@ -383,7 +398,7 @@ class ReimbursementTenseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run("init", cwd=tmp)
             run("add", "--text", "打车26，公司报销", cwd=tmp)
-            run("add", "--text", "公司把26打过来了", cwd=tmp)
+            run("add", "--text", "报销回来26", cwd=tmp)
 
             ledger = json.loads(ledger_path(tmp).read_text())
             advance = next(tx for tx in ledger["transactions"] if tx["type"] == "expense")
@@ -413,7 +428,7 @@ class RecordCommandTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run("init", cwd=tmp)
             run("record", "--text", "打车26，公司报销", cwd=tmp)
-            result = run("record", "--text", "公司把26打过来了", cwd=tmp)
+            result = run("record", "--text", "报销回来26", cwd=tmp)
             self.assertIn("核销", result.stdout)
 
     def test_record_and_add_agree_on_the_ledger(self):
@@ -426,7 +441,7 @@ class RecordCommandTest(unittest.TestCase):
 
             def shape(path):
                 tx = json.loads(path.read_text())["transactions"][0]
-                return {key: tx[key] for key in ("type", "amount", "category", "merchant", "account")}
+                return {key: tx.get(key) for key in ("type", "amount", "category", "merchant", "account")}
 
             self.assertEqual(shape(ledger_path(tmp_a)), shape(ledger_path(tmp_b)))
 

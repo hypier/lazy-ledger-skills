@@ -17,9 +17,11 @@ Design notes:
 """
 
 from __future__ import annotations
+from ledger_core.domain import money
 
 import datetime
 from collections import defaultdict
+from ledger_core.domain.semantics import counts_as
 
 # Severity ordering used when the caller only wants the top few findings.
 SEVERITY = {"alert": 0, "warn": 1, "info": 2, "praise": 3}
@@ -59,15 +61,7 @@ def _amount(transaction):
 
 
 def _counts(transaction):
-    """Transactions that represent real spending by the user."""
-    if transaction.get("type") != "expense":
-        return False
-    if transaction.get("excluded_from_totals"):
-        return False
-    # An unreimbursed advance is owed back, so it is not spending.
-    if transaction.get("advance") == "open":
-        return False
-    return True
+    return counts_as(transaction, "expense")
 
 
 def _month_bounds(today, offset=0):
@@ -99,9 +93,9 @@ def find_category_surges(transactions, today, currency="CNY"):
         if not _counts(transaction):
             continue
         month = month_key(transaction)
-        if month == this_month:
+        if month == this_month and _day(transaction) <= today.isoformat():
             current[transaction.get("category") or "其他"].append(transaction)
-        elif month == last_month:
+        elif month == last_month and int(_day(transaction)[8:10]) <= today.day:
             previous[transaction.get("category") or "其他"].append(transaction)
 
     findings = []
@@ -125,8 +119,8 @@ def find_category_surges(transactions, today, currency="CNY"):
                 "severity": "warn",
                 "category": category,
                 "message": (
-                    f"{category}比上月多了 {ratio:.1f} 倍：{len(baseline_rows)} 笔 → {len(rows)} 笔"
-                    f"（{format_money(baseline_amount, currency)} → {format_money(current_amount, currency)}）"
+                    f"{category}本月截至 {today.day} 日为上月同期的 {ratio:.1f} 倍：{len(baseline_rows)} 笔 → {len(rows)} 笔"
+                    f"（{money.format_money(baseline_amount, currency)} → {money.format_money(current_amount, currency)}）"
                     f"，主要来自{driver}（{driver_count} 笔）。"
                 ),
                 "evidence": {
@@ -159,7 +153,7 @@ def find_stale_advances(transactions, today, currency="CNY"):
                 "severity": "warn",
                 "transaction_id": transaction.get("id"),
                 "message": (
-                    f"{label} 的 {format_money(_amount(transaction), currency)} 垫付已经 {days} 天没收回。"
+                    f"{label} 的 {money.format_money(_amount(transaction), currency)} 垫付已经 {days} 天没收回。"
                 ),
                 "evidence": {"days_outstanding": days, "amount": round(_amount(transaction), 2)},
                 "action": "确认这笔还能不能报；要不回来就用 advance writeoff 记成损失，别一直挂着。",
@@ -197,8 +191,8 @@ def find_outliers(transactions, today, currency="CNY"):
                 "transaction_id": transaction.get("id"),
                 "label": label,
                 "message": (
-                    f"{_day(transaction)} 的 {label} {format_money(amount, currency)} "
-                    f"是平时单笔（约 {format_money(median, currency)}）的 {amount / median:.0f} 倍。"
+                    f"{_day(transaction)} 的 {label} {money.format_money(amount, currency)} "
+                    f"是平时单笔（约 {money.format_money(median, currency)}）的 {amount / median:.0f} 倍。"
                 ),
                 "evidence": {"amount": round(amount, 2), "median": round(median, 2)},
                 "action": "确认不是误记或重复；如果是一次性大件，可以在备注里写清楚。",
@@ -227,7 +221,7 @@ def find_habit_merchants(transactions, today, currency="CNY"):
                 "severity": "info",
                 "merchant": merchant,
                 "message": (
-                    f"这个月已经去{merchant} {stat['count']} 次，共 {format_money(stat['amount'], currency)}。"
+                    f"这个月已经去{merchant} {stat['count']} 次，共 {money.format_money(stat['amount'], currency)}。"
                 ),
                 "evidence": {"count": stat["count"], "amount": round(stat["amount"], 2)},
                 "action": "觉得多了就设个上限；觉得正常就不用管，记下来只是为了让你看见。",
@@ -303,7 +297,7 @@ def find_duplicate_suspected(transactions, today, currency="CNY"):
                     "severity": "alert",
                     "transaction_id": other.get("id"),
                     "message": (
-                        f"{first} 和 {second} 各有一笔 {format_money(amount, currency)} 的{label}，"
+                        f"{first} 和 {second} 各有一笔 {money.format_money(amount, currency)} 的{label}，"
                         "看着像同一笔记了两次。"
                     ),
                     "evidence": {
@@ -369,7 +363,7 @@ def find_missing_recurring(transactions, today, currency="CNY"):
                 "kind": "missing_recurring",
                 "severity": "warn",
                 "message": (
-                    f"{key} 连续 {len(ordered)} 个月都在 {format_money(typical, currency)} 左右，"
+                    f"{key} 连续 {len(ordered)} 个月都在 {money.format_money(typical, currency)} 左右，"
                     f"但 {last} 之后就没再出现过。"
                 ),
                 "evidence": {"key": key, "months": ordered, "last_month": last, "amount": round(typical, 2)},
@@ -457,7 +451,7 @@ def find_negative_balances(balances, currency="CNY"):
     # account_balances() returns a list of non-archived account records.
     records = balances.values() if isinstance(balances, dict) else balances
     for record in records:
-        if not isinstance(record, dict) or record.get("archived"):
+        if not isinstance(record, dict) or record.get("archived") or record.get("opening_confirmed") is False or record.get("type") == "credit":
             continue
         balance = record.get("balance")
         if not isinstance(balance, (int, float)) or balance >= 0:
@@ -468,8 +462,8 @@ def find_negative_balances(balances, currency="CNY"):
                 "severity": "alert",
                 "account": record.get("name"),
                 "message": (
-                    f"{record.get('name')} 的余额算出来是 {format_money(balance, currency)}，"
-                    "真实账户不可能是负的。"
+                    f"{record.get('name')} 的余额算出来是 {money.format_money(balance, currency)}，"
+                    "请核对期初与已记录流水。"
                 ),
                 "evidence": {"balance": round(float(balance), 2)},
                 "action": "多半是有支出记到了这个账户、但期初余额没填。补一下期初或调整账户。",
@@ -497,7 +491,7 @@ def find_missing_details(transactions, today, currency="CNY"):
             "kind": "unspecified_spending",
             "severity": "info",
             "message": (
-                f"本月有 {len(missing)} 笔共 {format_money(total, currency)} 既没商户也没分类，"
+                f"本月有 {len(missing)} 笔共 {money.format_money(total, currency)} 既没商户也没分类，"
                 "报表里会全都归到「其他」。"
             ),
             "evidence": {"count": len(missing), "amount": round(total, 2)},
@@ -535,8 +529,3 @@ def build_findings(ledger, today=None, currency=None, limit=None, balances=None)
 def month_key(transaction):
     day = _day(transaction)
     return day[:7] if day else ""
-
-
-def format_money(amount, currency="CNY"):
-    symbol = "¥" if currency == "CNY" else f"{currency} "
-    return f"{symbol}{float(amount):,.2f}"

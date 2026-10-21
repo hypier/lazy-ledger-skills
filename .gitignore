@@ -1,3 +1,5 @@
+*-runtime/
+
 # Runtime data — real ledgers, backups, and generated reports stay out of git
 data/
 backups/
@@ -6,7 +8,7 @@ memory/
 lazy-ledger*.json
 *-memory.md
 lazy-ledger-bill-*.html
-*-bill-*.html
+*-bill-20*.html
 lazy-ledger-report.html
 lazy-ledger*.csv
 *-bill-rows.tsv
@@ -27,4 +29,6 @@ htmlcov/
 .DS_Store
 .venv/
 .workbuddy/
+node_modules/
+frontend/openui/test-results/
 

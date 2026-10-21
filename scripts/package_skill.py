@@ -12,6 +12,8 @@ Usage:
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
 import re
 import sys
 import zipfile
@@ -38,11 +40,12 @@ def read_frontmatter(path: Path) -> dict:
     return dict(SCALAR_RE.findall(match.group(1)))
 
 
-def load_ignore_patterns() -> list[str]:
-    if not IGNORE_FILE.exists():
+def load_ignore_patterns(skill_dir=SKILL_DIR) -> list[str]:
+    ignore_file = skill_dir / ".skillignore"
+    if not ignore_file.exists():
         raise ValidationError(".skillignore is missing; refusing to package runtime data")
     patterns = []
-    for raw in IGNORE_FILE.read_text(encoding="utf-8").splitlines():
+    for raw in ignore_file.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line and not line.startswith("#"):
             patterns.append(line)
@@ -111,7 +114,7 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
     if not wrapper.stat().st_mode & 0o111:
         raise ValidationError("scripts/ledger is not executable; run: chmod +x scripts/ledger")
 
-    patterns = load_ignore_patterns()
+    patterns = load_ignore_patterns(skill_dir)
     included = []
     for path in sorted(skill_dir.rglob("*")):
         if not path.is_file():
@@ -125,6 +128,31 @@ def validate(skill_dir: Path) -> tuple[str, list[str]]:
 
     if not included:
         raise ValidationError("no files left to package; check .skillignore")
+
+    required = {"scripts/ledger_core/domain/model.py", "scripts/ledger_core/domain/metrics.py",
+                "scripts/ledger_core/storage/repository.py", "scripts/ledger_core/services/profile.py",
+                "scripts/ledger_core/adapters/runtime_cli.py", "scripts/ledger_core/services/reports.py", "scripts/ledger_core/services/remotes.py",
+                "scripts/ledger_core/adapters/commands.py", "scripts/ledger_core/storage/documents.py", "scripts/ledger_core/services/generative_ui.py",
+                "assets/openui/catalog.json", "assets/openui/renderer.js", "assets/openui/renderer.css",
+                "assets/openui/build.json", "assets/openui/THIRD_PARTY_LICENSES.txt",
+                "assets/openui/validate.cjs", "assets/openui/generation.json", "scripts/ledger_core/services/ui_generation.py", "scripts/ledger_core/services/preview.py"}
+    missing_packaged = sorted(required - set(included))
+    if missing_packaged:
+        raise ValidationError("Required runtime files filtered from package: " + ", ".join(missing_packaged))
+
+    # Built assets and the self-contained Node validator ship together. Prevent a stale
+    # bundle/catalog combination from silently shipping a fallback-only viewer.
+    try:
+        asset_root = skill_dir / "assets/openui"
+        manifest = json.loads((asset_root / "build.json").read_text())
+        catalog = json.loads((asset_root / "catalog.json").read_text())
+        if manifest["renderer"] != catalog["renderer"]:
+            raise ValueError("renderer versions differ")
+        for filename in ("renderer.js", "renderer.css", "catalog.json", "validate.cjs", "generation.json"):
+            if hashlib.sha256((asset_root / filename).read_bytes()).hexdigest() != manifest["sha256"][filename]:
+                raise ValueError("stale " + filename)
+    except (OSError, ValueError, KeyError) as exc:
+        raise ValidationError("OpenUI assets need rebuilding: " + str(exc)) from exc
 
     # Guard against accidentally shipping a real ledger.
     leaked = [rel for rel in included if re.search(r"^lazy-ledger.*\.json$", rel)]

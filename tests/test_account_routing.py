@@ -1,9 +1,4 @@
-"""The account a purchase is charged to, and whether the reply admits a change.
-
-Bookkeeping that silently charges an 8000 laptop to a 2000 wallet does not just
-look wrong -- it manufactures a negative balance, and that fake problem then
-crowds out real ones in every later briefing.
-"""
+"""Confirmed payment facts never change because another account is richer."""
 
 import json
 import subprocess
@@ -17,7 +12,8 @@ SCRIPTS = ROOT / "scripts"
 WRAPPER = SCRIPTS / "ledger"
 
 sys.path.insert(0, str(SCRIPTS))
-import ledger_tool  # noqa: E402
+from ledger_core.domain.model import empty_ledger  # noqa: E402
+from ledger_core.services.habits import affordable_account  # noqa: E402
 
 
 def run(*args, cwd, check=True):
@@ -35,7 +31,8 @@ class LargeExpenseAccountTest(unittest.TestCase):
         run("init", cwd=self.cwd)
         run("account", "update", "--id", "acc_wechat", "--opening", "2000", cwd=self.cwd)
         run("account", "update", "--id", "acc_bank", "--opening", "20000", cwd=self.cwd)
-        # One small purchase teaches the default account.
+        # A default requires an explicit user setting.
+        run("account", "update", "--id", "acc_wechat", "--default", cwd=self.cwd)
         run("record", "--text", "星巴克38", cwd=self.cwd)
 
     def tearDown(self):
@@ -44,34 +41,34 @@ class LargeExpenseAccountTest(unittest.TestCase):
     def parse(self, text):
         return json.loads(run("parse", "--text", text, cwd=self.cwd).stdout)
 
-    def test_small_purchase_keeps_the_learned_account(self):
+    def test_small_purchase_keeps_the_confirmed_account(self):
         payload = self.parse("美团外卖45")
         self.assertEqual(payload["account"], "微信零钱")
-        self.assertIsNone(payload.get("account_reason"))
+        self.assertIn("已确认", payload["account_reason"])
 
-    def test_purchase_larger_than_the_wallet_moves_to_an_account_that_can_pay(self):
+    def test_large_purchase_keeps_confirmed_account(self):
         payload = self.parse("京东买了台电脑8000")
-        self.assertEqual(payload["account"], "银行卡")
+        self.assertEqual(payload["account"], "微信零钱")
         # The payment method has to follow, or the row says a bank card paid by WeChat.
-        self.assertEqual(payload["method"], "bank")
-        self.assertIn("余额不够", payload["account_reason"])
+        self.assertEqual(payload["method"], "wechat")
+        self.assertIn("已确认", payload["account_reason"])
 
-    def test_threshold_is_about_affordability_not_amount_alone(self):
-        # 3000 would overdraw the wallet; 1500 would not, so it stays put.
-        self.assertEqual(self.parse("京东买了台显示器3000")["account"], "银行卡")
+    def test_amount_never_changes_account(self):
+        # Both amounts use the user-confirmed account.
+        self.assertEqual(self.parse("京东买了台显示器3000")["account"], "微信零钱")
         self.assertEqual(self.parse("超市囤货1500")["account"], "微信零钱")
 
-    def test_reroute_is_explained_in_the_reply(self):
+    def test_reply_does_not_invent_a_different_payment_account(self):
         out = run("record", "--text", "京东买了台电脑8000", cwd=self.cwd).stdout
-        self.assertIn("银行卡", out)
-        self.assertIn("微信零钱", out, "the reply must name the account it moved away from")
-        self.assertIn("余额不够", out)
+        self.assertNotIn("银行卡", out)
+        self.assertIn("微信零钱", out)
+        self.assertNotIn("余额不够", out)
 
-    def test_no_negative_balance_after_a_large_purchase(self):
+    def test_negative_book_balance_is_not_hidden_by_reassignment(self):
         run("record", "--text", "京东买了台电脑8000", cwd=self.cwd)
         summary = json.loads(run("summary", "--range", "this-month", "--json", cwd=self.cwd).stdout)
         wechat = next(a for a in summary["accounts"] if a["name"] == "微信零钱")
-        self.assertGreaterEqual(wechat["balance"], 0)
+        self.assertEqual(wechat["balance"], -6038)
 
     def test_explicit_account_is_never_overridden(self):
         # The user said WeChat paid; even if that overdraws it, that is their
@@ -89,7 +86,7 @@ class LargeExpenseAccountTest(unittest.TestCase):
 
 class AffordabilityHelperTest(unittest.TestCase):
     def test_picks_the_richest_account(self):
-        ledger = ledger_tool.empty_ledger()
+        ledger = empty_ledger()
         for account in ledger["accounts"]:
             if account["id"] == "acc_wechat":
                 account["opening_balance"] = 500
@@ -97,14 +94,14 @@ class AffordabilityHelperTest(unittest.TestCase):
                 account["opening_balance"] = 9000
             if account["id"] == "acc_alipay":
                 account["opening_balance"] = 3000
-        best = ledger_tool.affordable_account(ledger, 4000)
+        best = affordable_account(ledger, 4000)
         self.assertEqual(best["name"], "银行卡")
 
     def test_returns_none_when_nothing_can_cover_it(self):
-        ledger = ledger_tool.empty_ledger()
+        ledger = empty_ledger()
         for account in ledger["accounts"]:
             account["opening_balance"] = 10
-        self.assertIsNone(ledger_tool.affordable_account(ledger, 4000))
+        self.assertIsNone(affordable_account(ledger, 4000))
 
 
 if __name__ == "__main__":

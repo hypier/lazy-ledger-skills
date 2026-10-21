@@ -1,99 +1,72 @@
-# Present Ledger Data
+# Presentation and reports
 
-Chat is the default. Use the localhost app when the user wants to inspect or edit rows, and static HTML only for an exportable snapshot.
+Load `context --task report` and the user's profile. The purpose of presentation
+is comprehension, not filling a fixed set of pages. Start with a concise answer
+in chat. A single fact needs no dashboard.
 
-## Choose A Surface
+- `show` / `brief`: current facts and actionable items in dialogue.
+- `summary --json` / `show --json`: shared metric input for a chart or report.
+- `export`: portable CSV or JSON detail when requested.
+- `bill show --month YYYY-MM --json`: monthly facts and an existing saved letter.
+- `bill save --month YYYY-MM --title ... --body ...`: save the written report.
+  This does not create HTML. Avoid unsupported claims or moral judgments.
 
-| Request | Action |
-|---|---|
-| Confirmation after a write | Concise rows plus affected-month totals |
-| Spending, income, net, comparison | `show --compare` |
-| Year or quarter | `show --range this-year|this-quarter --compare` |
-| Budget remaining | `show --compare` or `budget list` |
-| Account balances | `account list --json` |
-| Recent/search rows | `recent`, `list`, or `find` |
-| Open/edit ledger | Follow [html-report.md](html-report.md) and run `serve` |
-| Static export | `render` |
-| Monthly bill | `bill show`, write from facts, then `bill save` |
-| Habit portrait | Follow [habits.md](habits.md) |
+Choose a graph for a trend or comparison when it makes the answer easier to
+understand. Use available host presentation capabilities and the core metric
+payload; include period, currency and coverage. Do not invent another financial
+aggregation algorithm inside a template. Refresh data before publishing a
+previously generated view. State whether an artifact is a snapshot.
 
-Do not paste raw ledger JSON unless requested.
+For monthly reviews, apply the conclusions-first guidance in
+[analysis.md](analysis.md). In a visual monthly report, make the key findings easy
+to scan and pair them with relevant charts and short explanations; keep long
+narratives and transaction tables available as supporting detail. Choose chart
+types by the question: a pie/donut for a small number of positive composition
+shares, a line for change over time, bars for comparisons, or a waterfall for
+how income, spending and refunds produce the net result. Use alternatives when
+negative values or too many categories make a pie misleading. Do not fill the
+page with repeated bar charts or add chart variety without an analytical purpose.
+Label amounts, shares, units and comparable periods clearly. Distinguish missing
+records from zero activity. Every headline and callout must be supported by the
+same current metrics as its chart; chart variety alone does not make an analysis.
 
-## Spending Summary
+When `metrics.income_basis` is present, use the core's `totals.income` and
+`totals.net` as the primary figures and disclose that basis. Keep `raw_totals`
+as a separate reconciliation reference. Explain income using signed
+`income_evidence` contributions; ordinary income-type transactions alone omit
+adjustments based on transfers and excluded work payments. Do not apply the
+profile adjustment a second time in a view. Month/member views must use the same
+core rules. An unlabelled expense is not implicitly owned by a specific member.
 
-```bash
-"$LEDGER_SKILL_DIR/scripts/ledger" show \
-  --compare
-```
+The `render`, `bill render` and `serve` compatibility entries now use the shared
+report service, documented in [html-report.md](html-report.md). All three old
+HTML assets were removed. The runtime manifest legitimately lists zero templates.
+`profile.presentation.density` accepts `compact`, `normal` or `detailed`; compact
+output retains metrics/evidence and omits the row listing. Graph and format
+preferences in user prose guide the host's output choice.
 
-Use `--month YYYY-MM`, `--range last-month|last7|last30|this-quarter|this-year`, or `--start / --end` when the user names a period.
+Use `report build --start YYYY-MM-DD --end YYYY-MM-DD` for the new workflow.
+Default Markdown contains totals, coverage, budget progress and evidence rows;
+`--format json` returns the same metric package, and `--format html` creates a
+self-contained, read-only page without a template or server. It contains no
+client-side financial calculations. Chinese long text wraps on narrow screens.
+Choose rich host visualizations only when they improve understanding.
 
-Paste the command's markdown without redoing its arithmetic. The generated observations already cover comparison, pace, recurring items, refunds, and review queues. Add prose only when it answers the user's actual question.
+For a custom interactive view, read [generative-ui.md](generative-ui.md). The agent
+chooses the structure and authors OpenUI Lang or HTML, using `report ui-spec` and
+selected `report data` from a frozen report. `report validate` returns diagnostics;
+`report compose` renders the corrected source or archives it. Core financial values
+remain authoritative; agent prose and HTML need semantic review. The old
+`--format openui --layout ...` path remains available for simple compositions.
 
-For calculations or a custom explanation, use deterministic summary JSON:
+`--archive` saves a unique report directory with data, the rendered result and
+a renderer/digest manifest. The data includes source transaction IDs and rows,
+ledger/profile/runtime tokens, coverage, profile snapshot and metric version.
+`report read --id REPORT_ID --format ...` uses that archived snapshot, never the
+latest ledger. A correction leaves the old report intact; a new build gets a new
+ID. Archive files are excluded from the ledger Git snapshot by default.
 
-```bash
-"$LEDGER_SKILL_DIR/scripts/ledger" summary \
-  --range this-month \
-  --compare \
-  --json
-```
-
-## Search And Recent Rows
-
-Keep chat output compact and include IDs only when correction or deletion needs them:
-
-```text
-最近 2 笔
-- 08-18 星巴克 · 咖啡茶饮 · ¥38.00
-- 08-17 地铁 · 公共交通 · ¥4.00
-```
-
-### Default Limits And Truncation
-
-`list` returns at most 20 rows and `recent` at most 5 unless `--limit` says otherwise. Always pass an explicit `--limit` when the answer depends on the full set — counting, period totals, or "was anything recorded that day".
-
-`--json` returns an object, not a bare array:
-
-```json
-{ "transactions": [], "count": 20, "total": 435, "limit": 20, "truncated": true, "period": {} }
-```
-
-Read `total` and `truncated` before drawing conclusions: `truncated: true` means rows were cut off, so an absent date or merchant proves nothing. Re-run with `--limit <total>` to see everything. Plain-text output prints a matching `匹配共 N 笔` reminder when rows are cut.
-
-## Backup And Export
-
-```bash
-"$LEDGER_SKILL_DIR/scripts/ledger" backup
-
-"$LEDGER_SKILL_DIR/scripts/ledger" export \
-  --range this-month \
-  --format csv \
-  --output ./lazy-ledger.csv
-```
-
-`backup` writes a dated full-ledger JSON copy. `export --format json` writes filtered transactions and is not a replacement ledger.
-
-## Monthly Bill
-
-The bill has two layers:
-
-1. Deterministic facts from the ledger.
-2. A short agent-written letter based only on those facts.
-
-```bash
-"$LEDGER_SKILL_DIR/scripts/ledger" bill show \
-  --month 2026-08 \
-  --json
-```
-
-Follow the returned brief. Write 400-800 Chinese characters, describe what changed, and offer one useful observation without moralizing or inventing amounts.
-
-```bash
-"$LEDGER_SKILL_DIR/scripts/ledger" bill save \
-  --month 2026-08 \
-  --title "八月还是把钱花在吃上" \
-  --body "……"
-```
-
-Reply with the letter and the returned HTML path. `bill render --month YYYY-MM` regenerates the file from current facts and the saved letter.
+Legacy `bill save` narratives can become stale after corrections; recheck their
+claims against current metrics before reuse. If a visual output is unavailable,
+use the Markdown or JSON package to answer in chat. No visual is required to
+record, correct or explain the data.

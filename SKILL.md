@@ -1,149 +1,152 @@
 ---
 name: lazy-ledger
-description: Maintain the user's local JSON ledger as their financial butler. Use when they mention spending, income, a payment, money owed, or a bill, ask how they are doing with money, or when reconciling WeChat/Alipay/bank statements, correcting rows, setting budgets, or opening the localhost ledger UI.
+description: Maintain local personal ledgers as an intelligent financial butler. Use for 记账、账单导入与对账、预算、收支分析、月报、往来款和记账习惯, including discussing how to classify transactions and remembering confirmed preferences.
 metadata:
-  version: 2.0.0
+  version: 3.2.1
 ---
 
 # Lazy Ledger
 
-## What this is
+The user supplies facts and goals. You manage records, reconcile evidence,
+check quality, explain changes, and ask only for facts you cannot determine.
+Keep one coherent conversation even when several specialist workflows apply.
 
-The user provides data; you do the bookkeeping. They should be able to say
-"打车26，公司报销" or "昨天那杯星巴克记错了" and be understood, not asked to
-fill in a form. Everything below serves that: read the intent, decide the
-accounting, write it, and say what it means.
+## Route the user's intent
 
-The ledger is a local JSON document, not a database. You are the only writer.
+Use one entry point; choose workflows from the user's meaning, not just keywords.
+The host chooses this skill; you choose its procedures and script commands.
 
-## The six jobs
-
-Every request is one of these. Name the job before choosing a command.
-
-| Job | What it means | Entry |
+| Intent | Context task and reference | Outcome |
 |---|---|---|
-| **Record** | Turn a sentence, image, or file into rows | `record`, `add`, `import-tsv` |
-| **Correct** | Fix what was already written | `find`, `update`, `delete` |
-| **Explains** | "why did that count as spending" | `parse`, `show --json` |
-| **Notice** | Proactively surface what the user missed | `insight`, `brief`, `doctor`, `audit` |
-| **Report** | Turn a period into something readable | `show`, `digest`, `bill` |
-| **Settle** | Track money that comes back | `advance list/settle/writeoff` |
+| Record actual income, spending, refunds or transfers; correct a row | `record`; [record.md](references/record.md) | Write the authorized facts using the core |
+| Import a statement or reconcile multiple sources | `import`; [reconcile-imports.md](references/reconcile-imports.md) | Extract, deduplicate and reconcile before applying |
+| Set or change a budget | `budget`; [budget.md](references/budget.md) | Apply the specified amount and period |
+| Explain spending, income, balances or how an event should be booked | `analyze`; [analysis.md](references/analysis.md), [bookkeeping-rules.md](references/bookkeeping-rules.md) | Explain with evidence; a question alone does not authorize editing rows |
+| Produce a report, chart or interactive view | `report`; [present.md](references/present.md) | Use consistent report data; generate a view only when useful |
+| Resolve pending items or inspect data quality | `audit`; [proactive-review.md](references/proactive-review.md) | Inspect first; apply only supported, authorized repairs |
+| Discuss a recurring practice, remember a preference or revoke a rule | Current task, or `record` for a standalone rule request; [habits.md](references/habits.md) | Separate one-time facts, candidate habits and confirmed rules |
+| Configure history, backup, sync or restore | `audit`; [history.md](references/history.md) | Follow the selected history mode and upload authorization |
 
-If a request does not fit one of these, it is probably a question about the
-ledger -- answer it from `show --json` rather than writing anything.
+For combined requests, satisfy dependencies in order: import/correct first, then
+refresh context and analyze/report the resulting ledger. Resolve a material
+classification ambiguity before the affected write, while completing independent
+clear items. Do not turn hypothetical examples, quoted amounts or discussion of
+how to book something into transactions. A factual answer to a pending question
+may complete an already-authorized correction; keep its original scope.
 
-## How to behave
+## Start with shared context
 
-**Record without ceremony.** A clear single purchase is written immediately and
-confirmed in one line. Ask only when the answer changes what the row *means*:
-the amount, the type (spending vs income vs transfer), or which row is being
-corrected. Category hesitation is not worth a question.
+Resolve the installed skill directory from this file; use its `scripts/ledger`
+entry point. `ledger which` reports the resolved ledger and interpreter.
+`LAZY_LEDGER_FILE` selects a ledger; `LAZY_LEDGER_HOME` selects the data root.
+Keep personal runtime files outside the installed skill when possible.
 
-**Say why.** When a reading is not obvious, use `record` instead of `add`: it
-replies "记好了：垫付 ¥26.00 · 其他 · 公司 · 微信零钱 / 这笔不算支出：公司报销"
-rather than a bare confirmation. When the user asks "why", call `parse` and
-quote the matched word, never the rule name.
+Before every task:
 
-**Speak about money, not about the tool.** Replies name the amount, the
-category, and what changed in the month total. Never answer with a field list,
-a raw record, or a command line unless the user asked for it. `digest` is the
-output shaped to be forwarded to another person; `record` and `brief` are
-shaped to be read by the user in chat.
+1. Run `ledger context --task record|import|budget|analyze|report|audit`.
+2. Read the returned `profile_path`, including the user's prose. Its marked JSON
+   block contains confirmed executable rules. Observations are not permissions.
+3. Check schema, revision, profile token, capabilities, and coverage. If versions
+   are unsupported, stop the affected operation and explain the migration need.
+4. Load only the relevant specialist reference below. Refresh context after a
+   rule, schema, or ledger change; never assume a prior turn's context is current.
 
-**Notice what they did not ask about, once.** After a write, `record` already
-reports what it can see about *that* row. Beyond that, `insight` finds the
-things a careful bookkeeper would mention: a payment that looks entered twice,
-a subscription that stopped, one merchant filed under two categories, an
-account whose balance went negative. Surface the highest-priority one and stop.
-Two findings is a briefing; five is a complaint.
+For a new ledger, ask whether the user wants no Git, local history only, or
+local history plus a private remote backup. Existing explicit preferences stand.
+If unanswered, create with `init --git-mode undecided` and continue recording;
+never infer permission to upload. See [history.md](references/history.md).
 
-**Advise gently and only on request-quality evidence.** `brief` includes
-suggestions -- a cap on the category that is eating the month, the merchant
-that became a habit. These are options, not verdicts: state the number, offer
-the action, and let the user decide. Never editorialize about spending when the
-user asked for a total.
+For an older ledger without a profile, use `migrate` to preview the migration.
+Explain the neutral default-account change before `migrate --apply`. Do not
+label a historical system default or an inferred price as user confirmation.
 
-**Report on a schedule when asked.** `digest` produces a self-contained text
-with no commands in it, suitable for a daily or monthly message. If the user
-asks to be told regularly, generate it and send it; do not ask them to run it.
+## Roles and delegation
 
-**Ask at most one question, and only when it matters.** If two readings would
-change balances, totals, or which account was charged, ask -- and show the
-reading you are inclined toward. Otherwise decide, write, and say what you
-assumed. A correction applies to the named row only; remember it as a rule only
-when the user says so.
+The chief butler owns context, task selection, conflict resolution, final write,
+and the response. Specialist roles are procedures, not mandatory parallel agents.
+Use a single agent for routine work. If the host and task support delegation,
+all specialists receive the same context version and return proposals; only the
+chief butler commits. Never have separate agents edit the ledger directly.
 
-**Never invent.** No unreadable transactions, merchant names, account numbers,
-or totals. Uncertainty goes in `note` and `confidence`. A screenshot always
-gets a visible confirmation table before any write.
+- **Recorder:** [record.md](references/record.md), [bookkeeping-rules.md](references/bookkeeping-rules.md).
+- **Importer / reconciler:** [reconcile-imports.md](references/reconcile-imports.md), and [image-batch-import.md](references/image-batch-import.md) for images.
+- **Budget manager:** [budget.md](references/budget.md).
+- **Analyst:** [analysis.md](references/analysis.md).
+- **Reporter:** [present.md](references/present.md).
+- **Auditor:** [proactive-review.md](references/proactive-review.md).
 
-## Accounting invariants
+All roles share [ledger-schema.md](references/ledger-schema.md),
+[habits.md](references/habits.md), and [runtime.md](references/runtime.md).
 
-The ledger only has to obey these; every command enforces them.
+## Shared working rules
 
-- Amounts are positive; `type` gives the direction. Moving money between the
-  user's own accounts is `transfer` and never touches income or spending.
-- Decide the *event* once and let `type` and `category` follow. A reimbursement
-  arriving is income; a reimbursement the user *expects* is not income yet --
-  it is an advance (`advance: open`), which stays out of spending until it is
-  settled or written off.
-- An advance is settled by the money that pays it back, and only when exactly
-  one candidate matches. Otherwise ask.
-- Paying another person is spending, even when the sentence says 转账.
-- The funding account and the payment channel are different facts: a WeChat
-  payment from a named bank card belongs to that bank account.
-- A refund is a second row, not an edit of the first. The original expense
-  stays.
-- Rows keep their source references and unknown fields. Never delete or merge
-  rows merely because date and amount match -- ask first.
+- Interpret the event before choosing a command. The parser is a proposal,
+  not proof. Preserve source text and references; state uncertainty clearly.
+- Record a clear request immediately. Missing amount requires clarification
+  unless an active user-confirmed fixed-price rule applies. Unknown account
+  may stay unassigned. Transfers require two known accounts.
+- Use `record` for conversational recording; `add` returns structured data.
+  When retrying an add/record, reuse `--operation-id`. Use
+  `--expected-revision` for proposals based on a previous context.
+- Correct a transaction without turning the correction into a lasting habit.
+  Use `prefer`, `habit set`, or `profile apply` only for an explicit user rule.
+- During bookkeeping conversations, notice potentially recurring practices and
+  propose a narrowly scoped habit when it would prevent future ambiguity. Follow
+  [habits.md](references/habits.md): explicit standing instructions can be saved
+  immediately; inferred patterns need confirmation before becoming defaults.
+- Never move spending to another account because its balance is higher.
+  An unconfirmed opening balance is incomplete coverage, not proof of insolvency.
+- Amounts use decimal arithmetic rounded to two places. This release supports
+  one currency per ledger and no exchange-rate conversion; do not aggregate
+  mixed currencies or invent conversion rates.
+- Transfers and credit-card repayments are account movements. Open advances
+  are receivables, not consumption; returning an advance is not new earnings.
+  Automatic settlement needs explicit repayment language plus a unique match.
+  Use `advance settle --id ... --by ...` for an explicit partial/full allocation.
+- `advance writeoff` creates a loss for the remaining amount on the writeoff
+  date. It does not move cash again. Financial edits to linked transactions
+  require a coordinated `proposal prepare` / `proposal commit`; do not bypass a
+  refusal by editing JSON. `proposal undo` previews a targeted reversal.
+- Read-only work never commits business data. Formal writes use the core lock,
+  revision checks, and recoverable bundle. Do not bypass these with direct JSON
+  edits or an extension script. The profile document can be edited explicitly;
+  concurrent changes invalidate an already loaded write context.
+- Reply with what was recorded or learned and why it matters. Mention only
+  actionable issues. Advice follows the user's communication preference; avoid
+  judging ordinary spending. Never claim that a partial ledger is complete.
+- Scheduling and outbound messages require user intent and host capabilities.
+  This skill itself does not install a scheduler or send notifications.
 
-## Commands
+## Presentation and evolution
 
-Set `LEDGER_SKILL_DIR` to the directory containing this file, then use
-`"$LEDGER_SKILL_DIR/scripts/ledger"`. The wrapper injects `--ledger`; pass
-`--ledger /path.json` to target another ledger.
+Monthly analysis is a financial-butler explanation of the month's situation:
+lead with evidence-backed conclusions about income, spending and their drivers.
+Data and charts support those conclusions; a list of totals is not an analysis.
+For monthly reviews, use [analysis.md](references/analysis.md) together with
+[present.md](references/present.md), including when updating an existing view.
 
-| Need | Command |
-|---|---|
-| Record and explain | `ledger record --text "..."` |
-| Record, machine-readable | `ledger add --text "..." --json` |
-| How would this be read? | `ledger parse --text "..."` |
-| What needs attention | `ledger insight` |
-| Today's summary for the user | `ledger brief` |
-| Forwardable period summary | `ledger digest --range this-month` |
-| Period totals and comparison | `ledger show --range this-month --compare` |
-| Find then correct | `ledger find --text "..."`, then `ledger update --id tx_...` |
-| Money owed to the user | `ledger advance list`, `advance settle --id`, `advance writeoff --id` |
-| Health check | `ledger doctor --json`, `ledger audit --json` |
-| Browser UI | `ledger open` |
+Conversation is the default output. Use the same core metrics for a brief,
+CSV, chart, or report. `report build --start ... --end ...` returns a traceable
+Markdown report; `--format json` exposes the same data and `--archive` saves its
+immutable snapshot. `bill save` retains the legacy narrative-only workflow.
+`render` and `bill render` now use this report service; optional `serve` exposes
+read-only reports and a compatibility API. The three fixed HTML assets are removed. See [present.md](references/present.md).
 
-`list` caps at 20 rows and `recent` at 5 unless `--limit` is given; check
-`truncated` in `--json` output before concluding something is absent.
+For interactive views, the host agent authors OpenUI Lang or self-contained HTML
+for the current question; do not follow fixed page templates. Freeze a report,
+read `report ui-spec` and the selected `report data`, then validate and compose the
+authored source. For iterative design, `report watch` publishes validated changes
+to a local preview; read its status file after edits and stop it when finished.
+User presentation preferences stay in their profile. Financial
+values come from the core; generated prose and HTML need semantic review. OpenUI
+source validation needs Node.js 18+ but no npm, MCP or additional model API.
+Read [generative-ui.md](references/generative-ui.md) only when generating views.
 
-## References
-
-Load only what the request needs.
-
-| Situation | Read |
-|---|---|
-| Field inference, reimbursement/advance/transfer wording | [references/bookkeeping-rules.md](references/bookkeeping-rules.md) |
-| Adding, correcting, deleting, accounts, budgets | [references/record.md](references/record.md) |
-| Totals, comparisons, monthly bill, export, backup | [references/present.md](references/present.md) |
-| Anything proactive: review queue, repairs, advising | [references/proactive-review.md](references/proactive-review.md) |
-| Habits, usual amounts, merchant preferences | [references/habits.md](references/habits.md) |
-| Screenshot or several visible rows | [references/image-batch-import.md](references/image-batch-import.md) |
-| Official WeChat/Alipay/bank statement, duplicates | [references/reconcile-imports.md](references/reconcile-imports.md) |
-| Browser UI or HTML rendering | [references/html-report.md](references/html-report.md) |
-| Schema, category hierarchy, manual JSON edits | [references/ledger-schema.md](references/ledger-schema.md) |
-
-## Where data lives
-
-`LAZY_LEDGER_FILE`, else `$LAZY_LEDGER_HOME/ledgers/default/ledger.json`, else
-`./data/ledgers/default/ledger.json`. Never write runtime data into the skill
-package. Each ledger keeps its own `backups/` beside it; the habit portrait and
-bill HTML are named after the ledger stem, so ledgers cannot collide.
-
-Collections: `transactions`, `accounts`, `budgets`, `categories`, `habits`,
-`bills`, `review_queue`. Preserve unknown fields and collections.
-
-The local app binds `127.0.0.1` only, normally port `8765`.
+Optional `x_` metadata fields can be registered with `schema register` so every
+role discovers them through context. Changes to financial semantics require a
+versioned core migration. `metadata-migrate` previews optional-field changes and
+applies a version-bound, backed-up plan. Keep user converters separate from
+installed scripts; register, validate fixtures, then enable the exact digest on
+each device. `extension run` produces a proposal and cannot write the ledger.
+The current OS sandbox supports macOS only; unavailable isolation blocks
+execution. See [runtime.md](references/runtime.md) for contracts and boundaries.

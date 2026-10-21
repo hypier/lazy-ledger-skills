@@ -15,8 +15,8 @@ against plain dicts and reused by ``digest``.
 """
 
 from __future__ import annotations
+from ledger_core.domain import money
 
-from ledger_insight import format_money
 
 # How each economic nature reads back to the person. The phrasing is the
 # product: "垫付" tells them the money is coming back, "支出" does not.
@@ -38,7 +38,7 @@ NATURE_NOTE = {
 
 
 def _money(amount, currency):
-    return format_money(amount or 0, currency)
+    return money.format_money(amount or 0, currency)
 
 
 def describe_row(tx, currency):

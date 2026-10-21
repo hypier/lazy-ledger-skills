@@ -146,8 +146,7 @@ class Collection:
     def _rows(self):
         rows = self.store.data.setdefault(self.name, [])
         if not isinstance(rows, list):
-            rows = []
-            self.store.data[self.name] = rows
+            raise ValueError("Collection must be a list")
         return rows
 
     def all(self):
@@ -202,7 +201,9 @@ class Collection:
         raise DocumentNotFound(doc_id)
 
     def replace_all(self, docs, *, commit=True):
-        self.store.data[self.name] = [copy.deepcopy(doc) for doc in docs if isinstance(doc, dict)]
+        if not isinstance(docs, list) or any(not isinstance(doc, dict) for doc in docs):
+            raise ValueError("Replacement collection must contain objects")
+        self.store.data[self.name] = copy.deepcopy(docs)
         if commit:
             self.store.commit()
 
@@ -216,33 +217,17 @@ class DocumentStore:
         self.create = create
         self.data = self._load()
 
-    def _tool(self):
-        import ledger_tool
-
-        return ledger_tool
-
     def _load(self):
-        tool = self._tool()
-        if not self.path.exists():
-            if not self.create:
-                raise FileNotFoundError(self.path)
-            data = tool.empty_ledger(self.currency)
-        else:
-            data = tool.normalize_ledger(read_json(self.path), self.currency)
-        data["store"] = STORE_KIND
-        data.setdefault("store_version", STORE_VERSION)
-        return data
+        from .repository import load
+        return load(self.path, self.currency, self.create)
 
     def reload(self):
         self.data = self._load()
         return self.data
 
     def commit(self):
-        tool = self._tool()
-        self.data["store"] = STORE_KIND
-        self.data["store_version"] = STORE_VERSION
-        self.data["updated_at"] = tool.now_iso()
-        atomic_write_json(self.path, self.data)
+        from .repository import save
+        save(self.path, self.data)
 
     def snapshot(self):
         self.reload()

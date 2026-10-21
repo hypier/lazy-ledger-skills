@@ -351,26 +351,27 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("merchant", text)
             self.assertIn("星巴克", text)
 
-    def test_render_dashboard_contains_calendar_and_review(self):
+    def test_render_contains_core_report_and_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
             output = Path(tmp) / "report.html"
             run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 星巴克 38")
             run_tool("render", "--ledger", str(ledger), "--output", str(output))
             html = output.read_text(encoding="utf-8")
-            self.assertIn("支出月历", html)
-            self.assertIn("待复核", html)
+            self.assertIn("账务报告", html)
+            self.assertIn("支出 38.00", html)
+            self.assertNotIn("<script", html)
             self.assertIn("星巴克", html)
             self.assertNotIn("__LEDGER_DATA__", html)
 
-    def test_add_assigns_default_and_named_accounts(self):
+    def test_add_keeps_unknown_account_and_preserves_named_account(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
             added = json.loads(
                 run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 星巴克 38").stdout
             )["added"][0]
-            self.assertEqual(added["account"], "微信零钱")
-            self.assertEqual(added["account_id"], "acc_wechat")
+            self.assertNotIn("account", added)
+            self.assertNotIn("account_id", added)
             cash = json.loads(
                 run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 现金 午饭 20").stdout
             )["added"][0]
@@ -488,18 +489,14 @@ class LedgerToolTest(unittest.TestCase):
                     "这月午饭比较固定，没有乱花。",
                 ).stdout
             )
-            html_path = Path(saved["file"])
-            self.assertTrue(html_path.exists())
-            self.assertEqual(html_path.name, "ledger-bill-2026-08.html")
-            html = html_path.read_text(encoding="utf-8")
-            self.assertIn("<canvas", html)
-            self.assertIn("这月午饭比较固定", html)
+            self.assertNotIn("file", saved)
+            self.assertFalse((ledger.parent / "ledger-bill-2026-08.html").exists())
             self.assertNotIn("file", json.loads(ledger.read_text(encoding="utf-8"))["bills"][0])
             shown = run_tool("bill", "show", "--ledger", str(ledger), "--month", "2026-08")
             self.assertIn("这月午饭比较固定", shown.stdout)
             self.assertIn("八月午饭还是那些", shown.stdout)
 
-    def test_bill_render_writes_canvas_html(self):
+    def test_bill_render_writes_static_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "lazy-ledger.json"
             run_tool("add", "--ledger", str(ledger), "--text", "2026-08-03 午饭 16")
@@ -509,7 +506,7 @@ class LedgerToolTest(unittest.TestCase):
             html_path = Path(payload["file"])
             self.assertEqual(html_path.name, "lazy-ledger-bill-2026-08.html")
             html = html_path.read_text(encoding="utf-8")
-            self.assertIn("<canvas", html)
+            self.assertIn("<main>", html)
             self.assertIn("2026-08", html)
 
     def test_render_includes_accounts_and_budgets(self):
@@ -522,9 +519,8 @@ class LedgerToolTest(unittest.TestCase):
             html = output.read_text(encoding="utf-8")
             self.assertIn("账户余额", html)
             self.assertIn("预算", html)
-            self.assertIn("账本观察", html)
-            self.assertIn("周期账", html)
-            self.assertIn("微信零钱", html)
+            self.assertIn("8000.00", html)
+            self.assertIn("38.00", html)
 
     def test_summary_json_includes_income_indicators(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -538,18 +534,17 @@ class LedgerToolTest(unittest.TestCase):
             self.assertEqual(summary["income_count"], 2)
             self.assertEqual(summary["by_income_merchant"], {"公司": 100.0, "朋友": 50.0})
 
-    def test_live_app_contains_income_analysis_panel(self):
-        html = (ROOT / "assets" / "ledger-app.html").read_text(encoding="utf-8")
-        self.assertIn('id="incomeAnalysis"', html)
-        self.assertIn('id="incomeSourceChart"', html)
-        self.assertEqual(html.count('class="month-select"'), 2)
-        self.assertIn('params.set("month", rangeMode.slice(6))', html)
-        self.assertIn('id="annualReport"', html)
-        self.assertIn('id="annualTrend"', html)
-        self.assertIn('id="annualMonths"', html)
-        self.assertIn("function renderAnnualReport()", html)
-        self.assertIn('class="annual-trend-line ${type}"', html)
-        self.assertIn('class="annual-trend-value${raised ? " raised" : ""}${below ? " below" : ""}"', html)
+    def test_report_escapes_source_markup_and_preserves_income(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.json"
+            output = Path(tmp) / "income.html"
+            run_tool("add", "--ledger", str(ledger), "--amount", "150", "--type", "income", "--merchant", '<script>alert(1)</script>', "--date", "2026-07-01")
+            run_tool("render", "--ledger", str(ledger), "--output", str(output))
+            html = output.read_text()
+            self.assertIn("收入 150.00", html)
+            self.assertNotIn("<script", html)
+            self.assertIn('width=device-width', html)
+            self.assertIn("金额依据", html)
 
     def test_init_marks_json_as_document_store(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -562,7 +557,7 @@ class LedgerToolTest(unittest.TestCase):
             self.assertIn("accounts", data)
             self.assertIn("habits", data)
 
-    def test_repeated_lunch_fills_amount_silently(self):
+    def test_repeated_price_is_observation_not_permission_to_fill_amount(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.json"
             run_tool("add", "--ledger", str(ledger), "--text", "2026-07-07 午饭 16")
@@ -570,13 +565,12 @@ class LedgerToolTest(unittest.TestCase):
             payload = json.loads(run_tool("habit", "list", "--ledger", str(ledger), "--json").stdout)
             profile = payload["profile"]
             self.assertIn("午饭", profile["summary"])
-            lunch = next(item for item in profile["stable_amounts"] if item["phrase"] == "午饭")
-            self.assertEqual(lunch["amount"], 16.0)
-            parsed = json.loads(run_tool("parse", "--ledger", str(ledger), "--text", "午饭").stdout)
-            self.assertEqual(parsed["amount"], 16.0)
-            self.assertEqual(parsed["category"], "外食")
-            added = json.loads(run_tool("add", "--ledger", str(ledger), "--text", "午饭").stdout)
-            self.assertEqual(added["added"][0]["amount"], 16.0)
+            self.assertFalse(any(item["phrase"] == "午饭" for item in profile["stable_amounts"]))
+            parsed = run_tool("parse", "--ledger", str(ledger), "--text", "午饭", check=False)
+            self.assertNotEqual(parsed.returncode, 0)
+            result = run_tool("add", "--ledger", str(ledger), "--text", "午饭", check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(len(json.loads(ledger.read_text())["transactions"]), 2)
 
     def test_habit_memory_markdown_is_written_beside_ledger(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -599,6 +593,7 @@ class LedgerToolTest(unittest.TestCase):
             run_tool("add", "--ledger", str(ledger), "--amount", "10", "--merchant", "商户一", "--account", "银行卡")
             run_tool("add", "--ledger", str(ledger), "--amount", "20", "--merchant", "商户二", "--account", "银行卡")
 
+            run_tool("account", "update", "--ledger", str(ledger), "--id", "acc_wechat", "--default")
             run_tool("habit", "memory", "--ledger", str(ledger))
             data = json.loads(ledger.read_text(encoding="utf-8"))
             defaults = data["preferences"]["usage_profile"]["defaults"]
@@ -674,7 +669,7 @@ def _scripts_on_path():
 class DocumentStoreTest(unittest.TestCase):
     def test_insert_update_remove_persist(self):
         _scripts_on_path()
-        from ledger_db import STORE_KIND, DocumentNotFound, DocumentStore
+        from ledger_core.storage.documents import STORE_KIND, DocumentNotFound, DocumentStore
 
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "ledger.json"
@@ -742,31 +737,12 @@ class LiveServerTest(unittest.TestCase):
 
                 with urllib.request.urlopen(base + "/", timeout=2) as resp:
                     html = resp.read().decode("utf-8")
-                self.assertIn("懒人记账", html)
-                self.assertIn('role="tab"', html)
-                self.assertIn("月度账单", html)
-                self.assertIn("pieChart", html)
-                self.assertIn('id="icon-expense"', html)
-                self.assertIn('id="icon-food"', html)
-                self.assertIn("function categoryIcon(category, type)", html)
-                self.assertIn("icon(categoryIcon(tx.category, type))", html)
-                self.assertIn('id="icon-wechat"', html)
-                self.assertIn("function accountIcon(method, account)", html)
-                self.assertIn("icon(accountIcon(tx.method, account))", html)
-                self.assertIn("function shortWhen(tx)", html)
-                self.assertIn('class="row-when"', html)
-                self.assertIn('const showTypeBadge = (type) => type === "refund" || type === "transfer"', html)
-                self.assertIn("function groupTransactionsByDay(rows)", html)
-                self.assertIn("function dailyTotals(rows)", html)
-                self.assertIn('class="day-head"', html)
-                self.assertIn('class="row editable-row"', html)
-                self.assertIn('id="categoryForm"', html)
-                self.assertIn('id="categoryDialog"', html)
+                self.assertIn("账务报告", html)
+                self.assertIn("<main>", html)
+                self.assertNotIn("<script", html)
                 with urllib.request.urlopen(base + "/settings", timeout=2) as resp:
                     settings_html = resp.read().decode("utf-8")
-                self.assertIn('id="panel-settings"', settings_html)
-                self.assertNotIn("跳到账本", html)
-                self.assertNotIn('type="button">改</button>', html)
+                self.assertIn("账务报告", settings_html)
 
                 add_req = urllib.request.Request(
                     base + "/api/transactions",
@@ -872,7 +848,7 @@ class LiveServerTest(unittest.TestCase):
                 self.assertIn("花得不多", saved["body"])
                 with urllib.request.urlopen(base + "/bill/2026-08", timeout=5) as resp:
                     canvas = resp.read().decode("utf-8")
-                self.assertIn("<canvas", canvas)
+                self.assertIn("<main>", canvas)
                 self.assertIn("花得不多", canvas)
                 self.assertTrue((Path(tmp) / "ledger-bill-2026-08.html").exists())
             finally:

@@ -1,0 +1,22 @@
+{
+  "name": "lazy-ledger-openui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:charts": "node --test test/charts.test.mjs",
+    "test:generation": "node --test test/generation.test.mjs",
+    "test:unit": "node --test test/charts.test.mjs test/generation.test.mjs test/preview.test.mjs"
+  },
+  "dependencies": {
+    "@openuidev/react-lang": "1.0.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.11",
+    "@playwright/test": "1.56.1"
+  }
+}

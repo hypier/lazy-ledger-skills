@@ -20,9 +20,8 @@ Evidence reviewed:
 - `references/html-report.md`
 - `scripts/ledger_tool.py`
 - `assets/ledger-viewer-template.html`
-- Generated sample files:
-  - `product-design-audit/sample-ledger.json`
-  - `product-design-audit/sample-report.html`
+- Historical generated ledger/report samples were reviewed for this audit.
+  Those sample data files were removed when the user switched to a real ledger in October 2026.
 
 Screenshot capture was attempted through the Product Design browser flow, but the in-app browser blocked direct `file://` access and local HTTP preview timed out in this environment. Chrome extension control was unavailable. The HTML report was still generated successfully and reviewed from source/template behavior.
 

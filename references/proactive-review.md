@@ -19,11 +19,25 @@ A refund with exactly one confident counterpart (within 90 days, matching amount
 
 Ask only when no counterpart exists (reported under 未对上的退款) or when several materially different candidates remain, in which case nothing is linked and the decision stays with the user.
 
-The same rule applies to advances: a reimbursement equal to exactly one open advance settles it automatically and the income row gets `relation: reimbursement`. Several matching advances means nothing is settled — ask.
+Automatic advance settlement additionally requires explicit repayment/reimbursement language and one matching open advance. Equal amounts alone, including a salary of the same amount, never authorize settlement. Partial settlement uses an actual income row and a matching allocation.
 
 ## Persisted Review Queue
 
-`review refresh` derives findings from the current ledger and appends new ones to `review_queue` in the ledger file; `review next` returns the highest-priority open item; `review resolve --id <tx> --code <code>` closes one item with an optional `--note`. Because the queue lives in the ledger, a review session can span several calls instead of restarting the scan each time, and a resolved item is not recreated by a later refresh.
+Financial writes persist actionable findings. `review refresh` reconciles persisted findings with current evidence. `review next`
+is read-only. `review resolve --id TX --code CODE --note ...` records a decision;
+For ledger/account findings use the full finding key as `--id` and omit `--code`.
+`--status waiting|dismissed|snoozed|open` supports other lifecycle states. Snoozing
+requires a future `--until YYYY-MM-DD`. The same resolved or dismissed evidence
+stays quiet; changed evidence reopens the item and preserves the previous decision.
+A disappeared finding resolves on refresh. A snooze expires on the given date.
+Legacy decisions without a stored evidence token are retained on first adoption.
+
+For a user-authorized scheduled check, `review notifications` returns only
+unacknowledged open evidence. After successful delivery, pass that exact saved
+JSON to `review notifications --ack receipt.json`. Do not acknowledge before
+sending or create a scheduler without user intent and a supported host. Reading
+or refreshing the queue does not silently claim a notification was delivered.
+The device-local acknowledgement file does not affect financial data.
 
 ## Discuss
 
@@ -31,7 +45,7 @@ Resolve clear findings automatically when evidence agrees: distinct authoritativ
 
 ## Confirm And Repair
 
-Ask exactly one confirmation question before deleting or merging a transaction, changing its type, amount, account, or date, or adding or changing a relation. After the answer, either apply that repair group or record that the user declined it. Update by transaction ID, preserve unknown fields, and make the smallest requested change. Create a backup before a deletion. Then rerun `doctor --json` or `audit --json`, report the result, and only then present the next group.
+Use the user’s existing correction authorization. Ask only when unresolved facts or the scope of a destructive repair require a choice; do not repeat an approval already given. Prepare a coordinated proposal, then apply the authorized repair or record the user’s decision. Update by transaction ID, preserve unknown fields, and make the smallest requested change. Create a backup before a deletion. Then rerun `doctor --json` or `audit --json`, report the result, and only then present the next group.
 
 If no deterministic repair exists, leave the rows unchanged and ask one focused question. Do not hide the issue by changing it to `其他`, lowering the amount, or suppressing the warning.
 
@@ -48,17 +62,11 @@ folds the top ones into the daily summary, and `record` re-checks only what is
 relevant to the row just written. They differ in what kind of mistake they look
 for:
 
-| Detector | Looks for | Severity |
-|---|---|---|
-| `negative_balance` | a derived balance below zero, which means missing data | alert |
-| `duplicate_suspected` | same amount, same subject, within 48 hours | alert |
-| `stale_advance` | money owed for more than 30 days | warn |
-| `missing_recurring` | a bill present 3+ consecutive months that stopped for 2+ | warn |
-| `category_surge` | a category spending 1.5x last month's count, with the driver named | warn |
-| `outlier` | one purchase 5x the usual single amount | info |
-| `habit_merchant` | one merchant frequent enough that the total is worth seeing | info |
-| `category_drift` | one merchant filed under two categories in different months | info |
-| `missing_details` | rows with no merchant or note | info |
+Detectors cover negative derived balances, possible duplicates, long-outstanding
+advances, missing recurring entries, category changes, outliers and missing
+transaction details. Their thresholds are observations, not user-confirmed
+budget rules. An unknown opening balance is a coverage limitation; a negative
+calculated balance alone does not prove insolvency or justify moving an account.
 
 Two rules keep this from becoming nagging:
 

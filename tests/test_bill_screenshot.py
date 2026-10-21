@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -67,17 +68,18 @@ class BillScreenshotTest(unittest.TestCase):
             self.assertIn("零食有鸣", text)
             self.assertIn("image", text)
 
-    def test_find_original_prefers_wider_download(self):
-        src = Path("/Users/barry/Downloads/微信图片_20260822154929_198_5.jpg")
-        thumb = Path(
-            "/Users/barry/.cursor/projects/Users-barry-code-skills-lazy-ledger/assets/"
-            "_____20260822154929_198_5-fc31f3c3-d4f8-4d59-bbf7-ac4dd9737b26.jpg"
-        )
-        if not src.exists() or not thumb.exists():
-            self.skipTest("sample WeChat screenshot not on disk")
-        info = bill_screenshot.find_original_image(thumb)
-        self.assertTrue(info["replaced"])
-        self.assertGreaterEqual(info["width"], 400)
+    def test_prepare_refund_does_not_invent_an_expense_or_account(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "screenshot.png"
+            source.write_bytes(b"synthetic fixture")
+            row = {"occurred_at": "2026-08-18 16:33", "sign": "+", "amount": 32.61,
+                   "merchant": "商户-退款", "status": "退款成功", "confidence": 1}
+            with patch.object(bill_screenshot, "find_original_image", return_value={"path":source,"width":600,"height":900,"replaced":False}), patch.object(bill_screenshot, "run_ocr", return_value={"items":[{}]*8}), patch.object(bill_screenshot,"pair_rows",return_value=({},[row])), patch("builtins.print"):
+                result = bill_screenshot.prepare(source, Path(tmp)/"rows.tsv", True)
+            self.assertEqual(result["count"], 1)
+            self.assertEqual(result["rows"][0]["type"], "refund")
+            self.assertEqual(result["rows"][0]["account"], "")
+            self.assertNotIn("由退款行反推", result["markdown"])
 
 
 if __name__ == "__main__":
