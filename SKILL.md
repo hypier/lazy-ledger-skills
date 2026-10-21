@@ -119,6 +119,12 @@ All roles share [ledger-schema.md](references/ledger-schema.md),
 
 ## Presentation and evolution
 
+Monthly analysis is a financial-butler explanation of the month's situation:
+lead with evidence-backed conclusions about income, spending and their drivers.
+Data and charts support those conclusions; a list of totals is not an analysis.
+For monthly reviews, use [analysis.md](references/analysis.md) together with
+[present.md](references/present.md), including when updating an existing view.
+
 Conversation is the default output. Use the same core metrics for a brief,
 CSV, chart, or report. `report build --start ... --end ...` returns a traceable
 Markdown report; `--format json` exposes the same data and `--archive` saves its

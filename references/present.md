@@ -17,6 +17,19 @@ payload; include period, currency and coverage. Do not invent another financial
 aggregation algorithm inside a template. Refresh data before publishing a
 previously generated view. State whether an artifact is a snapshot.
 
+For monthly reviews, apply the conclusions-first guidance in
+[analysis.md](analysis.md). In a visual monthly report, make the key findings easy
+to scan and pair them with relevant charts and short explanations; keep long
+narratives and transaction tables available as supporting detail. Choose chart
+types by the question: a pie/donut for a small number of positive composition
+shares, a line for change over time, bars for comparisons, or a waterfall for
+how income, spending and refunds produce the net result. Use alternatives when
+negative values or too many categories make a pie misleading. Do not fill the
+page with repeated bar charts or add chart variety without an analytical purpose.
+Label amounts, shares, units and comparable periods clearly. Distinguish missing
+records from zero activity. Every headline and callout must be supported by the
+same current metrics as its chart; chart variety alone does not make an analysis.
+
 When `metrics.income_basis` is present, use the core's `totals.income` and
 `totals.net` as the primary figures and disclose that basis. Keep `raw_totals`
 as a separate reconciliation reference. Explain income using signed
